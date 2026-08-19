@@ -1,0 +1,167 @@
+:root {
+    --sidebar-width: 240px;
+    --brand: #173d2b;
+    --brand-hover: #22573e;
+    --background: #f4f7f5;
+    --surface: #ffffff;
+    --text: #17211b;
+    --muted: #6b756f;
+    --border: #dde6e0;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html,
+body {
+    margin: 0;
+    min-height: 100%;
+    font-family: Arial, Helvetica, sans-serif;
+    color: var(--text);
+    background: var(--background);
+}
+
+button,
+input,
+select,
+textarea {
+    font: inherit;
+}
+
+.app-shell {
+    min-height: 100vh;
+    display: grid;
+    grid-template-columns:
+        var(--sidebar-width)
+        minmax(0, 1fr);
+}
+
+.sidebar {
+    min-height: 100vh;
+    padding: 22px 18px;
+    background: var(--brand);
+    color: #ffffff;
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 28px;
+}
+
+.sidebar-brand__mark {
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border-radius: 10px;
+    background: #ffffff;
+    color: var(--brand);
+    font-weight: 800;
+}
+
+.sidebar-brand small {
+    display: block;
+    margin-top: 2px;
+    color: rgba(255,255,255,.65);
+}
+
+.sidebar-menu {
+    display: grid;
+    gap: 6px;
+}
+
+.sidebar-link,
+.sidebar-pending {
+    padding: 10px 12px;
+    border-radius: 8px;
+    color: rgba(255,255,255,.80);
+    text-decoration: none;
+}
+
+.sidebar-link:hover,
+.sidebar-link.is-active {
+    background: rgba(255,255,255,.12);
+    color: #ffffff;
+}
+
+.sidebar-pending {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    opacity: .58;
+}
+
+.sidebar-pending small {
+    font-size: 10px;
+}
+
+.app-content {
+    min-width: 0;
+}
+
+.topbar {
+    min-height: 68px;
+    padding: 0 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--border);
+}
+
+.topbar-user {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.topbar-user__text small {
+    display: block;
+    margin-top: 2px;
+    color: var(--muted);
+}
+
+.topbar-user form {
+    margin: 0;
+}
+
+.topbar-logout {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #ffffff;
+    cursor: pointer;
+}
+
+.page-content {
+    padding: 24px;
+}
+
+@media (max-width: 850px) {
+    .app-shell {
+        grid-template-columns: 1fr;
+    }
+
+    .sidebar {
+        display: none;
+    }
+
+    .topbar {
+        padding: 14px 18px;
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .topbar-user {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .page-content {
+        padding: 16px;
+    }
+}
