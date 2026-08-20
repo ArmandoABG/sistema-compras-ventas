@@ -69,9 +69,30 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Cotizaciones
             </a>
         <?php endif; ?>
-        <?php if (si_tiene_permiso('apartados.ver')): ?><span class="sidebar-pending">Apartados</span><?php endif; ?>
-        <?php if (si_tiene_permiso('ventas.ver')): ?><span class="sidebar-pending">Ventas</span><?php endif; ?>
-        <?php if (si_tiene_permiso('cuentas_cobrar.ver')): ?><span class="sidebar-pending">Cuentas por cobrar</span><?php endif; ?>
+        <?php if (si_tiene_permiso('apartados.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('apartados.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/apartados.php')) ?>"
+            >
+                Apartados
+            </a>
+        <?php endif; ?>
+        <?php if (si_tiene_permiso('ventas.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('ventas.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/ventas.php')) ?>"
+            >
+                Ventas
+            </a>
+        <?php endif; ?>
+        <?php if (si_tiene_permiso('cuentas_cobrar.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('cuentas_cobrar.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/cuentas_cobrar.php')) ?>"
+            >
+                Cuentas por cobrar
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('inventario.ver')): ?>
             <a
                 class="<?= si_sidebar_activo('inventario.php', $scriptActual) ?>"

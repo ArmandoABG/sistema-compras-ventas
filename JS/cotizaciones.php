@@ -26,6 +26,8 @@ si_requerir_permiso('cotizaciones.ver', false);
 $tituloPagina = 'Cotizaciones';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('cotizaciones.crear');
+$puedeCrearApartado = si_tiene_permiso('apartados.crear') && si_tiene_permiso('apartados.ver');
+$puedeCrearVenta = si_tiene_permiso('ventas.crear') && si_tiene_permiso('ventas.ver');
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_cotizaciones.css';
@@ -337,6 +339,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     'use strict';
 
     const puedeCrear = <?= $puedeCrear ? 'true' : 'false' ?>;
+    const puedeCrearApartado = <?= $puedeCrearApartado ? 'true' : 'false' ?>;
+    const puedeCrearVenta = <?= $puedeCrearVenta ? 'true' : 'false' ?>;
     const csrfToken = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
 
     const estado = {
@@ -641,6 +645,21 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 acciones +=
                     '<button type="button" class="table-action table-action--success" data-action="aceptar" data-id="' + c.id + '">Aceptar</button>'
                     + '<button type="button" class="table-action table-action--danger" data-action="rechazar" data-id="' + c.id + '">Rechazar</button>';
+            }
+
+            if (c.estado === 'ACEPTADA' && !c.apartado_folio && !c.venta_folio) {
+                if (puedeCrearVenta) {
+                    acciones +=
+                        '<a class="table-action table-action--success table-action--link" href="ventas.php?cotizacion_id='
+                        + c.id
+                        + '">Crear venta</a>';
+                }
+                if (puedeCrearApartado) {
+                    acciones +=
+                        '<a class="table-action table-action--success table-action--link" href="apartados.php?cotizacion_id='
+                        + c.id
+                        + '">Crear apartado</a>';
+                }
             }
 
             acciones +=
