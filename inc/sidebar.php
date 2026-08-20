@@ -72,7 +72,14 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
         <?php if (si_tiene_permiso('apartados.ver')): ?><span class="sidebar-pending">Apartados</span><?php endif; ?>
         <?php if (si_tiene_permiso('ventas.ver')): ?><span class="sidebar-pending">Ventas</span><?php endif; ?>
         <?php if (si_tiene_permiso('cuentas_cobrar.ver')): ?><span class="sidebar-pending">Cuentas por cobrar</span><?php endif; ?>
-        <?php if (si_tiene_permiso('inventario.ver')): ?><span class="sidebar-pending">Inventario</span><?php endif; ?>
+        <?php if (si_tiene_permiso('inventario.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('inventario.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/inventario.php')) ?>"
+            >
+                Inventario
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('produccion.ver')): ?><span class="sidebar-pending">Producción</span><?php endif; ?>
         <?php if (si_tiene_permiso('qr.verificar')): ?><span class="sidebar-pending">Verificar QR</span><?php endif; ?>
         <?php if (si_tiene_permiso('reportes.ver')): ?><span class="sidebar-pending">Reportes</span><?php endif; ?>
