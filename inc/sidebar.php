@@ -101,7 +101,14 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Inventario
             </a>
         <?php endif; ?>
-        <?php if (si_tiene_permiso('produccion.ver')): ?><span class="sidebar-pending">Producción</span><?php endif; ?>
+        <?php if (si_tiene_permiso('produccion.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('produccion.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/produccion.php')) ?>"
+            >
+                Producción
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('qr.verificar')): ?><span class="sidebar-pending">Verificar QR</span><?php endif; ?>
         <?php if (si_tiene_permiso('reportes.ver')): ?><span class="sidebar-pending">Reportes</span><?php endif; ?>
     </nav>
