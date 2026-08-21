@@ -38,6 +38,21 @@ try {
             case 'OPCIONES_UNIDAD':
                 prod_opciones_unidad($conexion);
                 break;
+            case 'RECETAS_LISTAR':
+                prod_recetas_listar($conexion);
+                break;
+            case 'RECETA_DETALLE':
+                prod_receta_detalle($conexion);
+                break;
+            case 'RECETAS_SELECTOR':
+                prod_recetas_selector($conexion);
+                break;
+            case 'RECETA_BUSCAR_PRODUCTOS':
+                prod_receta_buscar_productos($conexion);
+                break;
+            case 'RECETA_ESCALAR':
+                prod_receta_escalar($conexion);
+                break;
             default:
                 si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
         }
@@ -59,6 +74,12 @@ try {
             break;
         case 'CANCELAR':
             prod_cancelar($conexion);
+            break;
+        case 'RECETA_GUARDAR':
+            prod_receta_guardar($conexion);
+            break;
+        case 'RECETA_ELIMINAR':
+            prod_receta_eliminar($conexion);
             break;
         default:
             si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
@@ -495,6 +516,7 @@ function prod_opciones_unidad(PDO $conexion): void
         'unidad_id' => (int) $producto['unidad_base_id'],
         'nombre' => 'Unidad base · ' . $producto['nombre'] . ' (' . $producto['simbolo'] . ')',
         'factor' => 1.0,
+        'presentacion_id' => null,
         'es_base' => 1,
     ]];
 
@@ -515,6 +537,7 @@ function prod_opciones_unidad(PDO $conexion): void
             'unidad_id' => (int) $p['unidad_id'],
             'nombre' => (string) $p['nombre'] . ' (' . (string) $p['simbolo'] . ')',
             'factor' => (float) $p['factor_a_unidad_base'],
+            'presentacion_id' => (int) $p['id'],
             'es_base' => 0,
         ];
     }
@@ -548,6 +571,23 @@ function prod_guardar(PDO $conexion, bool $confirmar): void
     $almacenId = prod_entero($payload['almacen_id'] ?? 0, 1, PHP_INT_MAX, 0);
     if ($almacenId <= 0 || !prod_almacen_activo($conexion, $almacenId)) {
         si_responder_json(false, 'Selecciona un almacén activo.', [], 422);
+    }
+
+    $recetaId = prod_entero($payload['receta_id'] ?? 0, 0, PHP_INT_MAX, 0);
+    $recetaVersion = prod_entero($payload['receta_version'] ?? 0, 0, PHP_INT_MAX, 0);
+    if ($recetaId > 0) {
+        $stmtReceta = $conexion->prepare("SELECT id, version, activo, deleted_at FROM recetas_produccion WHERE id = :id LIMIT 1");
+        $stmtReceta->execute([':id' => $recetaId]);
+        $recetaActual = $stmtReceta->fetch();
+        if (!$recetaActual || (int) $recetaActual['activo'] !== 1 || $recetaActual['deleted_at'] !== null) {
+            si_responder_json(false, 'La receta seleccionada ya no está disponible.', [], 409);
+        }
+        if ($recetaVersion <= 0 || $recetaVersion !== (int) $recetaActual['version']) {
+            si_responder_json(false, 'La receta cambió desde que la cargaste. Vuelve a aplicarla antes de guardar la producción.', [], 409);
+        }
+    } else {
+        $recetaId = 0;
+        $recetaVersion = 0;
     }
 
     $resultadoRaw = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
@@ -600,11 +640,15 @@ function prod_guardar(PDO $conexion, bool $confirmar): void
         $stmtUpdate = $conexion->prepare(
             "UPDATE producciones
              SET fecha_produccion = :fecha_produccion,
+                 receta_id = :receta_id,
+                 receta_version = :receta_version,
                  observaciones = :observaciones
              WHERE id = :id"
         );
         $stmtUpdate->execute([
             ':fecha_produccion' => $fecha,
+            ':receta_id' => $recetaId > 0 ? $recetaId : null,
+            ':receta_version' => $recetaVersion > 0 ? $recetaVersion : null,
             ':observaciones' => $observaciones !== '' ? $observaciones : null,
             ':id' => $produccionId,
         ]);
@@ -619,13 +663,15 @@ function prod_guardar(PDO $conexion, bool $confirmar): void
         $folioTemporal = 'TMP-PROD-' . bin2hex(random_bytes(10));
         $stmtInsert = $conexion->prepare(
             "INSERT INTO producciones
-                (folio, fecha_produccion, estado, observaciones, created_by)
+                (folio, fecha_produccion, estado, receta_id, receta_version, observaciones, created_by)
              VALUES
-                (:folio, :fecha_produccion, 'BORRADOR', :observaciones, :created_by)"
+                (:folio, :fecha_produccion, 'BORRADOR', :receta_id, :receta_version, :observaciones, :created_by)"
         );
         $stmtInsert->execute([
             ':folio' => $folioTemporal,
             ':fecha_produccion' => $fecha,
+            ':receta_id' => $recetaId > 0 ? $recetaId : null,
+            ':receta_version' => $recetaVersion > 0 ? $recetaVersion : null,
             ':observaciones' => $observaciones !== '' ? $observaciones : null,
             ':created_by' => $usuarioId,
         ]);
@@ -651,6 +697,8 @@ function prod_guardar(PDO $conexion, bool $confirmar): void
             'folio' => $folio,
             'estado' => $confirmar ? 'CONFIRMADA' : 'BORRADOR',
             'insumos' => count($insumos),
+            'receta_id' => $recetaId > 0 ? $recetaId : null,
+            'receta_version' => $recetaVersion > 0 ? $recetaVersion : null,
             'resultado_producto_id' => $resultado['producto_id'],
             'resultado_cantidad_base' => $resultado['cantidad_base'],
         ]
@@ -1284,6 +1332,7 @@ function prod_resolver_unidad(PDO $conexion, int $productoId, int $unidadBaseId,
             'nombre' => (string) $u['nombre'],
             'simbolo' => (string) $u['simbolo'],
             'factor' => 1.0,
+            'presentacion_id' => null,
         ];
     }
 
@@ -1292,7 +1341,7 @@ function prod_resolver_unidad(PDO $conexion, int $productoId, int $unidadBaseId,
     }
     $presentacionId = (int) $m[1];
     $stmt = $conexion->prepare(
-        "SELECT pp.unidad_id, pp.nombre, pp.factor_a_unidad_base, um.simbolo
+        "SELECT pp.id, pp.unidad_id, pp.nombre, pp.factor_a_unidad_base, um.simbolo
          FROM presentaciones_producto pp
          INNER JOIN unidades_medida um ON um.id = pp.unidad_id
          WHERE pp.id = :presentacion_id
@@ -1311,6 +1360,7 @@ function prod_resolver_unidad(PDO $conexion, int $productoId, int $unidadBaseId,
         'nombre' => (string) $p['nombre'],
         'simbolo' => (string) $p['simbolo'],
         'factor' => (float) $p['factor_a_unidad_base'],
+        'presentacion_id' => (int) $p['id'],
     ];
 }
 
@@ -1510,17 +1560,19 @@ function prod_costo_al_retirar(float $cantidadActual, ?float $costoActual, float
     return round($valorNuevo / $cantidadNueva, 6);
 }
 
-function prod_auditar(PDO $conexion, string $accion, int $entidadId, string $descripcion, ?array $antes, ?array $nuevos): void
+function prod_auditar(PDO $conexion, string $accion, int $entidadId, string $descripcion, ?array $antes, ?array $nuevos, string $tabla = 'producciones', string $modulo = 'Produccion'): void
 {
     $stmt = $conexion->prepare(
         "INSERT INTO auditoria
             (usuario_id, accion, modulo, entidad_tabla, entidad_id, descripcion, datos_anteriores, datos_nuevos, ip, user_agent)
          VALUES
-            (:usuario_id, :accion, 'Produccion', 'producciones', :entidad_id, :descripcion, :datos_anteriores, :datos_nuevos, :ip, :user_agent)"
+            (:usuario_id, :accion, :modulo, :tabla, :entidad_id, :descripcion, :datos_anteriores, :datos_nuevos, :ip, :user_agent)"
     );
     $stmt->execute([
         ':usuario_id' => (int) ($_SESSION['usuario_id'] ?? 0),
         ':accion' => prod_texto($accion, 80),
+        ':modulo' => prod_texto($modulo, 80),
+        ':tabla' => prod_texto($tabla, 80),
         ':entidad_id' => $entidadId,
         ':descripcion' => prod_texto($descripcion, 500),
         ':datos_anteriores' => $antes !== null ? json_encode($antes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null,
@@ -1629,4 +1681,709 @@ function prod_numero(float $n): string
 {
     $texto = number_format($n, 6, '.', ',');
     return rtrim(rtrim($texto, '0'), '.');
+}
+
+/* =========================================================================
+   RECETAS DE PRODUCCIÓN
+   Cada receta expresa lo necesario para 1 unidad/presentación del resultado.
+   ========================================================================= */
+
+function prod_recetas_listar(PDO $conexion): void
+{
+    $pagina = prod_entero($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
+    $porPagina = prod_entero($_GET['por_pagina'] ?? 12, 6, 48, 12);
+    $buscar = prod_texto($_GET['buscar'] ?? '', 160);
+    $estado = strtoupper(prod_texto($_GET['estado'] ?? 'ACTIVAS', 20));
+    if (!in_array($estado, ['ACTIVAS', 'INACTIVAS', 'TODAS'], true)) {
+        $estado = 'ACTIVAS';
+    }
+
+    $where = ['r.deleted_at IS NULL'];
+    $params = [];
+    if ($estado === 'ACTIVAS') $where[] = 'r.activo = 1';
+    if ($estado === 'INACTIVAS') $where[] = 'r.activo = 0';
+    if ($buscar !== '') {
+        $like = '%' . $buscar . '%';
+        $where[] = '(r.codigo LIKE :b1 OR r.nombre LIKE :b2 OR p.nombre LIKE :b3 OR p.sku LIKE :b4)';
+        $params = [':b1' => $like, ':b2' => $like, ':b3' => $like, ':b4' => $like];
+    }
+    $whereSql = implode(' AND ', $where);
+
+    $st = $conexion->prepare("SELECT COUNT(*) FROM recetas_produccion r INNER JOIN productos p ON p.id = r.producto_resultado_id WHERE {$whereSql}");
+    prod_bind($st, $params);
+    $st->execute();
+    $total = (int) $st->fetchColumn();
+    $paginas = max(1, (int) ceil($total / $porPagina));
+    $pagina = min($pagina, $paginas);
+    $offset = ($pagina - 1) * $porPagina;
+
+    $sql = "SELECT
+                r.id, r.codigo, r.nombre, r.version, r.activo,
+                r.presentacion_resultado_id,
+                r.cantidad_resultado, r.factor_resultado_base, r.cantidad_resultado_base,
+                r.observaciones, r.updated_at,
+                p.id AS producto_id, p.sku, p.nombre AS producto,
+                um.simbolo, um.nombre AS unidad, um.tipo AS tipo_unidad_referencia,
+                pp.nombre AS presentacion_resultado,
+                COALESCE(x.insumos, 0) AS insumos,
+                x.ingredientes_resumen,
+                CONCAT_WS(' ', u.nombres, u.apellido_paterno, u.apellido_materno) AS actualizado_por
+            FROM recetas_produccion r
+            INNER JOIN productos p ON p.id = r.producto_resultado_id
+            INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
+            LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
+            LEFT JOIN (
+                SELECT
+                    ri.receta_id,
+                    COUNT(*) AS insumos,
+                    SUBSTRING_INDEX(GROUP_CONCAT(pi.nombre ORDER BY ri.renglon SEPARATOR '|||'), '|||', 3) AS ingredientes_resumen
+                FROM recetas_produccion_insumos ri
+                INNER JOIN productos pi ON pi.id = ri.producto_id
+                GROUP BY ri.receta_id
+            ) x ON x.receta_id = r.id
+            LEFT JOIN usuarios u ON u.id = COALESCE(r.updated_by, r.created_by)
+            WHERE {$whereSql}
+            ORDER BY r.activo DESC, r.nombre ASC, r.id DESC
+            LIMIT :lim OFFSET :off";
+
+    $st = $conexion->prepare($sql);
+    prod_bind($st, $params);
+    $st->bindValue(':lim', $porPagina, PDO::PARAM_INT);
+    $st->bindValue(':off', $offset, PDO::PARAM_INT);
+    $st->execute();
+    $registros = $st->fetchAll();
+
+    foreach ($registros as &$r) {
+        $r['id'] = (int) $r['id'];
+        $r['version'] = (int) $r['version'];
+        $r['activo'] = (int) $r['activo'];
+        $r['insumos'] = (int) $r['insumos'];
+        $r['presentacion_resultado_id'] = $r['presentacion_resultado_id'] !== null ? (int) $r['presentacion_resultado_id'] : null;
+        $r['cantidad_resultado'] = (float) $r['cantidad_resultado'];
+        $r['factor_resultado_base'] = (float) $r['factor_resultado_base'];
+        $r['cantidad_resultado_base'] = (float) $r['cantidad_resultado_base'];
+        $r['referencia'] = prod_receta_referencia_texto($r);
+        $r['ingredientes_resumen'] = $r['ingredientes_resumen'] ? explode('|||', (string) $r['ingredientes_resumen']) : [];
+    }
+    unset($r);
+
+    si_responder_json(true, 'Recetas cargadas.', [
+        'registros' => $registros,
+        'paginacion' => ['pagina' => $pagina, 'paginas' => $paginas, 'total' => $total, 'por_pagina' => $porPagina],
+    ]);
+}
+
+function prod_recetas_selector(PDO $conexion): void
+{
+    $st = $conexion->query(
+        "SELECT
+            r.id, r.codigo, r.nombre, r.version,
+            r.producto_resultado_id, r.presentacion_resultado_id,
+            r.unidad_resultado_id, r.cantidad_resultado,
+            r.factor_resultado_base, r.cantidad_resultado_base,
+            p.nombre AS producto, p.sku,
+            um.nombre AS unidad, um.simbolo, um.tipo AS tipo_unidad_referencia,
+            pp.nombre AS presentacion_resultado
+         FROM recetas_produccion r
+         INNER JOIN productos p ON p.id = r.producto_resultado_id
+         INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
+         LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
+         WHERE r.activo = 1
+           AND r.deleted_at IS NULL
+           AND p.activo = 1
+           AND p.deleted_at IS NULL
+         ORDER BY r.nombre, r.id"
+    );
+    $rows = $st->fetchAll();
+    foreach ($rows as &$r) {
+        $r['id'] = (int) $r['id'];
+        $r['version'] = (int) $r['version'];
+        $r['producto_resultado_id'] = (int) $r['producto_resultado_id'];
+        $r['presentacion_resultado_id'] = $r['presentacion_resultado_id'] !== null ? (int) $r['presentacion_resultado_id'] : null;
+        $r['cantidad_resultado'] = (float) $r['cantidad_resultado'];
+        $r['factor_resultado_base'] = (float) $r['factor_resultado_base'];
+        $r['cantidad_resultado_base'] = (float) $r['cantidad_resultado_base'];
+        $r['referencia'] = prod_receta_referencia_texto($r);
+    }
+    unset($r);
+    si_responder_json(true, 'Recetas disponibles.', ['recetas' => $rows]);
+}
+
+function prod_receta_detalle(PDO $conexion): void
+{
+    $id = prod_entero($_GET['id'] ?? 0, 1, PHP_INT_MAX, 0);
+    if ($id <= 0) {
+        si_responder_json(false, 'La receta no es válida.', [], 422);
+    }
+
+    $st = $conexion->prepare(
+        "SELECT
+            r.*,
+            p.nombre AS producto, p.sku, p.permite_fraccion, p.unidad_base_id,
+            ub.nombre AS unidad_base, ub.simbolo AS simbolo_base, ub.codigo AS codigo_unidad_base, ub.tipo AS tipo_unidad_base,
+            um.nombre AS unidad, um.simbolo, um.tipo AS tipo_unidad_referencia,
+            pp.nombre AS presentacion_resultado
+         FROM recetas_produccion r
+         INNER JOIN productos p ON p.id = r.producto_resultado_id
+         INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
+         INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
+         LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
+         WHERE r.id = :id AND r.deleted_at IS NULL
+         LIMIT 1"
+    );
+    $st->execute([':id' => $id]);
+    $r = $st->fetch();
+    if (!$r) {
+        si_responder_json(false, 'La receta ya no existe.', [], 404);
+    }
+
+    $st = $conexion->prepare(
+        "SELECT
+            ri.*,
+            p.nombre AS producto, p.sku, p.permite_fraccion, p.unidad_base_id,
+            um.nombre AS unidad, um.simbolo,
+            ub.nombre AS unidad_base, ub.simbolo AS simbolo_base, ub.codigo AS codigo_unidad_base, ub.tipo AS tipo_unidad_base,
+            pp.nombre AS presentacion
+         FROM recetas_produccion_insumos ri
+         INNER JOIN productos p ON p.id = ri.producto_id
+         INNER JOIN unidades_medida um ON um.id = ri.unidad_id
+         INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
+         LEFT JOIN presentaciones_producto pp ON pp.id = ri.presentacion_id
+         WHERE ri.receta_id = :id
+         ORDER BY ri.renglon"
+    );
+    $st->execute([':id' => $id]);
+    $insumos = $st->fetchAll();
+
+    $r['id'] = (int) $r['id'];
+    $r['version'] = (int) $r['version'];
+    $r['activo'] = (int) $r['activo'];
+    $r['producto_resultado_id'] = (int) $r['producto_resultado_id'];
+    $r['presentacion_resultado_id'] = $r['presentacion_resultado_id'] !== null ? (int) $r['presentacion_resultado_id'] : null;
+    $r['unidad_resultado_id'] = (int) $r['unidad_resultado_id'];
+    $r['cantidad_resultado'] = (float) $r['cantidad_resultado'];
+    $r['factor_resultado_base'] = (float) $r['factor_resultado_base'];
+    $r['cantidad_resultado_base'] = (float) $r['cantidad_resultado_base'];
+    $r['referencia'] = prod_receta_referencia_texto($r);
+
+    foreach ($insumos as &$i) {
+        $i['id'] = (int) $i['id'];
+        $i['producto_id'] = (int) $i['producto_id'];
+        $i['presentacion_id'] = $i['presentacion_id'] !== null ? (int) $i['presentacion_id'] : null;
+        $i['unidad_id'] = (int) $i['unidad_id'];
+        $i['unidad_base_id'] = (int) $i['unidad_base_id'];
+        $i['cantidad'] = (float) $i['cantidad'];
+        $i['factor_a_unidad_base'] = (float) $i['factor_a_unidad_base'];
+        $i['cantidad_base'] = (float) $i['cantidad_base'];
+    }
+    unset($i);
+
+    $balance = prod_receta_balance_desde_datos($r, $insumos);
+    si_responder_json(true, 'Detalle de receta.', ['receta' => $r, 'insumos' => $insumos, 'balance' => $balance]);
+}
+
+function prod_receta_buscar_productos(PDO $conexion): void
+{
+    $q = prod_texto($_GET['q'] ?? '', 180);
+    $tipo = strtoupper(prod_texto($_GET['tipo'] ?? 'INSUMO', 20));
+    if (mb_strlen($q) < 2) {
+        si_responder_json(true, 'Escribe al menos dos caracteres.', ['productos' => []]);
+    }
+    if (!in_array($tipo, ['INSUMO', 'RESULTADO'], true)) {
+        si_responder_json(false, 'Tipo no válido.', [], 422);
+    }
+
+    $tipoProducto = $tipo === 'INSUMO' ? 'MATERIA_PRIMA' : 'PRODUCTO_TERMINADO';
+    $like = '%' . $q . '%';
+    $st = $conexion->prepare(
+        "SELECT
+            p.id, p.sku, p.nombre, p.tipo, p.unidad_base_id, p.permite_fraccion,
+            um.nombre AS unidad_base, um.simbolo AS simbolo_base, um.codigo AS codigo_unidad_base, um.tipo AS tipo_unidad_base
+         FROM productos p
+         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+         WHERE p.activo = 1
+           AND p.deleted_at IS NULL
+           AND p.controla_inventario = 1
+           AND p.tipo = :tipo
+           AND (p.sku LIKE :s OR p.nombre LIKE :n OR p.codigo_barras LIKE :c)
+         ORDER BY p.nombre
+         LIMIT 20"
+    );
+    $st->execute([':tipo' => $tipoProducto, ':s' => $like, ':n' => $like, ':c' => $like]);
+    $rows = $st->fetchAll();
+    foreach ($rows as &$r) {
+        $r['id'] = (int) $r['id'];
+        $r['unidad_base_id'] = (int) $r['unidad_base_id'];
+        $r['permite_fraccion'] = (int) $r['permite_fraccion'];
+    }
+    unset($r);
+    si_responder_json(true, 'Productos encontrados.', ['productos' => $rows]);
+}
+
+function prod_receta_escalar(PDO $conexion): void
+{
+    $id = prod_entero($_GET['receta_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $almacen = prod_entero($_GET['almacen_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $unidadesObjetivo = prod_decimal_positivo($_GET['cantidad'] ?? null);
+    if ($id <= 0 || $almacen <= 0 || $unidadesObjetivo === null) {
+        si_responder_json(false, 'Selecciona receta, almacén y cantidad a producir.', [], 422);
+    }
+    if (!prod_almacen_activo($conexion, $almacen)) {
+        si_responder_json(false, 'El almacén ya no está activo.', [], 409);
+    }
+
+    $st = $conexion->prepare(
+        "SELECT
+            r.*,
+            p.nombre AS producto, p.sku, p.permite_fraccion, p.unidad_base_id,
+            ub.simbolo AS simbolo_base,
+            um.nombre AS unidad, um.simbolo, um.tipo AS tipo_unidad_referencia,
+            pp.nombre AS presentacion_resultado
+         FROM recetas_produccion r
+         INNER JOIN productos p ON p.id = r.producto_resultado_id
+         INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
+         INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
+         LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
+         WHERE r.id = :id AND r.activo = 1 AND r.deleted_at IS NULL
+         LIMIT 1"
+    );
+    $st->execute([':id' => $id]);
+    $r = $st->fetch();
+    if (!$r) {
+        si_responder_json(false, 'La receta ya no está disponible.', [], 404);
+    }
+
+    if ((string) ($r['tipo_unidad_referencia'] ?? '') === 'UNIDAD' && abs($unidadesObjetivo - round($unidadesObjetivo)) > 0.000001) {
+        si_responder_json(false, 'La presentación de referencia se produce en unidades completas. Captura un número entero.', [], 422);
+    }
+
+    // La receta siempre representa exactamente 1 unidad/presentación del producto final.
+    $escala = $unidadesObjetivo;
+
+    $st = $conexion->prepare(
+        "SELECT
+            ri.*,
+            p.nombre AS producto, p.sku, p.permite_fraccion, p.unidad_base_id,
+            ub.simbolo AS simbolo_base,
+            COALESCE(e.existencia_fisica, 0) AS existencia_fisica,
+            COALESCE(e.cantidad_reservada, 0) AS cantidad_reservada,
+            COALESCE(e.cantidad_disponible, 0) AS cantidad_disponible
+         FROM recetas_produccion_insumos ri
+         INNER JOIN productos p ON p.id = ri.producto_id
+         INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
+         LEFT JOIN existencias_almacen e ON e.almacen_id = :almacen AND e.producto_id = ri.producto_id
+         WHERE ri.receta_id = :id
+         ORDER BY ri.renglon"
+    );
+    $st->execute([':almacen' => $almacen, ':id' => $id]);
+    $insumos = $st->fetchAll();
+
+    $faltantes = [];
+    foreach ($insumos as &$i) {
+        $i['producto_id'] = (int) $i['producto_id'];
+        $i['presentacion_id'] = $i['presentacion_id'] !== null ? (int) $i['presentacion_id'] : null;
+        $i['unidad_id'] = (int) $i['unidad_id'];
+        $i['cantidad'] = round((float) $i['cantidad'] * $escala, 6);
+        $i['cantidad_base'] = round((float) $i['cantidad_base'] * $escala, 6);
+        $i['factor_a_unidad_base'] = (float) $i['factor_a_unidad_base'];
+        $i['existencia_fisica'] = (float) $i['existencia_fisica'];
+        $i['cantidad_reservada'] = (float) $i['cantidad_reservada'];
+        $i['cantidad_disponible'] = (float) $i['cantidad_disponible'];
+        $i['suficiente'] = $i['cantidad_disponible'] + 0.000001 >= $i['cantidad_base'];
+        if (!$i['suficiente']) {
+            $faltantes[] = [
+                'producto' => $i['producto'],
+                'necesario' => $i['cantidad_base'],
+                'disponible' => $i['cantidad_disponible'],
+                'faltante' => max(0, round($i['cantidad_base'] - $i['cantidad_disponible'], 6)),
+                'simbolo' => $i['simbolo_base'],
+            ];
+        }
+    }
+    unset($i);
+
+    $referencia = prod_receta_referencia_texto($r);
+    $cantidadResultado = $unidadesObjetivo;
+    $cantidadResultadoBase = round($unidadesObjetivo * (float) $r['factor_resultado_base'], 6);
+
+    si_responder_json(true, 'Receta calculada.', [
+        'receta' => [
+            'id' => (int) $r['id'],
+            'codigo' => $r['codigo'],
+            'nombre' => $r['nombre'],
+            'version' => (int) $r['version'],
+            'referencia' => $referencia,
+        ],
+        'resultado' => [
+            'producto_id' => (int) $r['producto_resultado_id'],
+            'producto' => $r['producto'],
+            'sku' => $r['sku'],
+            'presentacion_id' => $r['presentacion_resultado_id'] !== null ? (int) $r['presentacion_resultado_id'] : null,
+            'unidad_id' => (int) $r['unidad_resultado_id'],
+            'cantidad' => $cantidadResultado,
+            'factor_a_unidad_base' => (float) $r['factor_resultado_base'],
+            'cantidad_base' => $cantidadResultadoBase,
+            'simbolo' => $r['simbolo'],
+            'simbolo_base' => $r['simbolo_base'],
+            'permite_fraccion' => (int) $r['permite_fraccion'],
+        ],
+        'insumos' => $insumos,
+        'faltantes' => $faltantes,
+        'puede_producir' => count($faltantes) === 0,
+    ]);
+}
+
+function prod_receta_guardar(PDO $conexion): void
+{
+    $payload = prod_payload();
+    $id = prod_entero($payload['id'] ?? 0, 0, PHP_INT_MAX, 0);
+    $usuario = (int) ($_SESSION['usuario_id'] ?? 0);
+    $nombre = prod_texto($payload['nombre'] ?? '', 160);
+    $observaciones = prod_texto($payload['observaciones'] ?? '', 4000);
+    $activo = !empty($payload['activo']) ? 1 : 0;
+
+    if (mb_strlen($nombre) < 3) {
+        si_responder_json(false, 'Captura un nombre de receta de al menos 3 caracteres.', [], 422);
+    }
+
+    $resultadoRaw = is_array($payload['resultado'] ?? null) ? $payload['resultado'] : [];
+    $insumosRaw = is_array($payload['insumos'] ?? null) ? $payload['insumos'] : [];
+
+    $resultado = prod_receta_validar_renglon($conexion, $resultadoRaw, 'RESULTADO');
+    if (!$resultado) {
+        si_responder_json(false, 'Selecciona el producto terminado y la presentación de referencia de la receta.', [], 422);
+    }
+    if (!$insumosRaw) {
+        si_responder_json(false, 'Agrega al menos una materia prima a la receta.', [], 422);
+    }
+    if (count($insumosRaw) > 100) {
+        si_responder_json(false, 'La receta no puede superar 100 ingredientes.', [], 422);
+    }
+
+    $insumos = [];
+    $vistos = [];
+    foreach ($insumosRaw as $n => $raw) {
+        if (!is_array($raw)) {
+            si_responder_json(false, 'Revisa el ingrediente #' . ($n + 1) . '.', [], 422);
+        }
+        $x = prod_receta_validar_renglon($conexion, $raw, 'INSUMO');
+        if (!$x) {
+            si_responder_json(false, 'Revisa el ingrediente #' . ($n + 1) . '.', [], 422);
+        }
+        if (isset($vistos[$x['producto_id']])) {
+            si_responder_json(false, 'Cada materia prima debe aparecer una sola vez en la receta.', [], 422);
+        }
+        $vistos[$x['producto_id']] = true;
+        $insumos[] = $x;
+    }
+
+    $balance = prod_receta_balance_desde_datos($resultado, $insumos);
+    if (!empty($balance['bloquea_guardado'])) {
+        si_responder_json(false, $balance['mensaje'] . ' Corrige la receta antes de guardarla.', [
+            'balance' => $balance,
+        ], 422);
+    }
+
+    $conexion->beginTransaction();
+    if ($id > 0) {
+        $st = $conexion->prepare("SELECT id, codigo, version FROM recetas_produccion WHERE id = :id AND deleted_at IS NULL FOR UPDATE");
+        $st->execute([':id' => $id]);
+        $anterior = $st->fetch();
+        if (!$anterior) {
+            prod_abort($conexion, 'La receta ya no existe.', 404);
+        }
+        $version = (int) $anterior['version'] + 1;
+        $codigo = (string) $anterior['codigo'];
+
+        $st = $conexion->prepare(
+            "UPDATE recetas_produccion
+             SET nombre = :nombre,
+                 producto_resultado_id = :producto,
+                 presentacion_resultado_id = :presentacion,
+                 unidad_resultado_id = :unidad,
+                 cantidad_resultado = 1,
+                 factor_resultado_base = :factor,
+                 cantidad_resultado_base = :base,
+                 version = :version,
+                 activo = :activo,
+                 observaciones = :obs,
+                 updated_by = :usuario
+             WHERE id = :id"
+        );
+        $st->execute([
+            ':nombre' => $nombre,
+            ':producto' => $resultado['producto_id'],
+            ':presentacion' => $resultado['presentacion_id'],
+            ':unidad' => $resultado['unidad_id'],
+            ':factor' => $resultado['factor_a_unidad_base'],
+            ':base' => $resultado['cantidad_base'],
+            ':version' => $version,
+            ':activo' => $activo,
+            ':obs' => $observaciones !== '' ? $observaciones : null,
+            ':usuario' => $usuario,
+            ':id' => $id,
+        ]);
+        $conexion->prepare("DELETE FROM recetas_produccion_insumos WHERE receta_id = :id")->execute([':id' => $id]);
+    } else {
+        $temporal = 'TMP-REC-' . bin2hex(random_bytes(8));
+        $version = 1;
+        $st = $conexion->prepare(
+            "INSERT INTO recetas_produccion
+                (codigo, nombre, producto_resultado_id, presentacion_resultado_id, unidad_resultado_id,
+                 cantidad_resultado, factor_resultado_base, cantidad_resultado_base,
+                 version, activo, observaciones, created_by, updated_by)
+             VALUES
+                (:codigo, :nombre, :producto, :presentacion, :unidad,
+                 1, :factor, :base,
+                 1, :activo, :obs, :creado, :actualizado)"
+        );
+        $st->execute([
+            ':codigo' => $temporal,
+            ':nombre' => $nombre,
+            ':producto' => $resultado['producto_id'],
+            ':presentacion' => $resultado['presentacion_id'],
+            ':unidad' => $resultado['unidad_id'],
+            ':factor' => $resultado['factor_a_unidad_base'],
+            ':base' => $resultado['cantidad_base'],
+            ':activo' => $activo,
+            ':obs' => $observaciones !== '' ? $observaciones : null,
+            ':creado' => $usuario,
+            ':actualizado' => $usuario,
+        ]);
+        $id = (int) $conexion->lastInsertId();
+        $codigo = 'REC-' . str_pad((string) $id, 6, '0', STR_PAD_LEFT);
+        $conexion->prepare("UPDATE recetas_produccion SET codigo = :codigo WHERE id = :id")->execute([':codigo' => $codigo, ':id' => $id]);
+    }
+
+    $st = $conexion->prepare(
+        "INSERT INTO recetas_produccion_insumos
+            (receta_id, renglon, producto_id, presentacion_id, unidad_id, cantidad, factor_a_unidad_base, cantidad_base, observaciones)
+         VALUES
+            (:receta, :renglon, :producto, :presentacion, :unidad, :cantidad, :factor, :base, :obs)"
+    );
+    $renglon = 1;
+    foreach ($insumos as $x) {
+        $st->execute([
+            ':receta' => $id,
+            ':renglon' => $renglon++,
+            ':producto' => $x['producto_id'],
+            ':presentacion' => $x['presentacion_id'],
+            ':unidad' => $x['unidad_id'],
+            ':cantidad' => $x['cantidad'],
+            ':factor' => $x['factor_a_unidad_base'],
+            ':base' => $x['cantidad_base'],
+            ':obs' => $x['observaciones'],
+        ]);
+    }
+
+    prod_auditar(
+        $conexion,
+        $version === 1 ? 'RECETA_CREADA' : 'RECETA_EDITADA',
+        $id,
+        ($version === 1 ? 'Se creó' : 'Se actualizó') . ' la receta ' . $codigo . ' por 1 ' . $resultado['unidad_nombre'] . '.',
+        null,
+        [
+            'codigo' => $codigo,
+            'version' => $version,
+            'producto_id' => $resultado['producto_id'],
+            'presentacion_resultado_id' => $resultado['presentacion_id'],
+            'factor_resultado_base' => $resultado['factor_a_unidad_base'],
+            'insumos' => count($insumos),
+            'balance' => $balance,
+        ],
+        'recetas_produccion',
+        'Produccion'
+    );
+
+    $conexion->commit();
+    si_responder_json(true, $version === 1 ? 'Receta creada correctamente.' : 'Receta actualizada correctamente.', [
+        'receta_id' => $id,
+        'codigo' => $codigo,
+        'version' => $version,
+        'balance' => $balance,
+    ]);
+}
+
+function prod_receta_eliminar(PDO $conexion): void
+{
+    $id = prod_entero($_POST['receta_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $usuario = (int) ($_SESSION['usuario_id'] ?? 0);
+    if ($id <= 0) {
+        si_responder_json(false, 'La receta no es válida.', [], 422);
+    }
+
+    $conexion->beginTransaction();
+    $st = $conexion->prepare("SELECT id, codigo, nombre FROM recetas_produccion WHERE id = :id AND deleted_at IS NULL FOR UPDATE");
+    $st->execute([':id' => $id]);
+    $r = $st->fetch();
+    if (!$r) {
+        prod_abort($conexion, 'La receta ya no existe.', 404);
+    }
+
+    $conexion->prepare(
+        "UPDATE recetas_produccion
+         SET activo = 0, deleted_at = NOW(), deleted_by = :usuario, updated_by = :actualizado
+         WHERE id = :id"
+    )->execute([':usuario' => $usuario, ':actualizado' => $usuario, ':id' => $id]);
+
+    prod_auditar($conexion, 'RECETA_ELIMINADA', $id, 'Se retiró la receta ' . $r['codigo'] . ' del catálogo.', null, [
+        'codigo' => $r['codigo'], 'nombre' => $r['nombre'],
+    ], 'recetas_produccion', 'Produccion');
+
+    $conexion->commit();
+    si_responder_json(true, 'Receta eliminada del catálogo.');
+}
+
+function prod_receta_validar_renglon(PDO $conexion, array $raw, string $tipo): ?array
+{
+    $productoId = prod_entero($raw['producto_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $opcion = prod_texto($raw['opcion_unidad'] ?? 'BASE', 50);
+    $observaciones = prod_texto($raw['observaciones'] ?? '', 255);
+    $cantidad = $tipo === 'RESULTADO' ? 1.0 : prod_decimal_positivo($raw['cantidad'] ?? null);
+    if ($productoId <= 0 || $cantidad === null) {
+        return null;
+    }
+
+    $st = $conexion->prepare(
+        "SELECT
+            p.id, p.nombre, p.sku, p.tipo, p.unidad_base_id, p.permite_fraccion, p.controla_inventario,
+            um.nombre AS unidad_base, um.simbolo AS simbolo_base, um.codigo AS codigo_unidad_base, um.tipo AS tipo_unidad_base
+         FROM productos p
+         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+         WHERE p.id = :id AND p.activo = 1 AND p.deleted_at IS NULL
+         LIMIT 1"
+    );
+    $st->execute([':id' => $productoId]);
+    $producto = $st->fetch();
+    if (!$producto || (int) $producto['controla_inventario'] !== 1) {
+        return null;
+    }
+
+    $esperado = $tipo === 'INSUMO' ? 'MATERIA_PRIMA' : 'PRODUCTO_TERMINADO';
+    if ($producto['tipo'] !== $esperado) {
+        si_responder_json(false, $tipo === 'INSUMO' ? 'Los ingredientes deben ser materias primas.' : 'El resultado debe ser un producto terminado.', [], 422);
+    }
+    if ($tipo === 'INSUMO' && (int) $producto['permite_fraccion'] !== 1 && abs($cantidad - round($cantidad)) > 0.000001) {
+        si_responder_json(false, 'El producto ' . $producto['nombre'] . ' no permite fracciones.', [], 422);
+    }
+
+    $unidad = prod_resolver_unidad($conexion, $productoId, (int) $producto['unidad_base_id'], $opcion);
+    if (!$unidad) {
+        si_responder_json(false, 'La unidad o presentación de ' . $producto['nombre'] . ' ya no está disponible.', [], 409);
+    }
+
+    $cantidadBase = round($cantidad * (float) $unidad['factor'], 6);
+    if ($cantidadBase <= 0) {
+        si_responder_json(false, 'La cantidad debe ser mayor que cero.', [], 422);
+    }
+
+    return [
+        'producto_id' => $productoId,
+        'producto' => $producto['nombre'],
+        'sku' => $producto['sku'],
+        'presentacion_id' => $unidad['presentacion_id'] ?? null,
+        'unidad_id' => (int) $unidad['unidad_id'],
+        'unidad_nombre' => (string) $unidad['nombre'],
+        'unidad_simbolo' => (string) $unidad['simbolo'],
+        'cantidad' => $cantidad,
+        'factor_a_unidad_base' => (float) $unidad['factor'],
+        'cantidad_base' => $cantidadBase,
+        'unidad_base' => (string) $producto['unidad_base'],
+        'simbolo_base' => (string) $producto['simbolo_base'],
+        'codigo_unidad_base' => (string) $producto['codigo_unidad_base'],
+        'tipo_unidad_base' => (string) $producto['tipo_unidad_base'],
+        'observaciones' => $observaciones !== '' ? $observaciones : null,
+    ];
+}
+
+function prod_receta_balance_desde_datos(array $resultado, array $insumos): array
+{
+    $salidaKg = prod_receta_masa_a_kg(
+        (float) ($resultado['cantidad_resultado_base'] ?? $resultado['cantidad_base'] ?? 0),
+        (string) ($resultado['codigo_unidad_base'] ?? '')
+    );
+
+    if ($salidaKg === null || $salidaKg <= 0) {
+        return [
+            'comparable' => 0,
+            'mensaje' => 'La presentación del producto terminado no puede compararse automáticamente por masa. La receta seguirá siendo válida, pero revisa manualmente su rendimiento.',
+            'bloquea_guardado' => 0,
+        ];
+    }
+
+    $masaInsumosKg = 0.0;
+    $noComparables = 0;
+    foreach ($insumos as $i) {
+        $kg = prod_receta_masa_a_kg((float) ($i['cantidad_base'] ?? 0), (string) ($i['codigo_unidad_base'] ?? ''));
+        if ($kg === null) {
+            $noComparables++;
+            continue;
+        }
+        $masaInsumosKg += $kg;
+    }
+
+    $masaInsumosKg = round($masaInsumosKg, 6);
+    $ratio = $salidaKg > 0 ? $masaInsumosKg / $salidaKg : 0.0;
+    $diferencia = round($masaInsumosKg - $salidaKg, 6);
+
+    // Una receta estándar no debe aceptar desbalances absurdos en las magnitudes que sí son comparables.
+    // Si hay ingredientes volumétricos no intentamos inventar densidades: el control de masa queda parcial.
+    // Para procesos excepcionales con pérdidas extremas se conserva la captura manual de Producción.
+    $bloquea = $ratio > 1.50 || ($noComparables === 0 && $ratio < 0.50);
+    if ($bloquea) {
+        $mensaje = 'La receta es desproporcionada: las materias primas comparables suman ' . prod_numero_texto($masaInsumosKg)
+            . ' kg para una presentación que produce ' . prod_numero_texto($salidaKg) . ' kg.';
+    } elseif ($ratio > 1.10) {
+        $mensaje = 'Aviso: la masa de materias primas supera en más de 10% la masa del producto terminado. Puede existir merma de proceso, pero conviene revisar la fórmula.';
+    } elseif ($noComparables === 0 && $ratio < 0.90) {
+        $mensaje = 'Aviso: la masa capturada de materias primas es menor que la masa del producto terminado. Revisa si falta algún ingrediente.';
+    } elseif ($noComparables > 0) {
+        $mensaje = 'La masa comparable está en un rango razonable. Hay ' . $noComparables . ' ingrediente(s) en unidades que no pueden convertirse automáticamente a kg; el balance es informativo.';
+    } else {
+        $mensaje = 'La suma de materias primas de masa es coherente con la presentación de referencia.';
+    }
+
+    return [
+        'comparable' => 1,
+        'masa_resultado_kg' => round($salidaKg, 6),
+        'masa_insumos_kg' => $masaInsumosKg,
+        'diferencia_kg' => $diferencia,
+        'ratio' => round($ratio, 6),
+        'no_comparables' => $noComparables,
+        'bloquea_guardado' => $bloquea ? 1 : 0,
+        'mensaje' => $mensaje,
+    ];
+}
+
+function prod_receta_masa_a_kg(float $cantidadBase, string $codigoUnidadBase): ?float
+{
+    $codigo = strtoupper(trim($codigoUnidadBase));
+    $factor = match ($codigo) {
+        'KG' => 1.0,
+        'G' => 0.001,
+        'TON' => 1000.0,
+        default => null,
+    };
+    return $factor === null ? null : $cantidadBase * $factor;
+}
+
+function prod_receta_referencia_texto(array $r): string
+{
+    $presentacion = trim((string) ($r['presentacion_resultado'] ?? ''));
+    if ($presentacion !== '') {
+        return '1 ' . $presentacion;
+    }
+    $unidad = trim((string) ($r['unidad'] ?? ''));
+    $simbolo = trim((string) ($r['simbolo'] ?? ''));
+    if ($unidad !== '') {
+        return '1 ' . $unidad . ($simbolo !== '' ? ' (' . $simbolo . ')' : '');
+    }
+    return '1 unidad';
+}
+
+function prod_numero_texto(float $valor): string
+{
+    $texto = number_format($valor, 6, '.', '');
+    $texto = rtrim(rtrim($texto, '0'), '.');
+    return $texto === '' ? '0' : $texto;
 }
