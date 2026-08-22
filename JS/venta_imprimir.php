@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/qr_core.php';
+require_once __DIR__ . '/../inc/qr_svg.php';
 
 si_requerir_permiso('ventas.ver', false);
 
@@ -62,6 +64,39 @@ $pagos = $stmt->fetchAll();
 $empresa = $conexion->query("SELECT valor_texto FROM configuracion_sistema WHERE clave = 'empresa.nombre' LIMIT 1")->fetchColumn();
 $empresa = $empresa ?: 'Sistema Integral';
 
+$qrHabilitado = si_qr_habilitado($conexion);
+$qrToken = null;
+$qrSvg = null;
+$qrTokenCorto = null;
+$qrError = false;
+$qrFueGenerado = false;
+if ($qrHabilitado && $venta['estado'] === 'CONFIRMADA') {
+    try {
+        $qrToken = si_qr_token_venta_actual($conexion, (int) $venta['id']);
+        if ($qrToken === null) {
+            $qrToken = si_qr_asegurar_token_venta($conexion, (int) $venta['id']);
+            $qrFueGenerado = $qrToken !== null;
+        }
+        if ($qrToken !== null) {
+            $qrTokenCorto = si_qr_token_corto((string) $qrToken['token']);
+            $qrDisponibleParaSalida = (int) $qrToken['activo'] === 1
+                && $qrToken['usado_at'] === null
+                && $qrToken['revocado_at'] === null;
+            if ($qrDisponibleParaSalida) {
+                $qrSvg = SiQrSvg::svg(si_qr_payload((string) $qrToken['token']));
+            }
+            if ($qrFueGenerado) {
+                si_qr_auditar($conexion, 'QR_GENERADO', (int) $venta['id'], 'Se generó el QR de salida de ' . $venta['folio'] . ' al preparar su comprobante.', [
+                    'token_id' => (int) $qrToken['id'],
+                ]);
+            }
+        }
+    } catch (Throwable $e) {
+        $qrError = true;
+        error_log('[VENTA-IMPRIMIR][QR] ' . $e->getMessage());
+    }
+}
+
 function ven_imp_fecha(?string $v, bool $hora = false): string {
     if (!$v) return '—';
     $ts = strtotime($v);
@@ -87,7 +122,7 @@ $pagadoTotal = $pagadoDirecto + (float) $venta['importe_anticipado'];
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title><?= si_escapar($venta['folio']) ?> | Venta</title>
 <style>
-*{box-sizing:border-box} body{margin:0;background:#f4f6f5;color:#1f2f26;font-family:Arial,Helvetica,sans-serif}.toolbar{display:flex;justify-content:flex-end;gap:8px;width:min(980px,calc(100% - 32px));margin:16px auto 0}.toolbar button,.toolbar a{padding:9px 13px;border:1px solid #ced9d1;border-radius:8px;background:#fff;color:#24342a;text-decoration:none;cursor:pointer}.sheet{position:relative;width:min(980px,calc(100% - 32px));margin:12px auto 32px;padding:34px 38px;background:#fff;box-shadow:0 12px 35px rgba(0,0,0,.08)}.watermark{position:absolute;top:180px;left:50%;transform:translateX(-50%) rotate(-25deg);color:rgba(150,20,20,.10);font-size:82px;font-weight:800;letter-spacing:.12em;pointer-events:none}.header{display:flex;justify-content:space-between;gap:28px;padding-bottom:20px;border-bottom:2px solid #173d2b}.brand h1{margin:0 0 6px;font-size:25px;color:#173d2b}.brand p{margin:0;color:#617067}.meta{text-align:right}.meta h2{margin:0 0 8px;font-size:24px}.meta span,.meta strong{display:block;margin-top:3px}.box{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;margin:22px 0;padding:15px;border:1px solid #dde6e0;border-radius:10px;background:#fafcfb}.box h3{margin:0 0 7px;font-size:12px;text-transform:uppercase;color:#647168}.box p{margin:3px 0;font-size:13px;color:#5e6c63}table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid #e8eeea;text-align:left;font-size:12px;vertical-align:top}th{background:#f4f7f5;color:#56635b}.num{text-align:right;white-space:nowrap}.product strong,.product small{display:block}.product small{margin-top:3px;color:#718078}.footer-grid{display:grid;grid-template-columns:1.35fr .8fr;gap:28px;margin-top:22px}.notes h3{margin:0 0 7px;font-size:14px}.notes p{margin:4px 0;color:#5e6c63;font-size:13px;white-space:pre-wrap}.totals{border:1px solid #dde6e0;border-radius:9px;padding:10px 13px}.totals div{display:flex;justify-content:space-between;gap:18px;padding:6px 0;border-bottom:1px dashed #dce5df}.totals div:last-child{border:0;font-size:17px;font-weight:700}.payment{margin-top:18px;padding-top:14px;border-top:1px solid #e2e8e4}.payment h3{margin:0 0 8px;font-size:14px}.legal{margin-top:24px;color:#738078;font-size:11px;text-align:center}@media print{body{background:#fff}.toolbar{display:none}.sheet{width:100%;margin:0;padding:20px;box-shadow:none}}@media(max-width:700px){.header,.box,.footer-grid{display:block}.meta{text-align:left;margin-top:16px}.sheet{width:100%;margin:0;padding:20px}}
+*{box-sizing:border-box} body{margin:0;background:#f4f6f5;color:#1f2f26;font-family:Arial,Helvetica,sans-serif}.toolbar{display:flex;justify-content:flex-end;gap:8px;width:min(980px,calc(100% - 32px));margin:16px auto 0}.toolbar button,.toolbar a{padding:9px 13px;border:1px solid #ced9d1;border-radius:8px;background:#fff;color:#24342a;text-decoration:none;cursor:pointer}.sheet{position:relative;width:min(980px,calc(100% - 32px));margin:12px auto 32px;padding:34px 38px;background:#fff;box-shadow:0 12px 35px rgba(0,0,0,.08)}.watermark{position:absolute;top:180px;left:50%;transform:translateX(-50%) rotate(-25deg);color:rgba(150,20,20,.10);font-size:82px;font-weight:800;letter-spacing:.12em;pointer-events:none}.header{display:flex;justify-content:space-between;gap:28px;padding-bottom:20px;border-bottom:2px solid #173d2b}.brand h1{margin:0 0 6px;font-size:25px;color:#173d2b}.brand p{margin:0;color:#617067}.meta{text-align:right}.meta h2{margin:0 0 8px;font-size:24px}.meta span,.meta strong{display:block;margin-top:3px}.box{display:grid;grid-template-columns:1.5fr 1fr;gap:20px;margin:22px 0;padding:15px;border:1px solid #dde6e0;border-radius:10px;background:#fafcfb}.box h3{margin:0 0 7px;font-size:12px;text-transform:uppercase;color:#647168}.box p{margin:3px 0;font-size:13px;color:#5e6c63}table{width:100%;border-collapse:collapse}th,td{padding:9px 8px;border-bottom:1px solid #e8eeea;text-align:left;font-size:12px;vertical-align:top}th{background:#f4f7f5;color:#56635b}.num{text-align:right;white-space:nowrap}.product strong,.product small{display:block}.product small{margin-top:3px;color:#718078}.footer-grid{display:grid;grid-template-columns:1.35fr .8fr;gap:28px;margin-top:22px}.notes h3{margin:0 0 7px;font-size:14px}.notes p{margin:4px 0;color:#5e6c63;font-size:13px;white-space:pre-wrap}.totals{border:1px solid #dde6e0;border-radius:9px;padding:10px 13px}.totals div{display:flex;justify-content:space-between;gap:18px;padding:6px 0;border-bottom:1px dashed #dce5df}.totals div:last-child{border:0;font-size:17px;font-weight:700}.payment{margin-top:18px;padding-top:14px;border-top:1px solid #e2e8e4}.payment h3{margin:0 0 8px;font-size:14px}.qr-section{display:flex;align-items:center;gap:22px;margin-top:22px;padding:16px;border:1px solid #dce6df;border-radius:10px;background:#fafcfb}.qr-code{width:165px;min-width:165px}.qr-code svg{display:block;width:100%;height:auto}.qr-copy h3{margin:0 0 7px;font-size:14px}.qr-copy p{margin:4px 0;color:#5e6c63;font-size:12px}.qr-token{font-family:monospace;font-weight:700;letter-spacing:.08em;color:#173d2b}.qr-disabled{margin-top:20px;padding:12px;border:1px dashed #d2dbd5;border-radius:8px;color:#6d786f;font-size:12px}.legal{margin-top:24px;color:#738078;font-size:11px;text-align:center}@media print{body{background:#fff}.toolbar{display:none}.sheet{width:100%;margin:0;padding:20px;box-shadow:none}}@media(max-width:700px){.header,.box,.footer-grid{display:block}.qr-section{display:block}.qr-code{margin:0 auto 12px}.meta{text-align:left;margin-top:16px}.sheet{width:100%;margin:0;padding:20px}}
 </style>
 </head>
 <body>
@@ -104,6 +139,27 @@ $pagadoTotal = $pagadoDirecto + (float) $venta['importe_anticipado'];
 <?php if ($venta['condicion_pago'] === 'CREDITO'): ?><p>Cuenta por cobrar: <strong><?= si_escapar($venta['cxc_folio'] ?: '—') ?></strong> · Saldo: <strong><?= ven_imp_moneda($venta['cxc_saldo'] ?: 0, $venta) ?></strong> · Vencimiento: <?= ven_imp_fecha($venta['cxc_vencimiento']) ?>.</p><?php else: ?><p>Anticipos aplicados: <strong><?= ven_imp_moneda($venta['importe_anticipado'], $venta) ?></strong> · Cobro registrado al vender: <strong><?= ven_imp_moneda($pagadoDirecto, $venta) ?></strong> · Total cubierto: <strong><?= ven_imp_moneda($pagadoTotal, $venta) ?></strong>.</p><?php endif; ?>
 <?php if ($pagos): ?><table><thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Estado</th><th class="num">Importe</th></tr></thead><tbody><?php foreach ($pagos as $p): ?><tr><td><?= ven_imp_fecha($p['fecha_pago'], true) ?></td><td><?= si_escapar($p['metodo_nombre']) ?></td><td><?= si_escapar($p['referencia'] ?: '—') ?></td><td><?= si_escapar($p['estado']) ?></td><td class="num"><?= ven_imp_moneda($p['importe'], $venta) ?></td></tr><?php endforeach; ?></tbody></table><?php endif; ?>
 </section>
+<?php if ($venta['estado'] === 'CONFIRMADA' && $qrHabilitado && $qrSvg !== null): ?>
+<section class="qr-section">
+    <div class="qr-code"><?= $qrSvg ?></div>
+    <div class="qr-copy">
+        <h3>QR de validación de salida</h3>
+        <p>Escanea este código desde <strong>Verificar QR</strong>. La lectura solo consulta la venta; la salida debe confirmarse manualmente después de revisar la mercancía.</p>
+        <p>Referencia: <span class="qr-token"><?= si_escapar((string) $qrTokenCorto) ?></span></p>
+        <p>Una vez confirmada la salida, este QR queda consumido y no se genera otro automáticamente.</p>
+    </div>
+</section>
+<?php elseif ($venta['estado'] === 'CONFIRMADA' && $qrHabilitado && $qrToken !== null && $qrToken['usado_at'] !== null): ?>
+<div class="qr-disabled"><strong>Salida ya confirmada:</strong> este QR fue utilizado el <?= si_escapar(ven_imp_fecha($qrToken['usado_at'], true)) ?><?= !empty($qrToken['usado_por']) ? ' por ' . si_escapar((string) $qrToken['usado_por']) : '' ?>. No se imprime un nuevo QR para esta venta.</div>
+<?php elseif ($venta['estado'] === 'CONFIRMADA' && $qrHabilitado && $qrToken !== null && $qrToken['revocado_at'] !== null): ?>
+<div class="qr-disabled"><strong>QR revocado:</strong> <?= si_escapar((string) ($qrToken['motivo_revocacion'] ?: 'el código ya no autoriza salida.')) ?></div>
+<?php elseif ($venta['estado'] === 'CANCELADA'): ?>
+<div class="qr-disabled"><strong>QR de salida no válido:</strong> esta venta está cancelada.</div>
+<?php elseif ($qrError): ?>
+<div class="qr-disabled"><strong>QR no disponible:</strong> el comprobante puede imprimirse, pero no fue posible preparar el código de salida. Revisa el módulo Verificar QR antes de despachar.</div>
+<?php elseif (!$qrHabilitado): ?>
+<div class="qr-disabled">La validación QR de salida está deshabilitada en la configuración del sistema.</div>
+<?php endif; ?>
 <p class="legal">Comprobante interno del Sistema Integral. No sustituye un CFDI.</p>
 </main>
 </body>

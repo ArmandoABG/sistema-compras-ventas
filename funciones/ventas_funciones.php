@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/qr_core.php';
 
 si_requerir_permiso('ventas.ver', true);
 
@@ -1169,6 +1170,10 @@ function ven_crear(PDO $conexion): void
     $conexion->prepare("UPDATE ventas SET estado = 'CONFIRMADA' WHERE id = :id")
         ->execute([':id' => $ventaId]);
 
+    // El QR forma parte de la venta confirmada. Si la función está habilitada,
+    // el token se crea dentro de la misma transacción que venta/inventario/pago.
+    $tokenQr = si_qr_asegurar_token_venta($conexion, $ventaId);
+
     if ($cotizacionId !== null && $apartadoId === null) {
         $conexion->prepare("UPDATE cotizaciones SET estado = 'CONVERTIDA' WHERE id = :id AND estado = 'ACEPTADA'")
             ->execute([':id' => $cotizacionId]);
@@ -1192,6 +1197,7 @@ function ven_crear(PDO $conexion): void
         'movimiento_inventario_id' => $movimientoId,
         'pago_venta_id' => $pagoVentaId,
         'cuenta_por_cobrar_id' => $cuentaCobrarId,
+        'token_qr_id' => $tokenQr !== null ? (int) $tokenQr['id'] : null,
     ]);
 
     $conexion->commit();
@@ -1202,6 +1208,7 @@ function ven_crear(PDO $conexion): void
         'movimiento_inventario_id' => $movimientoId,
         'pago_venta_id' => $pagoVentaId,
         'cuenta_por_cobrar_id' => $cuentaCobrarId,
+        'qr_generado' => $tokenQr !== null,
     ], 201);
 }
 
@@ -1229,6 +1236,47 @@ function ven_cancelar_venta(PDO $conexion): void
     }
     if ($venta['estado'] !== 'CONFIRMADA') {
         ven_cancelar($conexion, 'Solo una venta CONFIRMADA puede cancelarse desde este flujo.', 409);
+    }
+
+    /*
+     * Si la mercancía ya cruzó el punto de salida mediante una confirmación QR,
+     * cancelar la venta y devolver inventario automáticamente sería inconsistente.
+     * Ese caso debe atenderse mediante devolución/regularización, no reverso directo.
+     */
+    $stmtSalidaQr = $conexion->prepare(
+        "SELECT id, usado_at, usado_by
+         FROM tokens_qr_venta
+         WHERE venta_id = :venta_id
+           AND usado_at IS NOT NULL
+         ORDER BY usado_at ASC, id ASC
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmtSalidaQr->execute([':venta_id' => $ventaId]);
+    $salidaQr = $stmtSalidaQr->fetch();
+    if ($salidaQr) {
+        $salidaConfirmadaPor = null;
+        if ($salidaQr['usado_by'] !== null) {
+            $stmtUsuarioSalida = $conexion->prepare(
+                "SELECT CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)
+                 FROM usuarios
+                 WHERE id = :id
+                 LIMIT 1"
+            );
+            $stmtUsuarioSalida->execute([':id' => (int) $salidaQr['usado_by']]);
+            $nombreSalida = $stmtUsuarioSalida->fetchColumn();
+            $salidaConfirmadaPor = $nombreSalida !== false ? trim((string) $nombreSalida) : null;
+        }
+        ven_cancelar(
+            $conexion,
+            'La salida física de esta venta ya fue confirmada por QR. No se puede cancelar y reponer inventario directamente; atiende el caso mediante el flujo de devolución correspondiente.',
+            409,
+            [
+                'token_qr_id' => (int) $salidaQr['id'],
+                'salida_confirmada_at' => $salidaQr['usado_at'],
+                'salida_confirmada_por' => $salidaConfirmadaPor,
+            ]
+        );
     }
 
     if ($venta['apartado_id'] !== null) {

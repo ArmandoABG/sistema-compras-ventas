@@ -165,3 +165,102 @@ textarea {
         padding: 16px;
     }
 }
+
+/* Navegación móvil: la sidebar pasa a panel lateral en pantallas pequeñas. */
+.sidebar-mobile-toggle,
+.sidebar-mobile-close,
+.sidebar-mobile-backdrop {
+    display: none;
+}
+
+@media (max-width: 850px) {
+    body.sidebar-mobile-open {
+        overflow: hidden;
+    }
+
+    .sidebar-mobile-toggle {
+        position: fixed;
+        top: 12px;
+        left: 12px;
+        z-index: 1250;
+        display: grid;
+        place-items: center;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        border: 1px solid #d7e1da;
+        border-radius: 9px;
+        background: #ffffff;
+        color: var(--brand);
+        box-shadow: 0 5px 18px rgba(20, 46, 31, .14);
+        font-size: 22px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .sidebar-mobile-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 1190;
+        display: block;
+        background: rgba(15, 28, 20, .46);
+    }
+
+    .sidebar-mobile-backdrop[hidden] {
+        display: none !important;
+    }
+
+    .sidebar {
+        position: fixed;
+        inset: 0 auto 0 0;
+        z-index: 1200;
+        display: block;
+        width: min(84vw, 320px);
+        min-height: 100vh;
+        padding: 18px 16px 24px;
+        overflow-y: auto;
+        transform: translateX(-105%);
+        transition: transform .2s ease;
+        box-shadow: 18px 0 45px rgba(10, 30, 19, .22);
+    }
+
+    .sidebar.is-mobile-open {
+        transform: translateX(0);
+    }
+
+    .sidebar-brand {
+        gap: 10px;
+        margin-bottom: 20px;
+        padding-right: 2px;
+    }
+
+    .sidebar-brand__text {
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
+    .sidebar-mobile-close {
+        flex: 0 0 auto;
+        display: grid;
+        place-items: center;
+        width: 38px;
+        height: 38px;
+        padding: 0;
+        border: 1px solid rgba(255,255,255,.16);
+        border-radius: 8px;
+        background: rgba(255,255,255,.08);
+        color: #ffffff;
+        font-size: 23px;
+        line-height: 1;
+        cursor: pointer;
+    }
+
+    .sidebar-menu {
+        padding-bottom: 22px;
+    }
+
+    .topbar {
+        min-height: 66px;
+        padding: 12px 16px 12px 66px;
+    }
+}

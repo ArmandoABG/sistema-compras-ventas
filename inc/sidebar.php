@@ -6,10 +6,20 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
     return $archivo === $scriptActual ? 'sidebar-link is-active' : 'sidebar-link';
 }
 ?>
-<aside class="sidebar">
+<button
+    type="button"
+    class="sidebar-mobile-toggle"
+    id="sidebarMobileToggle"
+    aria-label="Abrir menú principal"
+    aria-controls="appSidebar"
+    aria-expanded="false"
+>☰</button>
+<div class="sidebar-mobile-backdrop" id="sidebarMobileBackdrop" hidden></div>
+<aside class="sidebar" id="appSidebar">
     <div class="sidebar-brand">
         <div class="sidebar-brand__mark">SI</div>
-        <div><strong>Sistema Integral</strong><small>Gestión empresarial</small></div>
+        <div class="sidebar-brand__text"><strong>Sistema Integral</strong><small>Gestión empresarial</small></div>
+        <button type="button" class="sidebar-mobile-close" id="sidebarMobileClose" aria-label="Cerrar menú">×</button>
     </div>
     <nav class="sidebar-menu" aria-label="Menú principal">
         <?php if (si_tiene_permiso('dashboard.ver')): ?>
@@ -109,7 +119,44 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Producción
             </a>
         <?php endif; ?>
-        <?php if (si_tiene_permiso('qr.verificar')): ?><span class="sidebar-pending">Verificar QR</span><?php endif; ?>
+        <?php if (si_tiene_permiso('qr.verificar')): ?>
+            <a
+                class="<?= si_sidebar_activo('verificar_qr.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/verificar_qr.php')) ?>"
+            >
+                Verificar QR
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('reportes.ver')): ?><span class="sidebar-pending">Reportes</span><?php endif; ?>
     </nav>
 </aside>
+<script>
+(function () {
+    'use strict';
+    const sidebar = document.getElementById('appSidebar');
+    const toggle = document.getElementById('sidebarMobileToggle');
+    const close = document.getElementById('sidebarMobileClose');
+    const backdrop = document.getElementById('sidebarMobileBackdrop');
+    if (!sidebar || !toggle || !close || !backdrop) return;
+
+    function abrirMenu() {
+        sidebar.classList.add('is-mobile-open');
+        backdrop.hidden = false;
+        document.body.classList.add('sidebar-mobile-open');
+        toggle.setAttribute('aria-expanded', 'true');
+    }
+    function cerrarMenu() {
+        sidebar.classList.remove('is-mobile-open');
+        backdrop.hidden = true;
+        document.body.classList.remove('sidebar-mobile-open');
+        toggle.setAttribute('aria-expanded', 'false');
+    }
+
+    toggle.addEventListener('click', () => sidebar.classList.contains('is-mobile-open') ? cerrarMenu() : abrirMenu());
+    close.addEventListener('click', cerrarMenu);
+    backdrop.addEventListener('click', cerrarMenu);
+    sidebar.querySelectorAll('a.sidebar-link').forEach((link) => link.addEventListener('click', cerrarMenu));
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') cerrarMenu(); });
+    window.addEventListener('resize', () => { if (window.innerWidth > 850) cerrarMenu(); });
+})();
+</script>
