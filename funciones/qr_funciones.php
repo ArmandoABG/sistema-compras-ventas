@@ -410,7 +410,6 @@ function qr_confirmar_salida(PDO $conexion): void
     $respuesta['mensaje'] = 'Salida confirmada. Este QR ya no puede utilizarse para autorizar otra salida.';
     $respuesta['puede_confirmar_salida'] = false;
     $respuesta['puede_rechazar_salida'] = false;
-    $respuesta['puede_rehabilitar_qr'] = qr_usuario_es_administrador();
     $respuesta['qr']['activo'] = 0;
     $respuesta['qr']['usado_at'] = date('Y-m-d H:i:s');
     $respuesta['qr']['usado_por'] = (string) ($_SESSION['nombre_completo'] ?? $_SESSION['usuario'] ?? 'Usuario actual');
@@ -496,122 +495,49 @@ function qr_rechazar_salida(PDO $conexion): void
     si_responder_json(true, $respuesta['mensaje'], $respuesta);
 }
 
-
-/**
- * La rehabilitación de un QR consumido es deliberadamente exclusiva del rol
- * ADMINISTRADOR. No se basa en un botón oculto ni en un permiso de cliente:
- * cada petición vuelve a cargar la identidad desde MySQL mediante
- * si_requerir_permiso() al entrar en este endpoint.
- */
-function qr_usuario_es_administrador(): bool
-{
-    $roles = $_SESSION['roles'] ?? [];
-    return is_array($roles) && in_array('ADMINISTRADOR', $roles, true);
-}
-
-/**
- * Revierte ÚNICAMENTE la marca física de salida del QR.
- *
- * No toca la venta, pagos, CxC ni inventario: la salida QR es una validación
- * física posterior a una venta ya confirmada. Conserva las verificaciones
- * históricas y deja auditoría explícita del administrador que rehabilitó.
- */
 function qr_rehabilitar_qr(PDO $conexion): void
 {
-    if (!qr_usuario_es_administrador()) {
-        si_responder_json(
-            false,
-            'Solo un administrador puede rehabilitar un QR que ya fue marcado como salida.',
-            [],
-            403
-        );
-    }
-
-    if (!si_qr_habilitado($conexion)) {
-        si_responder_json(
-            false,
-            'La validación QR de salida está deshabilitada en la configuración del sistema.',
-            [],
-            409
-        );
+    si_refrescar_identidad_sesion_actual();
+    if (!qr_es_administrador_actual()) {
+        si_responder_json(false, 'Solo un Administrador puede rehabilitar un QR ya utilizado.', [], 403);
     }
 
     $entrada = qr_texto($_POST['codigo'] ?? '', 1200);
     $motivo = qr_texto($_POST['motivo'] ?? '', 255);
-
     if ($entrada === '') {
         si_responder_json(false, 'La referencia de la venta es obligatoria.', [], 422);
     }
     if (mb_strlen($motivo) < 5) {
-        si_responder_json(
-            false,
-            'Escribe un motivo de rehabilitación de al menos 5 caracteres.',
-            [],
-            422
-        );
+        si_responder_json(false, 'Escribe el motivo de la rehabilitación con al menos 5 caracteres.', [], 422);
     }
 
     $conexion->beginTransaction();
-
     $referencia = qr_resolver_referencia($conexion, $entrada, true, false);
-    if ($referencia === null) {
+    if ($referencia === null || !is_array($referencia['token'] ?? null)) {
         $conexion->rollBack();
-        si_responder_json(
-            false,
-            'La referencia ya no corresponde a una venta o QR emitido por el sistema.',
-            [],
-            404
-        );
+        si_responder_json(false, 'No se encontró un QR emitido para esta venta.', [], 404);
     }
 
     $venta = si_qr_resumen_venta($conexion, (int) $referencia['venta_id']);
-    if (!$venta) {
+    $token = $referencia['token'];
+    if (!$venta || $venta['estado'] !== 'CONFIRMADA') {
         $conexion->rollBack();
-        si_responder_json(false, 'La venta relacionada ya no existe.', [], 404);
+        si_responder_json(false, 'Solo se puede rehabilitar el QR de una venta confirmada.', [], 409);
     }
-
-    $token = is_array($referencia['token'] ?? null) ? $referencia['token'] : null;
-    if ($token === null) {
-        $conexion->rollBack();
-        si_responder_json(false, 'La venta no tiene un QR que pueda rehabilitarse.', [], 409);
-    }
-
-    if ($venta['estado'] !== 'CONFIRMADA') {
-        $conexion->rollBack();
-        si_responder_json(
-            false,
-            'Solo se puede rehabilitar el QR de una venta que continúe CONFIRMADA.',
-            [],
-            409
-        );
-    }
-
     if ($token['revocado_at'] !== null) {
         $conexion->rollBack();
-        si_responder_json(
-            false,
-            'Este QR fue revocado y no puede rehabilitarse desde la salida.',
-            [],
-            409
-        );
+        si_responder_json(false, 'Este QR fue revocado por una cancelación y no puede rehabilitarse desde salida.', [], 409);
     }
-
     if ($token['usado_at'] === null) {
         $conexion->rollBack();
-        si_responder_json(
-            false,
-            'Este QR no está marcado como salida; no necesita rehabilitación.',
-            [],
-            409
-        );
+        si_responder_json(false, 'Este QR no está marcado como utilizado; no necesita rehabilitación.', [], 409);
     }
 
-    $estadoAnterior = [
-        'token_id' => (int) $token['id'],
+    $antes = [
         'activo' => (int) $token['activo'],
-        'salida_confirmada_at' => $token['usado_at'],
-        'salida_confirmada_by' => $token['usado_by'],
-        'salida_confirmada_por' => trim((string) ($token['usado_por'] ?? '')) ?: null,
+        'usado_at' => $token['usado_at'],
+        'usado_by' => $token['usado_by'],
+        'token_corto' => si_qr_token_corto((string) $token['token']),
     ];
 
     $stmt = $conexion->prepare(
@@ -623,58 +549,56 @@ function qr_rehabilitar_qr(PDO $conexion): void
            AND usado_at IS NOT NULL
            AND revocado_at IS NULL"
     );
-    $stmt->execute([
-        ':token_id' => (int) $token['id'],
-    ]);
-
+    $stmt->execute([':token_id' => (int) $token['id']]);
     if ($stmt->rowCount() !== 1) {
         $conexion->rollBack();
-        si_responder_json(
-            false,
-            'El QR cambió de estado mientras se rehabilitaba. Vuelve a consultarlo.',
-            [],
-            409
-        );
+        si_responder_json(false, 'El QR cambió de estado mientras se rehabilitaba. Vuelve a consultarlo.', [], 409);
     }
 
-    si_qr_auditar(
-        $conexion,
-        'QR_REHABILITADO',
-        (int) $venta['id'],
-        'Un administrador rehabilitó el QR de salida de la venta ' . $venta['folio'] . '.',
-        [
-            'token_id' => (int) $token['id'],
-            'motivo' => $motivo,
-            'activo' => 1,
-            'usado_at' => null,
-            'usado_by' => null,
-        ],
-        $estadoAnterior
-    );
-
-    $referenciaActualizada = qr_resolver_referencia($conexion, $entrada, false, false);
-    if ($referenciaActualizada === null) {
-        throw new RuntimeException('No fue posible reconstruir el QR después de rehabilitarlo.');
-    }
-
-    $respuesta = qr_preparar_consulta($conexion, $referenciaActualizada);
-    $conexion->commit();
-
-    $respuesta['mensaje'] =
-        'QR rehabilitado correctamente. La venta vuelve a estar disponible para una nueva revisión de salida.';
-    $respuesta['rehabilitacion'] = [
-        'motivo' => $motivo,
-        'rehabilitado_por' => (string) (
-            $_SESSION['nombre_completo']
-            ?? $_SESSION['usuario']
-            ?? 'Administrador'
-        ),
-        'rehabilitado_at' => date('Y-m-d H:i:s'),
-        'salida_anterior_at' => $estadoAnterior['salida_confirmada_at'],
-        'salida_anterior_por' => $estadoAnterior['salida_confirmada_por'],
+    $despues = [
+        'activo' => 1,
+        'usado_at' => null,
+        'usado_by' => null,
+        'motivo_rehabilitacion' => $motivo,
+        'token_corto' => $antes['token_corto'],
     ];
 
+    $stmtAudit = $conexion->prepare(
+        "INSERT INTO auditoria
+            (usuario_id, fecha_hora, accion, modulo, entidad_tabla, entidad_id,
+             descripcion, datos_anteriores, datos_nuevos, ip, user_agent)
+         VALUES
+            (:usuario_id, NOW(), 'QR_REHABILITADO', 'QR', 'ventas', :entidad_id,
+             :descripcion, :datos_anteriores, :datos_nuevos, :ip, :user_agent)"
+    );
+    $stmtAudit->execute([
+        ':usuario_id' => (int) $_SESSION['usuario_id'],
+        ':entidad_id' => (int) $venta['id'],
+        ':descripcion' => mb_substr('El Administrador rehabilitó el QR de la venta ' . $venta['folio'] . '. Motivo: ' . $motivo, 0, 500),
+        ':datos_anteriores' => json_encode($antes, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE),
+        ':datos_nuevos' => json_encode($despues, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE),
+        ':ip' => si_ip_cliente(),
+        ':user_agent' => mb_substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500),
+    ]);
+
+    $conexion->commit();
+
+    $actual = qr_resolver_referencia($conexion, $entrada, false, false);
+    if ($actual === null) {
+        throw new RuntimeException('El QR fue rehabilitado, pero no pudo recargarse su estado.');
+    }
+    $respuesta = qr_preparar_consulta($conexion, $actual);
+    $respuesta['mensaje'] = 'QR rehabilitado correctamente. La venta vuelve a quedar disponible para una nueva confirmación de salida.';
+    $respuesta['rehabilitado'] = true;
+    $respuesta['motivo_rehabilitacion'] = $motivo;
+
     si_responder_json(true, $respuesta['mensaje'], $respuesta);
+}
+
+function qr_es_administrador_actual(): bool
+{
+    $roles = $_SESSION['roles'] ?? [];
+    return is_array($roles) && in_array('ADMINISTRADOR', $roles, true);
 }
 
 /**
@@ -931,7 +855,7 @@ function qr_preparar_consulta(PDO $conexion, array $referencia): array
         'puede_confirmar_salida' => $puedeConfirmar,
         'puede_rechazar_salida' => $puedeRechazar,
         'puede_rehabilitar_qr' => (
-            qr_usuario_es_administrador()
+            qr_es_administrador_actual()
             && $token !== null
             && $token['usado_at'] !== null
             && $token['revocado_at'] === null

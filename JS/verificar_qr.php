@@ -109,26 +109,6 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                         <section class="qr-sale-summary" id="resumenVentaQr"></section>
                         <div class="qr-warning" id="avisoVerificacionPrevia" hidden></div>
 
-                        <section class="qr-admin-panel" id="panelRehabilitar" hidden>
-                            <div>
-                                <strong>Acción exclusiva del Administrador</strong>
-                                <p>Si la salida se confirmó por error, puedes rehabilitar este mismo QR. La venta, pagos e inventario no se modifican; únicamente se revierte la marca de salida y la acción queda auditada.</p>
-                            </div>
-                            <button type="button" class="btn-secondary" id="btnMostrarRehabilitacion">Rehabilitar QR</button>
-                        </section>
-
-                        <section class="qr-admin-form" id="panelMotivoRehabilitacion" hidden>
-                            <label class="field">
-                                <span>Motivo de la rehabilitación</span>
-                                <textarea id="motivoRehabilitacion" rows="3" maxlength="255" placeholder="Ej. Se confirmó la salida por error antes de entregar la mercancía"></textarea>
-                                <small>Esta acción vuelve a habilitar el QR para una nueva revisión. El registro de la salida anterior se conserva en el historial y la rehabilitación queda en Auditoría.</small>
-                            </label>
-                            <div class="qr-reject-actions">
-                                <button type="button" class="btn-danger" id="btnRehabilitarQr">Confirmar rehabilitación</button>
-                                <button type="button" class="btn-secondary" id="btnCancelarRehabilitacion">Cancelar</button>
-                            </div>
-                        </section>
-
                         <div class="detail-section-heading"><h3>Productos de la venta</h3></div>
                         <div class="table-wrap">
                             <table class="module-table qr-products-table">
@@ -157,6 +137,23 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                             <div class="qr-reject-actions">
                                 <button type="button" class="btn-danger" id="btnGuardarRechazo">Registrar rechazo</button>
                                 <button type="button" class="btn-secondary" id="btnCancelarRechazo">Cancelar</button>
+                            </div>
+                        </section>
+
+                        <section class="qr-admin-panel" id="panelRehabilitar" hidden>
+                            <div class="qr-admin-heading">
+                                <div>
+                                    <strong>Corrección administrativa</strong>
+                                    <p>Solo un Administrador puede rehabilitar un QR marcado por error como salida. La acción queda registrada en Auditoría.</p>
+                                </div>
+                            </div>
+                            <label class="field">
+                                <span>Motivo de rehabilitación</span>
+                                <textarea id="motivoRehabilitar" rows="3" maxlength="255" placeholder="Ej. Se confirmó la salida por error antes de entregar la mercancía"></textarea>
+                            </label>
+                            <div class="qr-reject-actions">
+                                <button type="button" class="btn-warning" id="btnRehabilitarQr">Rehabilitar QR</button>
+                                <button type="button" class="btn-secondary" id="btnCancelarRehabilitar">Cancelar</button>
                             </div>
                         </section>
                     </div>
@@ -269,9 +266,8 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         $('panelDecision').hidden = true;
         $('panelRechazo').hidden = true;
         $('panelRehabilitar').hidden = true;
-        $('panelMotivoRehabilitacion').hidden = true;
         $('motivoRechazo').value = '';
-        $('motivoRehabilitacion').value = '';
+        $('motivoRehabilitar').value = '';
     }
 
     function renderResultado(r, permitirAcciones = true) {
@@ -326,7 +322,6 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                     ? 'La venta pasó las validaciones del sistema. Compara físicamente la mercancía y confirma solo si todo coincide.'
                     : 'La salida no puede confirmarse; puedes registrar un rechazo para dejar trazabilidad de la incidencia.';
             }
-
             estado.puedeRehabilitar = Boolean(r.puede_rehabilitar_qr);
             if (estado.puedeRehabilitar) {
                 $('panelRehabilitar').hidden = false;
@@ -357,7 +352,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         $('btnMostrarRechazo').disabled = true;
         try {
             const r = await apiPost('CONFIRMAR_SALIDA', { codigo: estado.codigoActual });
-            renderResultado(r, true);
+            renderResultado(r, false);
             mostrarMensaje('mensajePagina', r.mensaje, r.resultado === 'VALIDO' ? 'success' : 'warning');
             await Promise.all([cargarResumen(), cargarHistorial()]);
         } catch (e) {
@@ -383,52 +378,20 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         } finally { $('btnGuardarRechazo').disabled = false; }
     }
 
-
     async function rehabilitarQr() {
         if (!estado.codigoActual || !estado.puedeRehabilitar) return;
-
-        const motivo = $('motivoRehabilitacion').value.trim();
-        if (motivo.length < 5) {
-            return mostrarMensaje(
-                'mensajePagina',
-                'Escribe un motivo de rehabilitación de al menos 5 caracteres.',
-                'error'
-            );
-        }
-
-        if (!window.confirm(
-            '¿Rehabilitar este QR? Volverá a permitir una nueva confirmación de salida. ' +
-            'La salida anterior seguirá registrada y esta acción quedará auditada.'
-        )) return;
-
+        const motivo = $('motivoRehabilitar').value.trim();
+        if (motivo.length < 5) return mostrarMensaje('mensajePagina', 'Escribe un motivo de rehabilitación de al menos 5 caracteres.', 'error');
+        if (!window.confirm('¿Rehabilitar este QR? La venta podrá volver a confirmarse físicamente como salida. Esta corrección quedará registrada en Auditoría.')) return;
         $('btnRehabilitarQr').disabled = true;
-        $('btnCancelarRehabilitacion').disabled = true;
-
         try {
-            const r = await apiPost('REHABILITAR_QR', {
-                codigo: estado.codigoActual,
-                motivo
-            });
-
+            const r = await apiPost('REHABILITAR_QR', { codigo: estado.codigoActual, motivo });
             renderResultado(r, true);
             mostrarMensaje('mensajePagina', r.mensaje, 'success');
-
-            if (r.rehabilitacion) {
-                $('avisoVerificacionPrevia').hidden = false;
-                $('avisoVerificacionPrevia').innerHTML =
-                    '<strong>QR rehabilitado:</strong> ' +
-                    escapeHtml(fechaHora(r.rehabilitacion.rehabilitado_at)) +
-                    ' por ' + escapeHtml(r.rehabilitacion.rehabilitado_por || 'Administrador') +
-                    '. Motivo: ' + escapeHtml(r.rehabilitacion.motivo || '—');
-            }
-
             await Promise.all([cargarResumen(), cargarHistorial()]);
         } catch (e) {
             mostrarMensaje('mensajePagina', e.message, 'error');
-        } finally {
-            $('btnRehabilitarQr').disabled = false;
-            $('btnCancelarRehabilitacion').disabled = false;
-        }
+        } finally { $('btnRehabilitarQr').disabled = false; }
     }
 
     async function cargarHistorial() {
@@ -554,15 +517,8 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     $('btnMostrarRechazo').addEventListener('click', () => { $('panelRechazo').hidden = false; $('motivoRechazo').focus(); });
     $('btnGuardarRechazo').addEventListener('click', rechazarSalida);
     $('btnCancelarRechazo').addEventListener('click', () => { $('panelRechazo').hidden = true; $('motivoRechazo').value = ''; });
-    $('btnMostrarRehabilitacion').addEventListener('click', () => {
-        $('panelMotivoRehabilitacion').hidden = false;
-        $('motivoRehabilitacion').focus();
-    });
     $('btnRehabilitarQr').addEventListener('click', rehabilitarQr);
-    $('btnCancelarRehabilitacion').addEventListener('click', () => {
-        $('panelMotivoRehabilitacion').hidden = true;
-        $('motivoRehabilitacion').value = '';
-    });
+    $('btnCancelarRehabilitar').addEventListener('click', () => { $('panelRehabilitar').hidden = true; $('motivoRehabilitar').value = ''; });
     $('btnFotoQr').addEventListener('click', () => $('archivoQr').click());
     $('archivoQr').addEventListener('change', () => decodificarArchivo($('archivoQr').files && $('archivoQr').files[0]));
     $('tablaHistorial').addEventListener('click', (e) => { const b=e.target.closest('[data-verificacion-id]'); if(b) verHistorial(Number(b.dataset.verificacionId)); });

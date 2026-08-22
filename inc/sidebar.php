@@ -127,7 +127,14 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Verificar QR
             </a>
         <?php endif; ?>
-        <?php if (si_tiene_permiso('reportes.ver')): ?><span class="sidebar-pending">Reportes</span><?php endif; ?>
+        <?php if (si_tiene_permiso('reportes.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('reportes.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/reportes.php')) ?>"
+            >
+                Reportes
+            </a>
+        <?php endif; ?>
     </nav>
 </aside>
 <script>
