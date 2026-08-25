@@ -39,6 +39,9 @@ try {
             case 'BUSCAR_PRODUCTOS':
                 ven_buscar_productos($conexion);
                 break;
+            case 'STOCK_PRODUCTOS':
+                ven_stock_productos($conexion);
+                break;
             case 'PRESENTACIONES_PRODUCTO':
                 ven_presentaciones_producto($conexion);
                 break;
@@ -279,7 +282,71 @@ function ven_buscar_productos(PDO $conexion): void
     }
     unset($p);
 
+    $stock = ven_stock_multi_almacen($conexion, array_column($productos, 'id'));
+    foreach ($productos as &$p) {
+        $resumen = $stock[(int) $p['id']] ?? ven_stock_vacio();
+        $p['stock_total_fisico'] = $resumen['total_fisico'];
+        $p['stock_total_reservado'] = $resumen['total_reservado'];
+        $p['stock_total_disponible'] = $resumen['total_disponible'];
+        $p['stock_almacenes'] = $resumen['almacenes'];
+    }
+    unset($p);
+
     si_responder_json(true, 'Productos cargados.', ['productos' => $productos]);
+}
+
+function ven_stock_productos(PDO $conexion): void
+{
+    $almacenId = ven_id($_GET['almacen_id'] ?? null, 'almacén');
+    if (!ven_almacen_activo($conexion, $almacenId)) {
+        si_responder_json(false, 'El almacén seleccionado ya no está disponible.', [], 409);
+    }
+
+    $crudo = trim((string) ($_GET['producto_ids'] ?? ''));
+    $ids = [];
+    foreach (explode(',', $crudo) as $valor) {
+        $id = filter_var(trim($valor), FILTER_VALIDATE_INT, ['options' => ['min_range' => 1]]);
+        if ($id !== false) {
+            $ids[(int) $id] = (int) $id;
+        }
+    }
+    $ids = array_values($ids);
+    if (!$ids) {
+        si_responder_json(true, 'Sin productos para actualizar.', ['stock' => []]);
+    }
+    if (count($ids) > 60) {
+        si_responder_json(false, 'Solo se pueden consultar hasta 60 productos por solicitud.', [], 422);
+    }
+
+    $stock = ven_stock_multi_almacen($conexion, $ids);
+    $respuesta = [];
+    foreach ($ids as $productoId) {
+        $resumen = $stock[$productoId] ?? ven_stock_vacio();
+        $seleccionado = null;
+        foreach ($resumen['almacenes'] as $fila) {
+            if ((int) $fila['almacen_id'] === $almacenId) {
+                $seleccionado = $fila;
+                break;
+            }
+        }
+        $respuesta[(string) $productoId] = [
+            'producto_id' => $productoId,
+            'almacen_seleccionado' => $seleccionado ?? [
+                'almacen_id' => $almacenId,
+                'almacen_codigo' => '',
+                'almacen_nombre' => '',
+                'existencia_fisica' => 0.0,
+                'cantidad_reservada' => 0.0,
+                'cantidad_disponible' => 0.0,
+            ],
+            'stock_total_fisico' => $resumen['total_fisico'],
+            'stock_total_reservado' => $resumen['total_reservado'],
+            'stock_total_disponible' => $resumen['total_disponible'],
+            'stock_almacenes' => $resumen['almacenes'],
+        ];
+    }
+
+    si_responder_json(true, 'Disponibilidad actualizada.', ['stock' => $respuesta]);
 }
 
 function ven_presentaciones_producto(PDO $conexion): void
@@ -430,6 +497,16 @@ function ven_cotizacion_para_venta(PDO $conexion): void
     }
     unset($d);
 
+    $stockCotizacion = ven_stock_multi_almacen($conexion, array_column($detalles, 'producto_id'));
+    foreach ($detalles as &$d) {
+        $resumen = $stockCotizacion[(int) $d['producto_id']] ?? ven_stock_vacio();
+        $d['stock_total_fisico'] = $resumen['total_fisico'];
+        $d['stock_total_reservado'] = $resumen['total_reservado'];
+        $d['stock_total_disponible'] = $resumen['total_disponible'];
+        $d['stock_almacenes'] = $resumen['almacenes'];
+    }
+    unset($d);
+
     ven_tipar_cotizacion_fuente($cotizacion);
 
     si_responder_json(true, 'Cotización preparada para venta.', [
@@ -513,6 +590,16 @@ function ven_apartado_para_venta(PDO $conexion): void
     foreach ($detalles as &$d) {
         ven_tipar_detalle_fuente($d);
         $d['almacen_id'] = (int) $d['almacen_id'];
+    }
+    unset($d);
+
+    $stockApartado = ven_stock_multi_almacen($conexion, array_column($detalles, 'producto_id'));
+    foreach ($detalles as &$d) {
+        $resumen = $stockApartado[(int) $d['producto_id']] ?? ven_stock_vacio();
+        $d['stock_total_fisico'] = $resumen['total_fisico'];
+        $d['stock_total_reservado'] = $resumen['total_reservado'];
+        $d['stock_total_disponible'] = $resumen['total_disponible'];
+        $d['stock_almacenes'] = $resumen['almacenes'];
     }
     unset($d);
 
@@ -1756,6 +1843,104 @@ function ven_resolver_precio(PDO $conexion, int $productoId, int $presentacionId
     ];
 }
 
+
+function ven_stock_vacio(): array
+{
+    return [
+        'total_fisico' => 0.0,
+        'total_reservado' => 0.0,
+        'total_disponible' => 0.0,
+        'almacenes' => [],
+    ];
+}
+
+/**
+ * Devuelve el inventario de cada producto separado por almacén y también
+ * el total de la empresa. No mezcla unidades: cada resumen corresponde
+ * siempre a un único producto y su unidad base.
+ *
+ * @param int[] $productoIds
+ * @return array<int,array{total_fisico:float,total_reservado:float,total_disponible:float,almacenes:array<int,array<string,mixed>>}>
+ */
+function ven_stock_multi_almacen(PDO $conexion, array $productoIds): array
+{
+    $ids = [];
+    foreach ($productoIds as $valor) {
+        $id = (int) $valor;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+    $ids = array_values($ids);
+    if (!$ids) {
+        return [];
+    }
+    if (count($ids) > 100) {
+        $ids = array_slice($ids, 0, 100);
+    }
+
+    $placeholders = [];
+    $params = [];
+    foreach ($ids as $i => $id) {
+        $clave = ':producto_' . $i;
+        $placeholders[] = $clave;
+        $params[$clave] = $id;
+    }
+
+    $sql = "SELECT
+                p.id AS producto_id,
+                a.id AS almacen_id,
+                a.codigo AS almacen_codigo,
+                a.nombre AS almacen_nombre,
+                COALESCE(ea.existencia_fisica, 0) AS existencia_fisica,
+                COALESCE(ea.cantidad_reservada, 0) AS cantidad_reservada,
+                COALESCE(ea.cantidad_disponible, 0) AS cantidad_disponible
+            FROM productos p
+            CROSS JOIN almacenes a
+            LEFT JOIN existencias_almacen ea
+              ON ea.producto_id = p.id
+             AND ea.almacen_id = a.id
+            WHERE p.id IN (" . implode(',', $placeholders) . ")
+              AND a.activo = 1
+            ORDER BY p.id ASC, a.nombre ASC, a.id ASC";
+
+    $stmt = $conexion->prepare($sql);
+    foreach ($params as $clave => $valor) {
+        $stmt->bindValue($clave, $valor, PDO::PARAM_INT);
+    }
+    $stmt->execute();
+
+    $salida = [];
+    foreach ($ids as $id) {
+        $salida[$id] = ven_stock_vacio();
+    }
+
+    foreach ($stmt->fetchAll() as $fila) {
+        $productoId = (int) $fila['producto_id'];
+        if (!isset($salida[$productoId])) {
+            $salida[$productoId] = ven_stock_vacio();
+        }
+
+        $fisica = (float) $fila['existencia_fisica'];
+        $reservada = (float) $fila['cantidad_reservada'];
+        $disponible = (float) $fila['cantidad_disponible'];
+
+        $salida[$productoId]['total_fisico'] = round($salida[$productoId]['total_fisico'] + $fisica, 6);
+        $salida[$productoId]['total_reservado'] = round($salida[$productoId]['total_reservado'] + $reservada, 6);
+        $salida[$productoId]['total_disponible'] = round($salida[$productoId]['total_disponible'] + $disponible, 6);
+        $salida[$productoId]['almacenes'][] = [
+            'almacen_id' => (int) $fila['almacen_id'],
+            'almacen_codigo' => (string) $fila['almacen_codigo'],
+            'almacen_nombre' => (string) $fila['almacen_nombre'],
+            'existencia_fisica' => $fisica,
+            'cantidad_reservada' => $reservada,
+            'cantidad_disponible' => $disponible,
+        ];
+    }
+
+    return $salida;
+}
+
 /* =========================================================================
    INVENTARIO
    ========================================================================= */
@@ -1813,10 +1998,15 @@ function ven_bloquear_y_validar_existencias(PDO $conexion, array $detalles, bool
             }
         } else {
             if ($disponible + 0.000001 < $necesario) {
-                ven_cancelar($conexion, 'No hay existencia disponible suficiente para ' . $g['producto_nombre'] . '.', 409, [
+                $resumenStock = ven_stock_multi_almacen($conexion, [(int) $g['producto_id']]);
+                $resumenStock = $resumenStock[(int) $g['producto_id']] ?? ven_stock_vacio();
+                ven_cancelar($conexion, 'No hay existencia disponible suficiente para ' . $g['producto_nombre'] . ' en el almacén seleccionado.', 409, [
                     'producto_id' => $g['producto_id'],
+                    'almacen_id' => $g['almacen_id'],
                     'disponible_base' => round($disponible, 6),
                     'requerido_base' => round($necesario, 6),
+                    'stock_total_disponible' => $resumenStock['total_disponible'],
+                    'stock_almacenes' => $resumenStock['almacenes'],
                 ]);
             }
         }

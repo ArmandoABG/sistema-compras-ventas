@@ -62,7 +62,7 @@ function rep_definiciones(): array
     $estadosCotizacion = ['BORRADOR', 'GENERADA', 'ACEPTADA', 'RECHAZADA', 'VENCIDA', 'CONVERTIDA'];
     $estadosApartado = ['ACTIVO', 'COMPLETADO', 'VENCIDO', 'CANCELADO'];
     $estadosProduccion = ['BORRADOR', 'CONFIRMADA', 'CANCELADA'];
-    $estadosInventario = ['NORMAL', 'REORDEN', 'CRITICO', 'SIN_STOCK'];
+    $estadosInventario = ['NORMAL', 'REORDEN', 'CRITICO', 'SIN_DISPONIBLE', 'SIN_STOCK'];
     $estadosKardex = ['BORRADOR', 'APLICADO', 'REVERTIDO'];
     $accionesAuditoria = ['CREAR', 'MODIFICAR', 'CANCELAR', 'RESTAURAR', 'DESACTIVAR', 'REALIZAR_AJUSTE', 'REGISTRAR_PAGO', 'INICIAR_SESION', 'INICIAR_SESIÓN'];
 
@@ -114,6 +114,7 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Producto'), rep_col('tipo_producto', 'Tipo'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
                 rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('valor_inventario', 'Valor físico', 'moneda'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
@@ -135,6 +136,7 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Materia prima'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
                 rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
@@ -145,6 +147,7 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Producto terminado'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
                 rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
@@ -477,8 +480,9 @@ function rep_sql(string $codigo, array $f): array
             if ($f['estado'] !== '') {
                 $where[] = "(CASE
                     WHEN ea.existencia_fisica <= 0 THEN 'SIN_STOCK'
-                    WHEN ea.existencia_fisica <= ea.stock_minimo THEN 'CRITICO'
-                    WHEN ea.punto_reorden IS NOT NULL AND ea.existencia_fisica <= ea.punto_reorden THEN 'REORDEN'
+                    WHEN ea.cantidad_disponible <= 0 THEN 'SIN_DISPONIBLE'
+                    WHEN ea.stock_minimo > 0 AND ea.cantidad_disponible <= ea.stock_minimo THEN 'CRITICO'
+                    WHEN ea.punto_reorden IS NOT NULL AND ea.punto_reorden > 0 AND ea.cantidad_disponible <= ea.punto_reorden THEN 'REORDEN'
                     ELSE 'NORMAL'
                 END) = :estado_filtro";
                 $params['estado_filtro'] = $f['estado'];
@@ -486,12 +490,14 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['p.sku', 'p.nombre', 'a.nombre']);
             $sql = "SELECT a.nombre AS almacen, p.sku, p.nombre AS producto, p.tipo AS tipo_producto,
                            ea.existencia_fisica, ea.cantidad_reservada AS reservada, ea.cantidad_disponible AS disponible,
+                           ea.stock_minimo, ea.punto_reorden,
                            um.codigo AS unidad, ea.costo_promedio_base AS costo_promedio,
                            (ea.existencia_fisica * COALESCE(ea.costo_promedio_base,0)) AS valor_inventario,
                            CASE
                                WHEN ea.existencia_fisica <= 0 THEN 'SIN_STOCK'
-                               WHEN ea.existencia_fisica <= ea.stock_minimo THEN 'CRITICO'
-                               WHEN ea.punto_reorden IS NOT NULL AND ea.existencia_fisica <= ea.punto_reorden THEN 'REORDEN'
+                               WHEN ea.cantidad_disponible <= 0 THEN 'SIN_DISPONIBLE'
+                               WHEN ea.stock_minimo > 0 AND ea.cantidad_disponible <= ea.stock_minimo THEN 'CRITICO'
+                               WHEN ea.punto_reorden IS NOT NULL AND ea.punto_reorden > 0 AND ea.cantidad_disponible <= ea.punto_reorden THEN 'REORDEN'
                                ELSE 'NORMAL'
                            END AS estado
                     FROM existencias_almacen ea

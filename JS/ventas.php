@@ -199,6 +199,8 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                     </label>
                 </div>
 
+                <div id="alertaStockVenta" class="stock-assist" hidden></div>
+
                 <div class="table-wrap line-table-wrap">
                     <table class="module-table line-table">
                         <thead>
@@ -357,6 +359,120 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     function badge(valor) {
         const e = estadoVisual(valor);
         return '<span class="status-badge status-badge--' + e[1] + '">' + escapeHtml(e[0]) + '</span>';
+    }
+
+    function almacenActual() {
+        const id = Number($('ventaAlmacen')?.value || 0);
+        return estado.catalogos.almacenes.find((a) => Number(a.id) === id) || null;
+    }
+
+    function stockAlmacenesHtml(linea, requerido = 0) {
+        if (Number(linea.controla_inventario) !== 1) {
+            return '<span class="stock-indicator">Sin control de inventario</span>';
+        }
+
+        const almacenId = Number(linea.almacen_id || $('ventaAlmacen')?.value || 0);
+        const almacenes = Array.isArray(linea.stock_almacenes) ? linea.stock_almacenes : [];
+        const actual = almacenes.find((a) => Number(a.almacen_id) === almacenId);
+        const disponibleActual = actual ? Number(actual.cantidad_disponible || 0) : Number(linea.disponible || 0);
+        const total = Number(linea.stock_total_disponible ?? disponibleActual);
+        const unidad = escapeHtml(linea.unidad_base_simbolo || linea.unidad_base_codigo || '');
+        const suficiente = disponibleActual + 0.000001 >= Number(requerido || 0);
+        const nombreActual = actual?.almacen_nombre || almacenActual()?.nombre || 'Almacén seleccionado';
+        const otrosConStock = almacenes.filter((a) => Number(a.almacen_id) !== almacenId && Number(a.cantidad_disponible || 0) > 0.000001);
+        const alternativaSuficiente = otrosConStock.find((a) => Number(a.cantidad_disponible || 0) + 0.000001 >= Number(requerido || 0));
+
+        let html = '<div class="stock-cell">'
+            + '<div class="stock-cell__top">'
+            + '<span class="stock-indicator ' + (suficiente ? 'stock-indicator--ok' : 'stock-indicator--bad') + '">'
+            + escapeHtml(nombreActual) + ': ' + numero(disponibleActual, 3) + ' / ' + numero(requerido, 3) + ' ' + unidad
+            + '</span>'
+            + '<span class="stock-total-badge">Total empresa: ' + numero(total, 3) + ' ' + unidad + '</span>'
+            + '</div>';
+
+        if (!suficiente) {
+            if (otrosConStock.length) {
+                html += '<small class="stock-cell__hint">Hay existencia en ' + otrosConStock.length + ' almacén' + (otrosConStock.length === 1 ? '' : 'es') + ' adicional' + (otrosConStock.length === 1 ? '' : 'es') + '.</small>';
+            } else {
+                html += '<small class="stock-cell__hint stock-cell__hint--danger">No hay disponibilidad en otros almacenes.</small>';
+            }
+        }
+
+        if (almacenes.length > 1) {
+            html += '<details class="warehouse-stock-details"><summary>Ver stock por almacén</summary><div class="warehouse-stock-list">'
+                + almacenes.map((a) => {
+                    const disp = Number(a.cantidad_disponible || 0);
+                    const esActual = Number(a.almacen_id) === almacenId;
+                    return '<div class="warehouse-stock-item ' + (esActual ? 'warehouse-stock-item--selected' : '') + '">'
+                        + '<span><strong>' + escapeHtml(a.almacen_nombre || a.almacen_codigo || 'Almacén') + '</strong><small>'
+                        + 'Físico ' + numero(a.existencia_fisica, 3) + ' · Reservado ' + numero(a.cantidad_reservada, 3) + '</small></span>'
+                        + '<b>' + numero(disp, 3) + ' ' + unidad + '</b></div>';
+                }).join('')
+                + '</div></details>';
+        }
+
+        if (!suficiente && alternativaSuficiente && estado.origen !== 'APARTADO') {
+            html += '<button type="button" class="stock-switch-btn" data-switch-warehouse="' + Number(alternativaSuficiente.almacen_id) + '">Usar ' + escapeHtml(alternativaSuficiente.almacen_nombre || alternativaSuficiente.almacen_codigo) + '</button>';
+        }
+
+        return html + '</div>';
+    }
+
+    function ocultarAlertaStock() {
+        const el = $('alertaStockVenta');
+        if (!el) return;
+        el.hidden = true;
+        el.innerHTML = '';
+    }
+
+    function mostrarAlertaStock(linea, requerido, mensaje = '') {
+        const el = $('alertaStockVenta');
+        if (!el || !linea) return;
+        const almacenId = Number(linea.almacen_id || $('ventaAlmacen')?.value || 0);
+        const almacenes = Array.isArray(linea.stock_almacenes) ? linea.stock_almacenes : [];
+        const actual = almacenes.find((a) => Number(a.almacen_id) === almacenId);
+        const disponible = actual ? Number(actual.cantidad_disponible || 0) : Number(linea.disponible || 0);
+        const total = Number(linea.stock_total_disponible ?? disponible);
+        const unidad = escapeHtml(linea.unidad_base_simbolo || linea.unidad_base_codigo || '');
+        const otros = almacenes.filter((a) => Number(a.almacen_id) !== almacenId && Number(a.cantidad_disponible || 0) > 0.000001);
+
+        el.innerHTML = '<div class="stock-assist__icon">!</div><div class="stock-assist__body">'
+            + '<strong>' + escapeHtml(mensaje || ('Stock insuficiente para ' + linea.nombre)) + '</strong>'
+            + '<p>Necesitas <b>' + numero(requerido, 3) + ' ' + unidad + '</b>; en el almacén seleccionado hay <b>' + numero(disponible, 3) + '</b> y en toda la empresa hay <b>' + numero(total, 3) + ' ' + unidad + '</b> disponibles.</p>'
+            + (otros.length ? '<div class="stock-assist__warehouses">' + otros.map((a) =>
+                '<span>' + escapeHtml(a.almacen_nombre || a.almacen_codigo) + ': <b>' + numero(a.cantidad_disponible, 3) + ' ' + unidad + '</b></span>'
+            ).join('') + '</div>' : '<p class="stock-assist__empty">No hay existencia disponible en otros almacenes.</p>')
+            + '<small>El sistema no moverá mercancía automáticamente: puedes cambiar el almacén de la venta o registrar una transferencia.</small>'
+            + '</div>';
+        el.hidden = false;
+        el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    async function refrescarStockLineas() {
+        if (estado.origen === 'APARTADO' || !estado.lineas.length) return;
+        const almacenId = Number($('ventaAlmacen').value || 0);
+        if (!(almacenId > 0)) return;
+        const ids = [...new Set(estado.lineas.filter((l) => Number(l.controla_inventario) === 1).map((l) => Number(l.producto_id)).filter((id) => id > 0))];
+        if (!ids.length) return;
+
+        const r = await apiGet('STOCK_PRODUCTOS', { almacen_id: almacenId, producto_ids: ids.join(',') });
+        const stock = r.stock || {};
+        for (const linea of estado.lineas) {
+            const dato = stock[String(linea.producto_id)] || stock[linea.producto_id];
+            if (!dato) continue;
+            const sel = dato.almacen_seleccionado || {};
+            linea.almacen_id = almacenId;
+            linea.almacen_nombre = sel.almacen_nombre || almacenActual()?.nombre || '';
+            linea.existencia_fisica = Number(sel.existencia_fisica || 0);
+            linea.reservado = Number(sel.cantidad_reservada || 0);
+            linea.disponible = Number(sel.cantidad_disponible || 0);
+            linea.stock_total_fisico = Number(dato.stock_total_fisico || 0);
+            linea.stock_total_reservado = Number(dato.stock_total_reservado || 0);
+            linea.stock_total_disponible = Number(dato.stock_total_disponible || 0);
+            linea.stock_almacenes = Array.isArray(dato.stock_almacenes) ? dato.stock_almacenes : [];
+        }
+        ocultarAlertaStock();
+        renderLineas();
     }
 
     function mostrarMensaje(id, texto, tipo) {
@@ -619,6 +735,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('ventaMoneda').innerHTML = opciones(estado.catalogos.monedas, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMetodoPago').innerHTML = '<option value="0">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
         $('ventaCondicion').value = 'CONTADO';
+        ocultarAlertaStock();
         mostrarMensaje('mensajeVenta', ''); renderCliente(); renderLineas(); renderTotales();
     }
 
@@ -652,6 +769,10 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             nivel_precio: origen === 'DIRECTO' ? 'MANUAL' : 'HISTORICO', precio_venta_id: 0, precio_manual: false,
             controla_inventario: Number(d.controla_inventario ?? 1), permite_fraccion: Number(d.permite_fraccion ?? 1),
             disponible: Number(d.cantidad_disponible || 0), existencia_fisica: Number(d.existencia_fisica || 0), reservado: Number(d.cantidad_reservada || 0),
+            stock_total_fisico: Number(d.stock_total_fisico ?? d.existencia_fisica ?? 0),
+            stock_total_reservado: Number(d.stock_total_reservado ?? d.cantidad_reservada ?? 0),
+            stock_total_disponible: Number(d.stock_total_disponible ?? d.cantidad_disponible ?? 0),
+            stock_almacenes: Array.isArray(d.stock_almacenes) ? d.stock_almacenes : [],
             almacen_id: Number(d.almacen_id || $('ventaAlmacen').value || 0), almacen_nombre: d.almacen_nombre || '',
             presentaciones: [], bloqueada: true
         };
@@ -738,11 +859,21 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         const r = await apiGet('BUSCAR_PRODUCTOS', { q: q.trim(), almacen_id: almacenId });
         const items = r.productos || [];
         cont.dataset.items = JSON.stringify(items);
+        const almacen = almacenActual();
         cont.innerHTML = items.map((p) => {
-            const stock = Number(p.controla_inventario) === 1
-                ? 'Disponible ' + numero(p.cantidad_disponible, 3) + ' ' + escapeHtml(p.unidad_base_simbolo || p.unidad_base_codigo)
-                : 'Sin control de inventario';
-            return '<button type="button" class="smart-result" data-product-id="' + p.id + '"><strong>' + escapeHtml(p.sku + ' · ' + p.nombre) + '</strong><small>' + stock + '</small></button>';
+            if (Number(p.controla_inventario) !== 1) {
+                return '<button type="button" class="smart-result" data-product-id="' + p.id + '"><strong>' + escapeHtml(p.sku + ' · ' + p.nombre) + '</strong><small>Sin control de inventario</small></button>';
+            }
+            const unidad = escapeHtml(p.unidad_base_simbolo || p.unidad_base_codigo);
+            const seleccionado = Number(p.cantidad_disponible || 0);
+            const total = Number(p.stock_total_disponible ?? seleccionado);
+            const otros = (Array.isArray(p.stock_almacenes) ? p.stock_almacenes : [])
+                .filter((a) => Number(a.almacen_id) !== Number($('ventaAlmacen').value || 0) && Number(a.cantidad_disponible || 0) > 0.000001);
+            return '<button type="button" class="smart-result smart-result--stock" data-product-id="' + p.id + '">'
+                + '<span class="smart-result__main"><strong>' + escapeHtml(p.sku + ' · ' + p.nombre) + '</strong>'
+                + '<small>' + escapeHtml(almacen?.nombre || 'Almacén') + ': <b>' + numero(seleccionado, 3) + ' ' + unidad + '</b> disponibles · Total empresa: <b>' + numero(total, 3) + ' ' + unidad + '</b></small></span>'
+                + (otros.length ? '<span class="smart-result__other">' + otros.map((a) => escapeHtml(a.almacen_nombre) + ' ' + numero(a.cantidad_disponible, 3)).join(' · ') + '</span>' : '')
+                + '</button>';
         }).join('') || '<div class="smart-result smart-result--empty">No se encontraron productos.</div>';
         cont.hidden = false;
     }
@@ -759,7 +890,12 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             impuesto_pct: Number(p.impuesto_pct || 0), descuento: descuentoCliente(),
             controla_inventario: Number(p.controla_inventario || 0), permite_fraccion: Number(p.permite_fraccion || 0),
             disponible: Number(p.cantidad_disponible || 0), existencia_fisica: Number(p.existencia_fisica || 0), reservado: Number(p.cantidad_reservada || 0),
-            almacen_id: Number($('ventaAlmacen').value || 0), presentaciones: r.presentaciones || [], bloqueada: false
+            stock_total_fisico: Number(p.stock_total_fisico ?? p.existencia_fisica ?? 0),
+            stock_total_reservado: Number(p.stock_total_reservado ?? p.cantidad_reservada ?? 0),
+            stock_total_disponible: Number(p.stock_total_disponible ?? p.cantidad_disponible ?? 0),
+            stock_almacenes: Array.isArray(p.stock_almacenes) ? p.stock_almacenes : [],
+            almacen_id: Number($('ventaAlmacen').value || 0), almacen_nombre: almacenActual()?.nombre || '',
+            presentaciones: r.presentaciones || [], bloqueada: false
         };
         estado.lineas.push(linea);
         $('buscarProductoVenta').value = ''; $('resultadosProductosVenta').hidden = true;
@@ -805,9 +941,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('tablaLineasVenta').innerHTML = estado.lineas.map((l) => {
             const requerido = Number(l.cantidad_base || (Number(l.cantidad || 0) * Number(l.factor || 1)));
             const disponible = Number(l.disponible || 0);
-            const inventario = Number(l.controla_inventario) === 1
-                ? '<span class="stock-indicator ' + (disponible + 0.000001 >= requerido ? 'stock-indicator--ok' : 'stock-indicator--bad') + '">' + numero(disponible, 3) + ' / ' + numero(requerido, 3) + ' ' + escapeHtml(l.unidad_base_simbolo || l.unidad_base_codigo) + '</span>'
-                : '<span class="stock-indicator">Sin control</span>';
+            const inventario = stockAlmacenesHtml(l, requerido);
             const totalLinea = l.bloqueada ? Number(l.total || 0) : (() => {
                 const bruto = Number(l.cantidad || 0) * Number(l.precio || 0);
                 const sub = bruto * (1 - Number(l.descuento || 0) / 100);
@@ -850,7 +984,8 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 if (!(Number(l.cantidad) > 0) || !(Number(l.precio) > 0)) return mostrarMensaje('mensajeVenta', 'Todas las líneas deben tener cantidad y precio mayores que cero.', 'error');
                 const requerido = Number(l.cantidad || 0) * Number(l.factor || 1);
                 if (Number(l.controla_inventario) === 1 && Number(l.disponible || 0) + 0.000001 < requerido) {
-                    return mostrarMensaje('mensajeVenta', 'No hay existencia disponible suficiente para ' + l.nombre + '.', 'error');
+                    mostrarAlertaStock(l, requerido, 'No hay existencia suficiente de ' + l.nombre + ' en el almacén seleccionado.');
+                    return mostrarMensaje('mensajeVenta', 'Revisa la disponibilidad por almacén antes de confirmar.', 'error');
                 }
             }
         }
@@ -883,6 +1018,22 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             await cargarVentas();
             await verDetalle(r.venta_id);
         } catch (e) {
+            const datos = e?.data || {};
+            if (datos.producto_id && Array.isArray(datos.stock_almacenes)) {
+                const linea = estado.lineas.find((l) => Number(l.producto_id) === Number(datos.producto_id));
+                if (linea) {
+                    linea.stock_total_disponible = Number(datos.stock_total_disponible ?? linea.stock_total_disponible ?? 0);
+                    linea.stock_almacenes = datos.stock_almacenes;
+                    const actual = datos.stock_almacenes.find((a) => Number(a.almacen_id) === Number(datos.almacen_id || linea.almacen_id));
+                    if (actual) {
+                        linea.existencia_fisica = Number(actual.existencia_fisica || 0);
+                        linea.reservado = Number(actual.cantidad_reservada || 0);
+                        linea.disponible = Number(actual.cantidad_disponible || 0);
+                    }
+                    mostrarAlertaStock(linea, Number(datos.requerido_base || (linea.cantidad * linea.factor)), e.message);
+                    renderLineas();
+                }
+            }
             mostrarMensaje('mensajeVenta', e.message, 'error');
         } finally {
             $('btnConfirmarVenta').disabled = false;
@@ -1030,9 +1181,19 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     });
 
     $('tablaLineasVenta').addEventListener('click', (e) => {
+        const cambiar = e.target.closest('[data-switch-warehouse]');
+        if (cambiar) {
+            const destinoId = Number(cambiar.dataset.switchWarehouse || 0);
+            if (destinoId > 0 && estado.origen !== 'APARTADO') {
+                $('ventaAlmacen').value = String(destinoId);
+                $('ventaAlmacen').dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            return;
+        }
         const b = e.target.closest('[data-line-action="eliminar"]'); if (!b) return;
         const tr = b.closest('[data-key]');
         estado.lineas = estado.lineas.filter((x) => Number(x.key) !== Number(tr.dataset.key));
+        ocultarAlertaStock();
         renderLineas(); renderTotales();
     });
 
@@ -1051,17 +1212,14 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     });
 
     $('ventaAlmacen').addEventListener('change', async () => {
-        if (estado.cargandoOrigen) return;
-        if (estado.origen === 'COTIZACION') {
-            try { await cargarCotizacionFuente(estado.origenId); } catch (e) { mostrarMensaje('mensajeVenta', e.message, 'error'); }
-            return;
-        }
-        if (estado.origen !== 'DIRECTO') return;
-        if (estado.lineas.length) {
-            if (!window.confirm('Cambiar de almacén requiere volver a seleccionar los productos para recalcular la disponibilidad. ¿Continuar?')) {
-                return;
+        if (estado.cargandoOrigen || estado.origen === 'APARTADO') return;
+        try {
+            await refrescarStockLineas();
+            if (estado.lineas.length) {
+                mostrarMensaje('mensajeVenta', 'Se actualizó la disponibilidad de todos los productos para el almacén seleccionado.', 'success');
             }
-            estado.lineas = []; renderLineas(); renderTotales();
+        } catch (e) {
+            mostrarMensaje('mensajeVenta', e.message, 'error');
         }
     });
 

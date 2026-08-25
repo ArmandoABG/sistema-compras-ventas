@@ -27,8 +27,12 @@ $tituloPagina = 'Inventario';
 $puedeKardex = si_tiene_permiso('inventario.kardex');
 $puedeAjustar = si_tiene_permiso('inventario.ajustar');
 $puedeMermas = si_tiene_permiso('inventario.mermas');
+$puedeConfigurarStock = si_tiene_permiso('inventario.configurar_stock');
 $puedeOperaciones = $puedeAjustar || $puedeMermas;
+$puedeAccionesExistencia = $puedeKardex || $puedeConfigurarStock;
 $csrfToken = si_token_csrf();
+$almacenInicial = filter_input(INPUT_GET, 'almacen_id', FILTER_VALIDATE_INT);
+$almacenInicial = is_int($almacenInicial) && $almacenInicial > 0 ? $almacenInicial : 0;
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_inventario.css';
@@ -90,6 +94,12 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                         <h2>Existencias actuales</h2>
                         <p>El disponible se calcula como existencia física menos cantidad reservada; las cotizaciones no modifican ninguna de estas cantidades.</p>
                     </div>
+                    <?php if ($puedeConfigurarStock): ?>
+                    <div class="stock-policy-note" title="Los niveles se configuran por producto y almacén">
+                        <strong>Niveles de control</strong>
+                        <span>Configura mínimo y reorden desde cada renglón.</span>
+                    </div>
+                    <?php endif; ?>
                 </div>
 
                 <section class="stats-grid stats-grid--5">
@@ -188,11 +198,11 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                                     <th class="text-right">Disponible</th>
                                     <th class="text-right">Mínimo / reorden</th>
                                     <th>Estado</th>
-                                    <?php if ($puedeKardex): ?><th class="text-right">Acciones</th><?php endif; ?>
+                                    <?php if ($puedeAccionesExistencia): ?><th class="text-right">Acciones</th><?php endif; ?>
                                 </tr>
                             </thead>
                             <tbody id="tablaInventario">
-                                <tr><td colspan="<?= $puedeKardex ? '10' : '9' ?>" class="empty-cell">Cargando...</td></tr>
+                                <tr><td colspan="<?= $puedeAccionesExistencia ? '10' : '9' ?>" class="empty-cell">Cargando...</td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -449,6 +459,77 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     </div>
 </div>
 
+<?php if ($puedeConfigurarStock): ?>
+<div class="inv-stock-modal" id="modalNivelesStock" hidden>
+    <section class="inv-stock-modal__card" role="dialog" aria-modal="true" aria-labelledby="tituloNivelesStock">
+        <header class="inv-stock-modal__header">
+            <div>
+                <span class="inv-stock-modal__eyebrow">CONTROL DE INVENTARIO</span>
+                <h2 id="tituloNivelesStock">Stock mínimo y punto de reorden</h2>
+                <p id="subtituloNivelesStock">Configura cuándo debe considerarse crítico o próximo a reabastecimiento.</p>
+            </div>
+            <button type="button" class="inv-stock-modal__close" data-cerrar-niveles aria-label="Cerrar">×</button>
+        </header>
+
+        <form id="formNivelesStock" autocomplete="off">
+            <div class="inv-stock-modal__body">
+                <input type="hidden" id="nivelesProductoId">
+                <input type="hidden" id="nivelesAlmacenId">
+
+                <section class="stock-context">
+                    <div>
+                        <span>Producto</span>
+                        <strong id="nivelesProducto">—</strong>
+                        <small id="nivelesSku">—</small>
+                    </div>
+                    <div>
+                        <span>Almacén</span>
+                        <strong id="nivelesAlmacen">—</strong>
+                        <small id="nivelesUnidad">—</small>
+                    </div>
+                </section>
+
+                <section class="stock-snapshot" aria-label="Existencia actual">
+                    <article><span>Física</span><strong id="nivelesFisica">0</strong></article>
+                    <article><span>Reservada</span><strong id="nivelesReservada">0</strong></article>
+                    <article><span>Disponible</span><strong id="nivelesDisponible">0</strong></article>
+                </section>
+
+                <div class="stock-policy-grid">
+                    <label class="field">
+                        <span>Stock mínimo</span>
+                        <input type="number" id="nivelesStockMinimo" min="0" step="0.000001" inputmode="decimal" required>
+                        <small>Si el disponible llega a este nivel o menos, el producto se considera crítico.</small>
+                    </label>
+                    <label class="field">
+                        <span>Punto de reorden <em>opcional</em></span>
+                        <input type="number" id="nivelesPuntoReorden" min="0" step="0.000001" inputmode="decimal" placeholder="Sin punto de reorden">
+                        <small>Debe ser igual o mayor al stock mínimo. Déjalo vacío para desactivarlo.</small>
+                    </label>
+                </div>
+
+                <label class="stock-copy-option">
+                    <input type="checkbox" id="nivelesAplicarTodos">
+                    <span>
+                        <strong>Aplicar los mismos niveles a todos los almacenes activos</strong>
+                        <small>Solo copia mínimo y reorden; no modifica existencias, reservados ni costos. La vista previa corresponde al almacén mostrado.</small>
+                    </span>
+                </label>
+
+                <div class="stock-policy-preview" id="nivelesVistaPrevia">
+                    Captura los niveles para ver cómo quedará clasificado el stock actual.
+                </div>
+            </div>
+
+            <footer class="inv-stock-modal__footer">
+                <button type="button" class="btn-secondary" data-cerrar-niveles>Cancelar</button>
+                <button type="submit" class="btn-primary" id="btnGuardarNiveles">Guardar niveles</button>
+            </footer>
+        </form>
+    </section>
+</div>
+<?php endif; ?>
+
 <script>
 (() => {
     'use strict';
@@ -459,8 +540,11 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         puedeKardex: <?= $puedeKardex ? 'true' : 'false' ?>,
         puedeAjustar: <?= $puedeAjustar ? 'true' : 'false' ?>,
         puedeMermas: <?= $puedeMermas ? 'true' : 'false' ?>,
+        puedeConfigurarStock: <?= $puedeConfigurarStock ? 'true' : 'false' ?>,
+        puedeAccionesExistencia: <?= $puedeAccionesExistencia ? 'true' : 'false' ?>,
         puedeOperaciones: <?= $puedeOperaciones ? 'true' : 'false' ?>,
         csrfToken: <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
+        almacenInicial: <?= (int) $almacenInicial ?>,
     });
 
     const estado = {
@@ -483,6 +567,8 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         requestOperaciones: 0,
         requestProductosOperacion: 0,
         requestResumen: 0,
+        almacenesActivos: [],
+        niveles: { productoId: 0, almacenId: 0, disponible: 0, permiteFraccion: true },
     };
 
     const $ = (id) => document.getElementById(id);
@@ -510,6 +596,23 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         kpiSinDisponible: $('kpiSinDisponible'),
         kpiCriticos: $('kpiCriticos'),
         kpiReorden: $('kpiReorden'),
+
+        modalNivelesStock: $('modalNivelesStock'),
+        formNivelesStock: $('formNivelesStock'),
+        nivelesProductoId: $('nivelesProductoId'),
+        nivelesAlmacenId: $('nivelesAlmacenId'),
+        nivelesProducto: $('nivelesProducto'),
+        nivelesSku: $('nivelesSku'),
+        nivelesAlmacen: $('nivelesAlmacen'),
+        nivelesUnidad: $('nivelesUnidad'),
+        nivelesFisica: $('nivelesFisica'),
+        nivelesReservada: $('nivelesReservada'),
+        nivelesDisponible: $('nivelesDisponible'),
+        nivelesStockMinimo: $('nivelesStockMinimo'),
+        nivelesPuntoReorden: $('nivelesPuntoReorden'),
+        nivelesAplicarTodos: $('nivelesAplicarTodos'),
+        nivelesVistaPrevia: $('nivelesVistaPrevia'),
+        btnGuardarNiveles: $('btnGuardarNiveles'),
 
         buscarKardex: $('buscarKardex'),
         filtroAlmacenKardex: $('filtroAlmacenKardex'),
@@ -727,6 +830,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         if (!data) return;
 
         const almacenes = Array.isArray(data.almacenes) ? data.almacenes : [];
+        estado.almacenesActivos = almacenes;
         llenarSelect(
             dom.filtroAlmacenInventario,
             almacenes,
@@ -734,6 +838,12 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             'id',
             (a) => `${a.nombre}${a.codigo ? ` · ${a.codigo}` : ''}`
         );
+        if (CONFIG.almacenInicial > 0 && dom.filtroAlmacenInventario) {
+            const valorInicial = String(CONFIG.almacenInicial);
+            if (Array.from(dom.filtroAlmacenInventario.options).some((o) => o.value === valorInicial)) {
+                dom.filtroAlmacenInventario.value = valorInicial;
+            }
+        }
 
         if (CONFIG.puedeOperaciones) {
             llenarSelect(dom.operacionAlmacen, almacenes, { valor: '', texto: 'Selecciona almacén' }, 'id', (a) => `${a.nombre}${a.codigo ? ` · ${a.codigo}` : ''}`);
@@ -824,7 +934,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
 
     function renderInventario(registros) {
         if (!dom.tablaInventario) return;
-        const colspan = CONFIG.puedeKardex ? 10 : 9;
+        const colspan = CONFIG.puedeAccionesExistencia ? 10 : 9;
 
         if (!Array.isArray(registros) || registros.length === 0) {
             dom.tablaInventario.innerHTML = `<tr><td colspan="${colspan}" class="empty-cell">No hay productos que coincidan con los filtros.</td></tr>`;
@@ -835,8 +945,15 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             const unidad = r.unidad_simbolo || r.unidad_base || '';
             const activo = Number(r.producto_activo) === 1;
             const reorden = r.punto_reorden === null ? '—' : numero(r.punto_reorden);
-            const accion = CONFIG.puedeKardex
-                ? `<td class="actions-cell text-right"><button type="button" class="table-action" data-ver-kardex="1" data-producto-id="${Number(r.producto_id)}" data-almacen-id="${Number(r.almacen_id)}" data-producto="${escapar(`${r.sku} · ${r.producto}`)}">Ver Kardex</button></td>`
+            const acciones = [];
+            if (CONFIG.puedeConfigurarStock) {
+                acciones.push(`<button type="button" class="table-action table-action--stock" data-configurar-stock="1" data-producto-id="${Number(r.producto_id)}" data-almacen-id="${Number(r.almacen_id)}">Niveles</button>`);
+            }
+            if (CONFIG.puedeKardex) {
+                acciones.push(`<button type="button" class="table-action" data-ver-kardex="1" data-producto-id="${Number(r.producto_id)}" data-almacen-id="${Number(r.almacen_id)}" data-producto="${escapar(`${r.sku} · ${r.producto}`)}">Kardex</button>`);
+            }
+            const accion = CONFIG.puedeAccionesExistencia
+                ? `<td class="actions-cell text-right"><div class="table-actions-inline">${acciones.join('')}</div></td>`
                 : '';
 
             return `
@@ -874,7 +991,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     async function cargarInventario() {
         const requestId = ++estado.requestInventario;
         ocultarMensaje();
-        dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeKardex ? 10 : 9}" class="empty-cell">Cargando inventario...</td></tr>`;
+        dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeAccionesExistencia ? 10 : 9}" class="empty-cell">Cargando inventario...</td></tr>`;
 
         try {
             const data = await apiGet('LISTAR_INVENTARIO', parametrosInventario());
@@ -884,8 +1001,129 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             actualizarPaginacionInventario(data.paginacion || {});
         } catch (error) {
             if (requestId !== estado.requestInventario) return;
-            dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeKardex ? 10 : 9}" class="empty-cell">No fue posible cargar el inventario.</td></tr>`;
+            dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeAccionesExistencia ? 10 : 9}" class="empty-cell">No fue posible cargar el inventario.</td></tr>`;
             mostrarMensaje(error.message);
+        }
+    }
+
+    function estadoStockConNiveles(disponible, fisica, minimo, reorden) {
+        if (fisica <= 0) return 'SIN_STOCK';
+        if (disponible <= 0) return 'SIN_DISPONIBLE';
+        if (minimo > 0 && disponible <= minimo) return 'CRITICO';
+        if (reorden !== null && reorden > 0 && disponible <= reorden) return 'REORDEN';
+        return 'NORMAL';
+    }
+
+    function cerrarModalNiveles() {
+        if (!dom.modalNivelesStock) return;
+        dom.modalNivelesStock.hidden = true;
+        document.body.classList.remove('inv-modal-open');
+    }
+
+    function actualizarVistaPreviaNiveles() {
+        if (!CONFIG.puedeConfigurarStock || !dom.nivelesVistaPrevia) return;
+        const minimo = Number(dom.nivelesStockMinimo?.value || 0);
+        const textoReorden = String(dom.nivelesPuntoReorden?.value || '').trim();
+        const reorden = textoReorden === '' ? null : Number(textoReorden);
+        if (!Number.isFinite(minimo) || minimo < 0 || (reorden !== null && (!Number.isFinite(reorden) || reorden < 0))) {
+            dom.nivelesVistaPrevia.className = 'stock-policy-preview stock-policy-preview--danger';
+            dom.nivelesVistaPrevia.textContent = 'Captura valores válidos mayores o iguales a cero.';
+            return;
+        }
+        if (reorden !== null && reorden + 0.000001 < minimo) {
+            dom.nivelesVistaPrevia.className = 'stock-policy-preview stock-policy-preview--danger';
+            dom.nivelesVistaPrevia.textContent = 'El punto de reorden no puede ser menor que el stock mínimo.';
+            return;
+        }
+        const e = estadoStockConNiveles(estado.niveles.disponible, Number(dom.nivelesFisica?.dataset.valor || 0), minimo, reorden);
+        dom.nivelesVistaPrevia.className = `stock-policy-preview stock-policy-preview--${e.toLowerCase().replaceAll('_', '-')}`;
+        const descripciones = {
+            NORMAL: 'Con estos niveles, el disponible actual queda en estado Normal.',
+            REORDEN: 'Con estos niveles, el producto queda en Punto de reorden y requiere atención próxima.',
+            CRITICO: 'Con estos niveles, el producto queda en Stock crítico.',
+            SIN_DISPONIBLE: 'No hay disponible: la existencia física está totalmente comprometida por reservas.',
+            SIN_STOCK: 'Actualmente no existe stock físico en este almacén.',
+        };
+        dom.nivelesVistaPrevia.textContent = descripciones[e] || e;
+    }
+
+    async function abrirModalNiveles(productoId, almacenId) {
+        if (!CONFIG.puedeConfigurarStock || !dom.modalNivelesStock) return;
+        try {
+            const data = await apiGet('OBTENER_NIVELES_STOCK', { producto_id: productoId, almacen_id: almacenId });
+            if (!data) return;
+            const d = data.detalle || {};
+            estado.niveles.productoId = Number(d.producto_id || 0);
+            estado.niveles.almacenId = Number(d.almacen_id || 0);
+            estado.niveles.disponible = Number(d.cantidad_disponible || 0);
+            estado.niveles.permiteFraccion = Number(d.permite_fraccion || 0) === 1;
+
+            dom.nivelesProductoId.value = String(estado.niveles.productoId);
+            dom.nivelesAlmacenId.value = String(estado.niveles.almacenId);
+            dom.nivelesProducto.textContent = d.producto || '—';
+            dom.nivelesSku.textContent = d.sku || '—';
+            dom.nivelesAlmacen.textContent = d.almacen || '—';
+            dom.nivelesUnidad.textContent = `Unidad base: ${d.unidad_simbolo || d.unidad_base || '—'}`;
+            dom.nivelesFisica.textContent = numero(d.existencia_fisica);
+            dom.nivelesFisica.dataset.valor = String(Number(d.existencia_fisica || 0));
+            dom.nivelesReservada.textContent = numero(d.cantidad_reservada);
+            dom.nivelesDisponible.textContent = numero(d.cantidad_disponible);
+            dom.nivelesStockMinimo.value = String(Number(d.stock_minimo || 0));
+            dom.nivelesPuntoReorden.value = d.punto_reorden === null ? '' : String(Number(d.punto_reorden));
+            const step = estado.niveles.permiteFraccion ? '0.000001' : '1';
+            dom.nivelesStockMinimo.step = step;
+            dom.nivelesPuntoReorden.step = step;
+            dom.nivelesAplicarTodos.checked = false;
+            dom.nivelesAplicarTodos.disabled = estado.almacenesActivos.length <= 1;
+            actualizarVistaPreviaNiveles();
+            dom.modalNivelesStock.hidden = false;
+            document.body.classList.add('inv-modal-open');
+            dom.nivelesStockMinimo.focus();
+        } catch (error) {
+            mostrarMensaje(error.message);
+        }
+    }
+
+    async function guardarNivelesStock(event) {
+        event.preventDefault();
+        if (!CONFIG.puedeConfigurarStock) return;
+        const minimoTexto = String(dom.nivelesStockMinimo.value || '').trim();
+        const reordenTexto = String(dom.nivelesPuntoReorden.value || '').trim();
+        if (minimoTexto === '') {
+            mostrarMensaje('Captura el stock mínimo.');
+            return;
+        }
+        const minimo = Number(minimoTexto);
+        const reorden = reordenTexto === '' ? null : Number(reordenTexto);
+        if (!Number.isFinite(minimo) || minimo < 0 || (reorden !== null && (!Number.isFinite(reorden) || reorden < 0))) {
+            mostrarMensaje('Los niveles de stock deben ser valores válidos mayores o iguales a cero.');
+            return;
+        }
+        if (reorden !== null && reorden + 0.000001 < minimo) {
+            mostrarMensaje('El punto de reorden debe ser igual o mayor al stock mínimo.');
+            return;
+        }
+        if (!estado.niveles.permiteFraccion && (Math.abs(minimo - Math.round(minimo)) > 0.000001 || (reorden !== null && Math.abs(reorden - Math.round(reorden)) > 0.000001))) {
+            mostrarMensaje('Este producto no permite fracciones; usa niveles enteros.');
+            return;
+        }
+        dom.btnGuardarNiveles.disabled = true;
+        try {
+            const data = await apiPost('GUARDAR_NIVELES_STOCK', {
+                producto_id: estado.niveles.productoId,
+                almacen_id: estado.niveles.almacenId,
+                stock_minimo: minimoTexto,
+                punto_reorden: reordenTexto,
+                aplicar_todos: dom.nivelesAplicarTodos.checked ? 1 : 0,
+            });
+            cerrarModalNiveles();
+            mostrarMensaje(data.mensaje || 'Niveles actualizados.', 'success');
+            cargarInventario();
+            cargarResumen();
+        } catch (error) {
+            mostrarMensaje(error.message);
+        } finally {
+            dom.btnGuardarNiveles.disabled = false;
         }
     }
 
@@ -1245,6 +1483,11 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         });
 
         dom.tablaInventario?.addEventListener('click', (event) => {
+            const botonStock = event.target.closest('[data-configurar-stock="1"]');
+            if (botonStock) {
+                abrirModalNiveles(Number(botonStock.dataset.productoId || 0), Number(botonStock.dataset.almacenId || 0));
+                return;
+            }
             const boton = event.target.closest('[data-ver-kardex="1"]');
             if (!boton) return;
             seleccionarProductoKardex(
@@ -1253,6 +1496,19 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                 boton.dataset.almacenId
             );
         });
+
+        if (CONFIG.puedeConfigurarStock) {
+            dom.formNivelesStock?.addEventListener('submit', guardarNivelesStock);
+            dom.nivelesStockMinimo?.addEventListener('input', actualizarVistaPreviaNiveles);
+            dom.nivelesPuntoReorden?.addEventListener('input', actualizarVistaPreviaNiveles);
+            document.querySelectorAll('[data-cerrar-niveles]').forEach((b) => b.addEventListener('click', cerrarModalNiveles));
+            dom.modalNivelesStock?.addEventListener('mousedown', (event) => {
+                if (event.target === dom.modalNivelesStock) cerrarModalNiveles();
+            });
+            document.addEventListener('keydown', (event) => {
+                if (event.key === 'Escape' && dom.modalNivelesStock && !dom.modalNivelesStock.hidden) cerrarModalNiveles();
+            });
+        }
 
         if (CONFIG.puedeOperaciones) {
             dom.botonesTipoOperacion.forEach((boton) => {
@@ -1379,7 +1635,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         } catch (error) {
             mostrarMensaje(error.message);
             if (dom.tablaInventario) {
-                dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeKardex ? 10 : 9}" class="empty-cell">No fue posible iniciar el módulo.</td></tr>`;
+                dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeAccionesExistencia ? 10 : 9}" class="empty-cell">No fue posible iniciar el módulo.</td></tr>`;
             }
         }
     }

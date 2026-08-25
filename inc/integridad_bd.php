@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 /**
  * Mantiene alineados los catálogos de seguridad con la base oficial.
- * No elimina personalizaciones de Vendedor/Supervisor; solo repara faltantes.
+ * No elimina ni fuerza personalizaciones de Vendedor/Supervisor. Los paquetes
+ * iniciales se usan solo al crear/recuperar un rol vacío; los cambios de versión
+ * que agregan permisos se aplican mediante su SQL de actualización.
  */
 
 function si_roles_oficiales(): array
@@ -56,6 +58,10 @@ function si_permisos_oficiales(): array
         ['inventario.kardex', 'inventario', 'Consultar Kardex'],
         ['inventario.ajustar', 'inventario', 'Realizar ajustes'],
         ['inventario.mermas', 'inventario', 'Registrar mermas'],
+        ['inventario.transferir', 'inventario', 'Transferir entre almacenes'],
+        ['inventario.configurar_stock', 'inventario', 'Configurar stock mínimo y punto de reorden'],
+        ['almacenes.ver', 'inventario', 'Ver almacenes'],
+        ['almacenes.administrar', 'inventario', 'Administrar almacenes'],
         ['produccion.ver', 'produccion', 'Ver producción'],
         ['produccion.registrar', 'produccion', 'Registrar producción'],
         ['qr.verificar', 'qr', 'Verificar QR de salida'],
@@ -83,8 +89,8 @@ function si_permisos_supervisor_iniciales(): array
     return [
         'dashboard.ver', 'productos.ver', 'proveedores.ver', 'proveedores.comparar_precios',
         'compras.ver', 'compras.crear', 'recepciones.ver', 'recepciones.confirmar',
-        'inventario.ver', 'inventario.kardex', 'inventario.ajustar', 'inventario.mermas',
-        'produccion.ver', 'produccion.registrar', 'qr.verificar',
+        'inventario.ver', 'inventario.kardex', 'inventario.ajustar', 'inventario.mermas', 'inventario.transferir', 'inventario.configurar_stock',
+        'almacenes.ver', 'produccion.ver', 'produccion.registrar', 'qr.verificar',
         'devoluciones.ver', 'devoluciones.compra', 'reportes.ver',
     ];
 }

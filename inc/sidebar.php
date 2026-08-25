@@ -119,6 +119,22 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Inventario
             </a>
         <?php endif; ?>
+        <?php if (si_tiene_permiso('almacenes.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('almacenes.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/almacenes.php')) ?>"
+            >
+                Almacenes
+            </a>
+        <?php endif; ?>
+        <?php if (si_tiene_permiso('inventario.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('transferencias.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/transferencias.php')) ?>"
+            >
+                Transferencias
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('produccion.ver')): ?>
             <a
                 class="<?= si_sidebar_activo('produccion.php', $scriptActual) ?>"

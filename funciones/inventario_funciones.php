@@ -35,6 +35,11 @@ try {
                 inv_listar_inventario($conexion);
                 break;
 
+            case 'OBTENER_NIVELES_STOCK':
+                si_requerir_permiso('inventario.configurar_stock', true);
+                inv_obtener_niveles_stock($conexion);
+                break;
+
             case 'LISTAR_KARDEX':
                 if (!si_tiene_permiso('inventario.kardex')) {
                     si_responder_json(false, 'No tienes permiso para consultar el Kardex.', [], 403);
@@ -65,6 +70,11 @@ try {
     si_validar_csrf();
 
     switch ($accion) {
+        case 'GUARDAR_NIVELES_STOCK':
+            si_requerir_permiso('inventario.configurar_stock', true);
+            inv_guardar_niveles_stock($conexion);
+            break;
+
         case 'REGISTRAR_AJUSTE':
             si_requerir_permiso('inventario.ajustar', true);
             inv_registrar_ajuste($conexion);
@@ -139,6 +149,7 @@ function inv_catalogos(PDO $conexion): void
             'puede_kardex' => si_tiene_permiso('inventario.kardex'),
             'puede_ajustar' => si_tiene_permiso('inventario.ajustar'),
             'puede_mermas' => si_tiene_permiso('inventario.mermas'),
+            'puede_configurar_stock' => si_tiene_permiso('inventario.configurar_stock'),
         ]
     );
 }
@@ -334,6 +345,212 @@ function inv_listar_inventario(PDO $conexion): void
             ],
         ]
     );
+}
+
+/* =========================================================================
+   NIVELES DE STOCK / REORDEN
+   ========================================================================= */
+
+function inv_obtener_niveles_stock(PDO $conexion): void
+{
+    $productoId = inv_entero_rango($_GET['producto_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $almacenId = inv_entero_rango($_GET['almacen_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    if ($productoId <= 0 || $almacenId <= 0) {
+        si_responder_json(false, 'Selecciona producto y almacén.', [], 422);
+    }
+
+    $stmt = $conexion->prepare(
+        "SELECT p.id AS producto_id, p.sku, p.nombre AS producto, p.permite_fraccion, p.activo AS producto_activo,
+                um.nombre AS unidad_base, um.simbolo AS unidad_simbolo,
+                a.id AS almacen_id, a.codigo AS almacen_codigo, a.nombre AS almacen,
+                COALESCE(ea.existencia_fisica, 0) AS existencia_fisica,
+                COALESCE(ea.cantidad_reservada, 0) AS cantidad_reservada,
+                (COALESCE(ea.existencia_fisica, 0) - COALESCE(ea.cantidad_reservada, 0)) AS cantidad_disponible,
+                COALESCE(ea.stock_minimo, 0) AS stock_minimo,
+                ea.punto_reorden
+         FROM productos p
+         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+         INNER JOIN almacenes a ON a.id = :almacen AND a.activo = 1
+         LEFT JOIN existencias_almacen ea ON ea.producto_id = p.id AND ea.almacen_id = a.id
+         WHERE p.id = :producto
+           AND p.controla_inventario = 1
+           AND p.deleted_at IS NULL
+         LIMIT 1"
+    );
+    $stmt->execute([':almacen' => $almacenId, ':producto' => $productoId]);
+    $fila = $stmt->fetch();
+    if (!$fila) {
+        si_responder_json(false, 'El producto o almacén ya no está disponible para configurar inventario.', [], 404);
+    }
+
+    foreach (['producto_id', 'permite_fraccion', 'producto_activo', 'almacen_id'] as $campo) {
+        $fila[$campo] = (int) $fila[$campo];
+    }
+    foreach (['existencia_fisica', 'cantidad_reservada', 'cantidad_disponible', 'stock_minimo'] as $campo) {
+        $fila[$campo] = (float) $fila[$campo];
+    }
+    $fila['punto_reorden'] = $fila['punto_reorden'] !== null ? (float) $fila['punto_reorden'] : null;
+
+    si_responder_json(true, 'Niveles cargados.', ['detalle' => $fila]);
+}
+
+function inv_guardar_niveles_stock(PDO $conexion): void
+{
+    $productoId = inv_entero_rango($_POST['producto_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $almacenId = inv_entero_rango($_POST['almacen_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $stockTexto = trim((string) ($_POST['stock_minimo'] ?? ''));
+    $reordenTexto = trim((string) ($_POST['punto_reorden'] ?? ''));
+    $aplicarTodos = (string) ($_POST['aplicar_todos'] ?? '0') === '1';
+
+    if ($productoId <= 0 || $almacenId <= 0) {
+        si_responder_json(false, 'Selecciona producto y almacén.', [], 422);
+    }
+
+    $stockMinimo = inv_decimal_no_negativo($stockTexto);
+    if ($stockMinimo === null) {
+        si_responder_json(false, 'El stock mínimo debe ser un número válido mayor o igual a cero, con máximo 6 decimales.', [], 422);
+    }
+    $puntoReorden = null;
+    if ($reordenTexto !== '') {
+        $puntoReorden = inv_decimal_no_negativo($reordenTexto);
+        if ($puntoReorden === null) {
+            si_responder_json(false, 'El punto de reorden debe ser un número válido mayor o igual a cero, con máximo 6 decimales.', [], 422);
+        }
+        if ($puntoReorden + 0.000001 < $stockMinimo) {
+            si_responder_json(false, 'El punto de reorden debe ser igual o mayor al stock mínimo.', [], 422);
+        }
+    }
+
+    $conexion->beginTransaction();
+
+    $stmtProducto = $conexion->prepare(
+        "SELECT p.id, p.sku, p.nombre, p.permite_fraccion, p.controla_inventario, p.deleted_at,
+                um.simbolo AS unidad_simbolo
+         FROM productos p
+         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+         WHERE p.id = :id
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmtProducto->execute([':id' => $productoId]);
+    $producto = $stmtProducto->fetch();
+    if (!$producto || $producto['deleted_at'] !== null || (int) $producto['controla_inventario'] !== 1) {
+        inv_cancelar_transaccion($conexion, 'El producto ya no está disponible para control de inventario.', 409);
+    }
+
+    if ((int) $producto['permite_fraccion'] !== 1) {
+        $valores = [$stockMinimo];
+        if ($puntoReorden !== null) $valores[] = $puntoReorden;
+        foreach ($valores as $valor) {
+            if (abs($valor - round($valor)) > 0.000001) {
+                inv_cancelar_transaccion($conexion, 'Este producto no permite fracciones; el mínimo y reorden deben ser cantidades enteras.', 422);
+            }
+        }
+    }
+
+    if ($aplicarTodos) {
+        $stmtAlmacenes = $conexion->query(
+            "SELECT id, codigo, nombre
+             FROM almacenes
+             WHERE activo = 1
+             ORDER BY id ASC
+             FOR UPDATE"
+        );
+        $almacenes = $stmtAlmacenes->fetchAll();
+    } else {
+        $stmtAlmacenes = $conexion->prepare(
+            "SELECT id, codigo, nombre
+             FROM almacenes
+             WHERE id = :id AND activo = 1
+             LIMIT 1
+             FOR UPDATE"
+        );
+        $stmtAlmacenes->execute([':id' => $almacenId]);
+        $filaAlmacen = $stmtAlmacenes->fetch();
+        $almacenes = $filaAlmacen ? [$filaAlmacen] : [];
+    }
+
+    if (!$almacenes) {
+        inv_cancelar_transaccion($conexion, 'El almacén seleccionado ya no está activo.', 409);
+    }
+    if (!$aplicarTodos && (int) $almacenes[0]['id'] !== $almacenId) {
+        inv_cancelar_transaccion($conexion, 'El almacén seleccionado ya no está disponible.', 409);
+    }
+
+    $insertar = $conexion->prepare(
+        "INSERT IGNORE INTO existencias_almacen
+            (almacen_id, producto_id, existencia_fisica, cantidad_reservada, stock_minimo, punto_reorden)
+         VALUES (:almacen, :producto, 0, 0, 0, NULL)"
+    );
+    $bloquear = $conexion->prepare(
+        "SELECT id, existencia_fisica, cantidad_reservada, stock_minimo, punto_reorden
+         FROM existencias_almacen
+         WHERE almacen_id = :almacen AND producto_id = :producto
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $actualizar = $conexion->prepare(
+        "UPDATE existencias_almacen
+         SET stock_minimo = :stock_minimo,
+             punto_reorden = :punto_reorden
+         WHERE id = :id"
+    );
+
+    $actualizados = 0;
+    foreach ($almacenes as $almacen) {
+        $aid = (int) $almacen['id'];
+        $insertar->execute([':almacen' => $aid, ':producto' => $productoId]);
+        $bloquear->execute([':almacen' => $aid, ':producto' => $productoId]);
+        $existencia = $bloquear->fetch();
+        if (!$existencia) {
+            inv_cancelar_transaccion($conexion, 'No fue posible preparar la configuración del producto en el almacén.', 409);
+        }
+
+        $antes = [
+            'stock_minimo' => (float) $existencia['stock_minimo'],
+            'punto_reorden' => $existencia['punto_reorden'] !== null ? (float) $existencia['punto_reorden'] : null,
+            'existencia_fisica' => (float) $existencia['existencia_fisica'],
+            'cantidad_reservada' => (float) $existencia['cantidad_reservada'],
+        ];
+
+        $actualizar->bindValue(':stock_minimo', $stockMinimo);
+        if ($puntoReorden === null) {
+            $actualizar->bindValue(':punto_reorden', null, PDO::PARAM_NULL);
+        } else {
+            $actualizar->bindValue(':punto_reorden', $puntoReorden);
+        }
+        $actualizar->bindValue(':id', (int) $existencia['id'], PDO::PARAM_INT);
+        $actualizar->execute();
+
+        inv_auditar_operacion(
+            $conexion,
+            'NIVELES_STOCK_ACTUALIZADOS',
+            (int) $existencia['id'],
+            'Se actualizaron stock mínimo y punto de reorden de ' . $producto['sku'] . ' en ' . $almacen['codigo'] . '.',
+            $antes,
+            [
+                'stock_minimo' => $stockMinimo,
+                'punto_reorden' => $puntoReorden,
+                'producto_id' => $productoId,
+                'producto' => $producto['nombre'],
+                'almacen_id' => $aid,
+                'almacen' => $almacen['nombre'],
+                'aplicado_a_todos' => $aplicarTodos,
+            ],
+            'existencias_almacen'
+        );
+        $actualizados++;
+    }
+
+    $conexion->commit();
+    si_responder_json(true, $aplicarTodos
+        ? 'Niveles actualizados en ' . $actualizados . ' almacén(es) activos.'
+        : 'Stock mínimo y punto de reorden actualizados correctamente.', [
+        'producto_id' => $productoId,
+        'almacenes_actualizados' => $actualizados,
+        'stock_minimo' => $stockMinimo,
+        'punto_reorden' => $puntoReorden,
+    ]);
 }
 
 /* =========================================================================
@@ -1213,7 +1430,7 @@ function inv_auditar_operacion(
     ?array $nuevos,
     string $entidadTabla = 'movimientos_inventario'
 ): void {
-    if (!in_array($entidadTabla, ['movimientos_inventario', 'ajustes_inventario'], true)) {
+    if (!in_array($entidadTabla, ['movimientos_inventario', 'ajustes_inventario', 'existencias_almacen'], true)) {
         $entidadTabla = 'movimientos_inventario';
     }
 
@@ -1238,6 +1455,19 @@ function inv_auditar_operacion(
         ':ip' => inv_texto($_SERVER['REMOTE_ADDR'] ?? '', 45) ?: null,
         ':user_agent' => inv_texto($_SERVER['HTTP_USER_AGENT'] ?? '', 500) ?: null,
     ]);
+}
+
+function inv_decimal_no_negativo($valor): ?float
+{
+    $texto = trim((string) $valor);
+    if ($texto === '' || !preg_match('/^\d+(?:\.\d{1,6})?$/', $texto)) {
+        return null;
+    }
+    $numero = (float) $texto;
+    if (!is_finite($numero) || $numero < 0 || $numero > 999999999999.999999) {
+        return null;
+    }
+    return round($numero, 6);
 }
 
 function inv_decimal_positivo($valor): ?float
@@ -1334,7 +1564,11 @@ function inv_entero_rango($valor, int $min, int $max, int $predeterminado): int
         return $predeterminado;
     }
 
-    return max($min, min($max, $numero));
+    if ($numero < $min || $numero > $max) {
+        return $predeterminado;
+    }
+
+    return $numero;
 }
 
 function inv_texto($valor, int $maximo): string
