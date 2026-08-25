@@ -103,6 +103,14 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Cuentas por cobrar
             </a>
         <?php endif; ?>
+        <?php if (si_tiene_permiso('devoluciones.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('devoluciones.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/devoluciones.php')) ?>"
+            >
+                Devoluciones
+            </a>
+        <?php endif; ?>
         <?php if (si_tiene_permiso('inventario.ver')): ?>
             <a
                 class="<?= si_sidebar_activo('inventario.php', $scriptActual) ?>"

@@ -48,6 +48,10 @@ function si_permisos_oficiales(): array
         ['ventas.cancelar', 'ventas', 'Cancelar ventas'],
         ['cuentas_cobrar.ver', 'cuentas_por_cobrar', 'Ver cuentas por cobrar'],
         ['cuentas_cobrar.cobrar', 'cuentas_por_cobrar', 'Registrar cobros'],
+        ['devoluciones.ver', 'devoluciones', 'Ver devoluciones y regularizaciones'],
+        ['devoluciones.venta', 'devoluciones', 'Registrar devoluciones de cliente'],
+        ['devoluciones.compra', 'devoluciones', 'Registrar devoluciones a proveedor'],
+        ['devoluciones.regularizar', 'devoluciones', 'Liquidar regularizaciones financieras de devoluciones'],
         ['inventario.ver', 'inventario', 'Ver inventario'],
         ['inventario.kardex', 'inventario', 'Consultar Kardex'],
         ['inventario.ajustar', 'inventario', 'Realizar ajustes'],
@@ -70,7 +74,7 @@ function si_permisos_vendedor_iniciales(): array
         'dashboard.ver', 'productos.ver', 'clientes.ver', 'clientes.administrar',
         'cotizaciones.ver', 'cotizaciones.crear', 'apartados.ver', 'apartados.crear',
         'ventas.ver', 'ventas.crear', 'cuentas_cobrar.ver', 'cuentas_cobrar.cobrar',
-        'reportes.ver',
+        'devoluciones.ver', 'devoluciones.venta', 'reportes.ver',
     ];
 }
 
@@ -80,7 +84,8 @@ function si_permisos_supervisor_iniciales(): array
         'dashboard.ver', 'productos.ver', 'proveedores.ver', 'proveedores.comparar_precios',
         'compras.ver', 'compras.crear', 'recepciones.ver', 'recepciones.confirmar',
         'inventario.ver', 'inventario.kardex', 'inventario.ajustar', 'inventario.mermas',
-        'produccion.ver', 'produccion.registrar', 'qr.verificar', 'reportes.ver',
+        'produccion.ver', 'produccion.registrar', 'qr.verificar',
+        'devoluciones.ver', 'devoluciones.compra', 'reportes.ver',
     ];
 }
 
