@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/alertas_operativas.php';
 
 si_requerir_permiso(
     'dashboard.ver',
@@ -95,8 +96,13 @@ try {
            AND p.activo = 1
            AND p.controla_inventario = 1
            AND a.activo = 1
-           AND ea.stock_minimo > 0
-           AND ea.cantidad_disponible <= ea.stock_minimo"
+           AND (
+                ea.cantidad_disponible <= 0
+                OR (
+                    ea.stock_minimo > 0
+                    AND ea.cantidad_disponible <= ea.stock_minimo
+                )
+           )"
     )->fetchColumn();
 
     $cobrosVencidos = (int) $conexion->query(
@@ -237,7 +243,15 @@ try {
             ea.existencia_fisica,
             ea.cantidad_reservada,
             ea.cantidad_disponible,
-            ea.stock_minimo
+            ea.stock_minimo,
+            ea.punto_reorden,
+            CASE
+                WHEN ea.existencia_fisica <= 0 THEN 'SIN_STOCK'
+                WHEN ea.cantidad_disponible <= 0 THEN 'SIN_DISPONIBLE'
+                WHEN ea.stock_minimo > 0
+                 AND ea.cantidad_disponible <= ea.stock_minimo THEN 'CRITICO'
+                ELSE 'NORMAL'
+            END AS estado_stock
          FROM existencias_almacen ea
          INNER JOIN productos p
             ON p.id = ea.producto_id
@@ -249,13 +263,24 @@ try {
            AND p.activo = 1
            AND p.controla_inventario = 1
            AND a.activo = 1
-           AND ea.stock_minimo > 0
-           AND ea.cantidad_disponible <= ea.stock_minimo
+           AND (
+                ea.cantidad_disponible <= 0
+                OR (
+                    ea.stock_minimo > 0
+                    AND ea.cantidad_disponible <= ea.stock_minimo
+                )
+           )
          ORDER BY
-            (
-                ea.cantidad_disponible
-                / NULLIF(ea.stock_minimo, 0)
-            ) ASC,
+            CASE
+                WHEN ea.existencia_fisica <= 0 THEN 0
+                WHEN ea.cantidad_disponible <= 0 THEN 1
+                ELSE 2
+            END,
+            CASE
+                WHEN ea.stock_minimo > 0
+                THEN ea.cantidad_disponible / NULLIF(ea.stock_minimo, 0)
+                ELSE 999999
+            END ASC,
             p.nombre ASC
          LIMIT 10"
     );
@@ -435,6 +460,15 @@ try {
 
     $movimientos = $stmt->fetchAll();
 
+    /*
+    |--------------------------------------------------------------------------
+    | Alertas operativas compartidas
+    |--------------------------------------------------------------------------
+    | El mismo motor alimenta Dashboard y Topbar.
+    |--------------------------------------------------------------------------
+    */
+    $alertasOperativas = si_alertas_operativas_resumen($conexion);
+
     si_responder_json(
         true,
         'Dashboard cargado correctamente.',
@@ -446,6 +480,9 @@ try {
                 'cobros_vencidos' => $cobrosVencidos,
                 'pagos_vencidos' => $pagosVencidos,
                 'notificaciones' => $notificaciones,
+                'alertas_activas' => (int) ($alertasOperativas['total_sin_leer'] ?? 0),
+                'alertas_criticas' => (int) (($alertasOperativas['prioridades_sin_leer']['CRITICA'] ?? 0)),
+                'alertas_altas' => (int) (($alertasOperativas['prioridades_sin_leer']['ALTA'] ?? 0)),
             ],
             'ventas_hoy_monedas' => $ventasHoyMonedas,
             'resumen_cobrar' => $resumenCobrar,
@@ -459,6 +496,7 @@ try {
                 'indice_pct' => $indiceMermaPct,
             ],
             'movimientos_recientes' => $movimientos,
+            'alertas_operativas' => $alertasOperativas,
             'fecha_servidor' => date('Y-m-d H:i:s'),
         ]
     );

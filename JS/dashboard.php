@@ -158,6 +158,61 @@ $versionModulo = is_file($cssModulo)
                 hidden
             ></div>
 
+            <section class="dashboard-alert-center" id="centroAlertas">
+                <header class="dashboard-alert-center__head">
+                    <div>
+                        <p class="dashboard-eyebrow">PRIORIDADES OPERATIVAS</p>
+                        <h2>Centro de alertas</h2>
+                        <p>
+                            Pendientes calculados con la información real del sistema.
+                            Cada usuario ve solo lo que corresponde a sus permisos.
+                        </p>
+                    </div>
+
+                    <div class="dashboard-alert-center__health" id="estadoGeneralAlertas">
+                        Consultando...
+                    </div>
+                </header>
+
+                <div class="dashboard-alert-summary" id="resumenAlertas">
+                    <article class="dashboard-alert-summary__item is-critical">
+                        <span>Críticas</span>
+                        <strong id="alertasCriticas">0</strong>
+                    </article>
+                    <article class="dashboard-alert-summary__item is-high">
+                        <span>Altas</span>
+                        <strong id="alertasAltas">0</strong>
+                    </article>
+                    <article class="dashboard-alert-summary__item is-normal">
+                        <span>Atención</span>
+                        <strong id="alertasNormales">0</strong>
+                    </article>
+                    <article class="dashboard-alert-summary__item is-total">
+                        <span>Sin leer</span>
+                        <strong id="alertasTotal">0</strong>
+                    </article>
+                </div>
+
+                <div class="dashboard-alert-toolbar" id="filtrosAlertas">
+                    <div class="dashboard-alert-filters" role="group" aria-label="Filtrar alertas">
+                        <button type="button" class="is-active" data-alert-filter="NO_LEIDAS">Sin leer</button>
+                        <button type="button" data-alert-filter="TODAS">Todas</button>
+                        <button type="button" data-alert-filter="CRITICA">Críticas</button>
+                        <button type="button" data-alert-filter="ALTA">Altas</button>
+                        <button type="button" data-alert-filter="NORMAL">Atención</button>
+                        <button type="button" data-alert-filter="LEIDAS">Leídas</button>
+                    </div>
+
+                    <button type="button" class="dashboard-alert-mark-all" id="btnMarcarTodasAlertas">
+                        Marcar todas como leídas
+                    </button>
+                </div>
+
+                <div class="dashboard-alert-list" id="listaAlertas">
+                    <div class="dashboard-alert-empty">Cargando alertas operativas...</div>
+                </div>
+            </section>
+
             <section class="kpi-grid">
 
                 <article class="kpi-card">
@@ -192,10 +247,10 @@ $versionModulo = is_file($cssModulo)
                     <small>Cuentas a proveedores</small>
                 </article>
 
-                <article class="kpi-card">
-                    <span>Notificaciones</span>
+                <article class="kpi-card kpi-card--alerts">
+                    <span>Alertas sin leer</span>
                     <strong id="kpiNotificaciones">0</strong>
-                    <small>Pendientes de leer</small>
+                    <small id="detalleAlertasKpi">Sin pendientes críticos</small>
                 </article>
 
                 <article class="kpi-card">
@@ -418,6 +473,11 @@ $versionModulo = is_file($cssModulo)
     const endpoint =
         '?dashboard_api=1&accion=RESUMEN';
 
+    const alertasEndpoint = <?= json_encode(si_url('funciones/alertas_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+    const csrfAlertas = <?= json_encode(si_token_csrf(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+    let estadoAlertas = { alertas: [], total: 0, total_sin_leer: 0, prioridades: {}, prioridades_sin_leer: {} };
+    let filtroAlertas = 'NO_LEIDAS';
+
     const botonActualizar =
         document.getElementById('btnActualizar');
 
@@ -526,7 +586,16 @@ $versionModulo = is_file($cssModulo)
         document.getElementById(
             'kpiNotificaciones'
         ).textContent =
-            numero(kpis.notificaciones);
+            numero(kpis.alertas_activas);
+
+        const detalleAlertas = document.getElementById('detalleAlertasKpi');
+        const criticas = Number(kpis.alertas_criticas || 0);
+        const altas = Number(kpis.alertas_altas || 0);
+        detalleAlertas.textContent = criticas > 0
+            ? numero(criticas) + (criticas === 1 ? ' crítica' : ' críticas')
+            : (altas > 0
+                ? numero(altas) + (altas === 1 ? ' prioridad alta' : ' prioridades altas')
+                : 'Sin pendientes críticos');
 
         const merma = datos.merma_mes || {};
         document.getElementById('kpiMerma').textContent =
@@ -556,6 +625,213 @@ $versionModulo = is_file($cssModulo)
                 ).join(' · ')
                 : 'Sin ventas confirmadas';
     }
+
+    function clasePrioridadAlerta(prioridad) {
+        const valor = String(prioridad || 'NORMAL').toUpperCase();
+        if (valor === 'CRITICA') return 'is-critical';
+        if (valor === 'ALTA') return 'is-high';
+        if (valor === 'BAJA') return 'is-low';
+        return 'is-normal';
+    }
+
+    function textoPrioridadAlerta(prioridad) {
+        const valor = String(prioridad || 'NORMAL').toUpperCase();
+        if (valor === 'CRITICA') return 'Crítica';
+        if (valor === 'ALTA') return 'Alta';
+        if (valor === 'BAJA') return 'Baja';
+        return 'Atención';
+    }
+
+    function alertasFiltradas() {
+        const items = Array.isArray(estadoAlertas.alertas) ? estadoAlertas.alertas : [];
+
+        return items.filter(function (item) {
+            const prioridad = String(item.prioridad || 'NORMAL').toUpperCase();
+            const leida = Boolean(item.leida);
+
+            if (filtroAlertas === 'TODAS') return true;
+            if (filtroAlertas === 'NO_LEIDAS') return !leida;
+            if (filtroAlertas === 'LEIDAS') return leida;
+            if (filtroAlertas === 'NORMAL') return !leida && (prioridad === 'NORMAL' || prioridad === 'BAJA');
+            return !leida && prioridad === filtroAlertas;
+        });
+    }
+
+    function renderListaAlertas() {
+        const lista = document.getElementById('listaAlertas');
+        const items = alertasFiltradas();
+
+        document.querySelectorAll('[data-alert-filter]').forEach(function (button) {
+            button.classList.toggle('is-active', button.dataset.alertFilter === filtroAlertas);
+        });
+
+        const marcarTodas = document.getElementById('btnMarcarTodasAlertas');
+        if (marcarTodas) {
+            marcarTodas.disabled = Number(estadoAlertas.total_sin_leer || 0) <= 0;
+        }
+
+        if (!items.length) {
+            const mensajes = {
+                NO_LEIDAS: ['Sin alertas nuevas', 'Ya revisaste todas las alertas activas.'],
+                LEIDAS: ['Todavía no hay alertas leídas', 'Cuando marques una alerta como leída aparecerá aquí durante su periodo de reconocimiento.'],
+                CRITICA: ['Sin alertas críticas nuevas', 'No hay prioridades críticas sin leer.'],
+                ALTA: ['Sin alertas altas nuevas', 'No hay prioridades altas sin leer.'],
+                NORMAL: ['Sin alertas de atención nuevas', 'No hay alertas de seguimiento pendientes de leer.'],
+                TODAS: ['Todo en orden', 'No hay alertas activas para tu perfil.']
+            };
+            const texto = mensajes[filtroAlertas] || mensajes.TODAS;
+            lista.innerHTML = '<div class="dashboard-alert-empty is-ok"><strong>' + escapeHtml(texto[0]) + '</strong><span>' + escapeHtml(texto[1]) + '</span></div>';
+            return;
+        }
+
+        lista.innerHTML = items.map(function (item) {
+            const detalles = Array.isArray(item.detalles) ? item.detalles : [];
+            const leida = Boolean(item.leida);
+            const detalleHtml = detalles.length
+                ? '<details class="dashboard-alert-details"><summary>Ver ' + numero(detalles.length) + (detalles.length === 1 ? ' detalle' : ' detalles') + '</summary>'
+                    + '<div class="dashboard-alert-details__body">' + detalles.map(function (detalle) {
+                        return '<div class="dashboard-alert-detail">'
+                            + '<div><strong>' + escapeHtml(detalle.principal || '') + '</strong>'
+                            + (detalle.secundario ? '<span>' + escapeHtml(detalle.secundario) + '</span>' : '') + '</div>'
+                            + (detalle.meta ? '<small>' + escapeHtml(detalle.meta) + '</small>' : '')
+                            + '</div>';
+                    }).join('') + '</div></details>'
+                : '';
+
+            return '<article class="dashboard-alert-row ' + clasePrioridadAlerta(item.prioridad) + (leida ? ' is-read' : '') + '" data-alert-key="' + escapeHtml(item.clave || '') + '">'
+                + '<div class="dashboard-alert-row__indicator" aria-hidden="true"></div>'
+                + '<div class="dashboard-alert-row__main">'
+                + '<div class="dashboard-alert-row__meta">'
+                + '<span class="dashboard-alert-card__priority">' + escapeHtml(textoPrioridadAlerta(item.prioridad)) + '</span>'
+                + '<span class="dashboard-alert-card__category">' + escapeHtml(item.categoria || '') + '</span>'
+                + (leida ? '<span class="dashboard-alert-read-badge">Leída</span>' : '<span class="dashboard-alert-new-badge">Nueva</span>')
+                + '</div>'
+                + '<div class="dashboard-alert-row__title"><h3>' + escapeHtml(item.titulo || 'Alerta') + '</h3>'
+                + '<strong class="dashboard-alert-card__count">' + numero(item.conteo || 0) + '</strong></div>'
+                + '<p>' + escapeHtml(item.mensaje || '') + '</p>'
+                + detalleHtml
+                + '</div>'
+                + '<div class="dashboard-alert-row__actions">'
+                + '<a class="dashboard-alert-card__action" href="' + escapeHtml(item.href || '#') + '">' + escapeHtml(item.accion || 'Revisar') + '</a>'
+                + (!leida ? '<button type="button" class="dashboard-alert-read" data-alert-read="' + escapeHtml(item.clave || '') + '">Marcar como leída</button>' : '')
+                + '</div>'
+                + '</article>';
+        }).join('');
+    }
+
+    function renderAlertas(datos) {
+        estadoAlertas = datos || {};
+        const prioridades = estadoAlertas.prioridades_sin_leer || {};
+        const alertas = Array.isArray(estadoAlertas.alertas) ? estadoAlertas.alertas : [];
+        const totalActivo = Number(estadoAlertas.total || 0);
+        const totalSinLeer = Number(estadoAlertas.total_sin_leer || 0);
+        const criticas = Number(prioridades.CRITICA || 0);
+        const altas = Number(prioridades.ALTA || 0);
+        const normales = Number(prioridades.NORMAL || 0) + Number(prioridades.BAJA || 0);
+
+        document.getElementById('alertasCriticas').textContent = numero(criticas);
+        document.getElementById('alertasAltas').textContent = numero(altas);
+        document.getElementById('alertasNormales').textContent = numero(normales);
+        document.getElementById('alertasTotal').textContent = numero(totalSinLeer);
+
+        const estado = document.getElementById('estadoGeneralAlertas');
+
+        if (totalActivo <= 0 || !alertas.length) {
+            estado.className = 'dashboard-alert-center__health is-ok';
+            estado.textContent = 'Sin pendientes activos';
+            renderListaAlertas();
+            return;
+        }
+
+        if (totalSinLeer <= 0) {
+            estado.className = 'dashboard-alert-center__health is-ok';
+            estado.textContent = numero(totalActivo) + ' activas · todas revisadas';
+        } else if (criticas > 0) {
+            estado.className = 'dashboard-alert-center__health is-critical';
+            estado.textContent = numero(totalSinLeer) + ' sin leer · atención inmediata';
+        } else if (altas > 0) {
+            estado.className = 'dashboard-alert-center__health is-high';
+            estado.textContent = numero(totalSinLeer) + ' sin leer · prioridad alta';
+        } else {
+            estado.className = 'dashboard-alert-center__health is-normal';
+            estado.textContent = numero(totalSinLeer) + ' sin leer · seguimiento';
+        }
+
+        renderListaAlertas();
+    }
+
+    async function actualizarLecturaAlertas(accion, clave) {
+        const body = new URLSearchParams();
+        body.set('accion', accion);
+        body.set('csrf_token', csrfAlertas);
+        if (clave) body.set('clave', clave);
+
+        const response = await fetch(alertasEndpoint, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: body.toString()
+        });
+
+        const text = await response.text();
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (error) {
+            throw new Error('El servidor devolvió una respuesta no válida.');
+        }
+
+        if (!response.ok || data.success !== true) {
+            throw new Error(data.mensaje || 'No fue posible actualizar la alerta.');
+        }
+
+        renderAlertas(data.alertas_operativas || {});
+        window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
+    }
+
+    document.getElementById('filtrosAlertas')?.addEventListener('click', function (event) {
+        const button = event.target.closest('[data-alert-filter]');
+        if (!button) return;
+        filtroAlertas = String(button.dataset.alertFilter || 'NO_LEIDAS');
+        renderListaAlertas();
+    });
+
+    document.getElementById('listaAlertas')?.addEventListener('click', async function (event) {
+        const button = event.target.closest('[data-alert-read]');
+        if (!button || button.disabled) return;
+
+        button.disabled = true;
+        const textoOriginal = button.textContent;
+        button.textContent = 'Marcando...';
+        try {
+            await actualizarLecturaAlertas('MARCAR_LEIDA', String(button.dataset.alertRead || ''));
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = textoOriginal;
+            mensaje.textContent = error.message || 'No fue posible actualizar la alerta.';
+            mensaje.hidden = false;
+        }
+    });
+
+    document.getElementById('btnMarcarTodasAlertas')?.addEventListener('click', async function () {
+        const button = this;
+        if (button.disabled) return;
+        button.disabled = true;
+        const textoOriginal = button.textContent;
+        button.textContent = 'Marcando...';
+        try {
+            await actualizarLecturaAlertas('MARCAR_TODAS_LEIDAS');
+            button.textContent = textoOriginal;
+        } catch (error) {
+            button.disabled = false;
+            button.textContent = textoOriginal;
+            mensaje.textContent = error.message || 'No fue posible actualizar la alerta.';
+            mensaje.hidden = false;
+        }
+    });
 
     function renderCuentas(
         id,
@@ -836,6 +1112,7 @@ $versionModulo = is_file($cssModulo)
             }
 
             renderKpis(datos);
+            renderAlertas(datos.alertas_operativas || {});
 
             renderCuentas(
                 'tablaCobrar',
