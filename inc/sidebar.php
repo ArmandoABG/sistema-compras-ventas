@@ -159,6 +159,14 @@ function si_sidebar_activo(string $archivo, string $scriptActual): string
                 Reportes
             </a>
         <?php endif; ?>
+        <?php if (si_tiene_permiso('auditoria.ver')): ?>
+            <a
+                class="<?= si_sidebar_activo('auditoria.php', $scriptActual) ?>"
+                href="<?= si_escapar(si_url('JS/auditoria.php')) ?>"
+            >
+                Auditoría
+            </a>
+        <?php endif; ?>
     </nav>
 </aside>
 <script>
