@@ -69,10 +69,6 @@ try {
             cli_cambiar_estado_cliente($conexion);
             break;
 
-        case 'PAPELERA_CLIENTE':
-            cli_papelera_cliente($conexion);
-            break;
-
         case 'GUARDAR_NIVEL':
             cli_guardar_nivel($conexion);
             break;
@@ -154,7 +150,6 @@ function cli_catalogos(PDO $conexion): void
                 SELECT COUNT(*)
                 FROM clientes c
                 WHERE c.nivel_cliente_id = n.id
-                  AND c.deleted_at IS NULL
                   AND c.activo = 1
             ) AS clientes_activos
          FROM niveles_cliente n
@@ -218,7 +213,8 @@ function cli_listar_clientes(PDO $conexion): void
         $tipoPersona = 'TODOS';
     }
 
-    $where = ['c.deleted_at IS NULL'];
+    // Condición base: evita generar un WHERE vacío cuando no hay filtros.
+    $where = ['1=1'];
     $params = [];
 
     if ($q !== '') {
@@ -332,7 +328,7 @@ function cli_listar_clientes(PDO $conexion): void
             SUM(c.dias_credito > 0) AS con_credito,
             SUM(c.dias_credito = 0) AS sin_credito
          FROM clientes c
-         WHERE c.deleted_at IS NULL"
+         WHERE 1=1"
     )->fetch();
 
     si_responder_json(
@@ -389,7 +385,6 @@ function cli_detalle_cliente(PDO $conexion): void
          FROM clientes c
          LEFT JOIN niveles_cliente n ON n.id = c.nivel_cliente_id
          WHERE c.id = :id
-           AND c.deleted_at IS NULL
          LIMIT 1"
     );
 
@@ -606,8 +601,7 @@ function cli_guardar_cliente(PDO $conexion): void
                 dias_credito = :dias_credito,
                 limite_credito = :limite_credito,
                 observaciones = :observaciones
-             WHERE id = :id
-               AND deleted_at IS NULL"
+             WHERE id = :id"
         );
 
         $stmt->execute([
@@ -712,8 +706,7 @@ function cli_cambiar_estado_cliente(PDO $conexion): void
     $conexion->prepare(
         "UPDATE clientes
          SET activo = :activo
-         WHERE id = :id
-           AND deleted_at IS NULL"
+         WHERE id = :id"
     )->execute([
         ':activo' => $activo,
         ':id' => $id,
@@ -739,81 +732,6 @@ function cli_cambiar_estado_cliente(PDO $conexion): void
     );
 }
 
-function cli_papelera_cliente(PDO $conexion): void
-{
-    $id = cli_id($_POST['cliente_id'] ?? null, 'cliente');
-
-    $conexion->beginTransaction();
-
-    $cliente = cli_bloquear_cliente($conexion, $id);
-
-    if (!$cliente) {
-        cli_cancelar($conexion, 'El cliente ya no existe.', 404);
-    }
-
-    $stmtCxc = $conexion->prepare(
-        "SELECT COUNT(*)
-         FROM cuentas_por_cobrar
-         WHERE cliente_id = :cliente_id
-           AND estado <> 'CANCELADA'
-           AND saldo_pendiente > 0"
-    );
-    $stmtCxc->execute([':cliente_id' => $id]);
-
-    if ((int) $stmtCxc->fetchColumn() > 0) {
-        cli_cancelar(
-            $conexion,
-            'No puedes enviar a papelera un cliente que todavía tiene cuentas por cobrar con saldo pendiente. Puedes desactivarlo.',
-            409
-        );
-    }
-
-    $stmtApartado = $conexion->prepare(
-        "SELECT COUNT(*)
-         FROM apartados
-         WHERE cliente_id = :cliente_id
-           AND estado = 'ACTIVO'"
-    );
-    $stmtApartado->execute([':cliente_id' => $id]);
-
-    if ((int) $stmtApartado->fetchColumn() > 0) {
-        cli_cancelar(
-            $conexion,
-            'No puedes enviar a papelera un cliente con apartados activos. Puedes desactivarlo mientras concluyen.',
-            409
-        );
-    }
-
-    $conexion->prepare(
-        "UPDATE clientes
-         SET
-            activo = 0,
-            deleted_at = NOW(),
-            deleted_by = :deleted_by
-         WHERE id = :id
-           AND deleted_at IS NULL"
-    )->execute([
-        ':deleted_by' => (int) $_SESSION['usuario_id'],
-        ':id' => $id,
-    ]);
-
-    cli_auditar(
-        $conexion,
-        'CLIENTE_PAPELERA',
-        'clientes',
-        $id,
-        'Se envió un cliente a la papelera.',
-        cli_cliente_auditoria($cliente),
-        [
-            'activo' => 0,
-            'deleted_at' => date('Y-m-d H:i:s'),
-        ]
-    );
-
-    $conexion->commit();
-
-    si_responder_json(true, 'Cliente enviado a la papelera correctamente.');
-}
 
 /* =========================================================================
    CLASIFICACIÓN DE CLIENTES
@@ -834,13 +752,11 @@ function cli_listar_niveles(PDO $conexion): void
                 SELECT COUNT(*)
                 FROM clientes c
                 WHERE c.nivel_cliente_id = n.id
-                  AND c.deleted_at IS NULL
             ) AS clientes_asignados,
             (
                 SELECT COUNT(*)
                 FROM clientes c
                 WHERE c.nivel_cliente_id = n.id
-                  AND c.deleted_at IS NULL
                   AND c.activo = 1
             ) AS clientes_activos
          FROM niveles_cliente n
@@ -902,7 +818,6 @@ function cli_guardar_nivel(PDO $conexion): void
             "SELECT COUNT(*)
              FROM clientes
              WHERE nivel_cliente_id = :nivel_id
-               AND deleted_at IS NULL
                AND activo = 1"
         );
         $stmtUso->execute([':nivel_id' => $id]);
@@ -971,7 +886,6 @@ function cli_listar_credito(PDO $conexion): void
     }
 
     $where = [
-        'c.deleted_at IS NULL',
         'c.activo = 1',
     ];
     $params = [];
@@ -1082,12 +996,11 @@ function cli_listar_credito(PDO $conexion): void
 
     $resumen = $conexion->query(
         "SELECT
-            SUM(c.activo = 1 AND c.deleted_at IS NULL AND c.dias_credito > 0) AS clientes_credito,
-            COALESCE(SUM(CASE WHEN c.activo = 1 AND c.deleted_at IS NULL AND c.dias_credito > 0 THEN c.limite_credito ELSE 0 END), 0) AS limite_total,
-            COALESCE(SUM(CASE WHEN c.activo = 1 AND c.deleted_at IS NULL THEN uc.saldo_usado_base ELSE 0 END), 0) AS usado_total,
+            SUM(c.activo = 1 AND c.dias_credito > 0) AS clientes_credito,
+            COALESCE(SUM(CASE WHEN c.activo = 1 AND c.dias_credito > 0 THEN c.limite_credito ELSE 0 END), 0) AS limite_total,
+            COALESCE(SUM(CASE WHEN c.activo = 1 THEN uc.saldo_usado_base ELSE 0 END), 0) AS usado_total,
             SUM(
                 c.activo = 1
-                AND c.deleted_at IS NULL
                 AND c.dias_credito > 0
                 AND c.limite_credito IS NOT NULL
                 AND COALESCE(uc.saldo_usado_base, 0) > c.limite_credito
@@ -1175,7 +1088,6 @@ function cli_bloquear_cliente(PDO $conexion, int $id): ?array
             activo
          FROM clientes
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1
          FOR UPDATE"
     );
@@ -1237,7 +1149,7 @@ function cli_validar_rfc_unico(PDO $conexion, ?string $rfc, int $excluirId): voi
     }
 
     $stmt = $conexion->prepare(
-        "SELECT id, deleted_at
+        "SELECT id
          FROM clientes
          WHERE rfc = :rfc
            AND id <> :id
@@ -1253,9 +1165,7 @@ function cli_validar_rfc_unico(PDO $conexion, ?string $rfc, int $excluirId): voi
     if ($fila) {
         cli_cancelar(
             $conexion,
-            $fila['deleted_at'] !== null
-                ? 'Ese RFC pertenece a un cliente que está en la papelera.'
-                : 'Ya existe un cliente registrado con ese RFC.',
+            'Ya existe un cliente registrado con ese RFC.',
             409,
             ['campo' => 'rfc']
         );

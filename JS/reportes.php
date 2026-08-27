@@ -277,7 +277,6 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     }
 
     function etiquetaHistorica(fila) {
-        if (fila?.deleted_at) return ' · En papelera';
         if (Number(fila?.activo ?? 1) !== 1) return ' · Inactivo';
         return '';
     }

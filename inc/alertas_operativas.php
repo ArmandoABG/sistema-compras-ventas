@@ -129,7 +129,7 @@ function si_alertas_inventario(PDO $conexion, bool $incluirDetalles): array
         INNER JOIN productos p ON p.id = ea.producto_id
         INNER JOIN almacenes a ON a.id = ea.almacen_id
         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
-        WHERE p.deleted_at IS NULL
+        WHERE 1=1
           AND p.activo = 1
           AND p.controla_inventario = 1
           AND a.activo = 1

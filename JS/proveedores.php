@@ -1510,13 +1510,6 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
                         );
 
                         if (p.activo === 0) {
-                            acciones += botonAccion(
-                                'Papelera',
-                                'papelera-proveedor',
-                                p.id,
-                                null,
-                                'danger'
-                            );
                         }
                     }
 
@@ -1737,32 +1730,6 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
             estado.proveedorProductos
             && estado.proveedorProductos.id === id
             && activo === 0
-        ) {
-            limpiarProveedorProductos();
-        }
-    }
-
-    async function papeleraProveedor(id) {
-        if (
-            !window.confirm(
-                '¿Enviar este proveedor a la papelera? El sistema bloqueará la operación si existen compras abiertas o saldos pendientes.'
-            )
-        ) {
-            return;
-        }
-
-        await postSimple(
-            'PAPELERA_PROVEEDOR',
-            {
-                proveedor_id: id
-            }
-        );
-
-        await cargarProveedores();
-
-        if (
-            estado.proveedorProductos
-            && estado.proveedorProductos.id === id
         ) {
             limpiarProveedorProductos();
         }
@@ -3102,9 +3069,6 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
                     ).catch(mostrarError);
                     break;
 
-                case 'papelera-proveedor':
-                    papeleraProveedor(id).catch(mostrarError);
-                    break;
 
                 case 'productos-proveedor':
                     const p = estado.proveedores.find(

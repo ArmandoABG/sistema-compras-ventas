@@ -374,7 +374,6 @@ function inv_obtener_niveles_stock(PDO $conexion): void
          LEFT JOIN existencias_almacen ea ON ea.producto_id = p.id AND ea.almacen_id = a.id
          WHERE p.id = :producto
            AND p.controla_inventario = 1
-           AND p.deleted_at IS NULL
          LIMIT 1"
     );
     $stmt->execute([':almacen' => $almacenId, ':producto' => $productoId]);
@@ -424,7 +423,7 @@ function inv_guardar_niveles_stock(PDO $conexion): void
     $conexion->beginTransaction();
 
     $stmtProducto = $conexion->prepare(
-        "SELECT p.id, p.sku, p.nombre, p.permite_fraccion, p.controla_inventario, p.deleted_at,
+        "SELECT p.id, p.sku, p.nombre, p.permite_fraccion, p.controla_inventario,
                 um.simbolo AS unidad_simbolo
          FROM productos p
          INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
@@ -434,7 +433,7 @@ function inv_guardar_niveles_stock(PDO $conexion): void
     );
     $stmtProducto->execute([':id' => $productoId]);
     $producto = $stmtProducto->fetch();
-    if (!$producto || $producto['deleted_at'] !== null || (int) $producto['controla_inventario'] !== 1) {
+    if (!$producto || (int) $producto['controla_inventario'] !== 1) {
         inv_cancelar_transaccion($conexion, 'El producto ya no está disponible para control de inventario.', 409);
     }
 
@@ -791,7 +790,6 @@ function inv_buscar_productos_operacion(PDO $conexion): void
          INNER JOIN unidades_medida u ON u.id = p.unidad_base_id
          LEFT JOIN existencias_almacen e ON e.producto_id = p.id AND e.almacen_id = :almacen_id
          WHERE p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.controla_inventario = 1
            {$whereBuscar}
            {$whereDisponibilidad}
@@ -967,7 +965,7 @@ function inv_registrar_operacion_stock(PDO $conexion, string $tipoCodigo, string
     $conexion->beginTransaction();
 
     $stmt = $conexion->prepare(
-        "SELECT p.id, p.sku, p.nombre, p.permite_fraccion, p.controla_inventario, p.activo, p.deleted_at,
+        "SELECT p.id, p.sku, p.nombre, p.permite_fraccion, p.controla_inventario, p.activo,
                 u.nombre unidad_base, u.simbolo unidad_simbolo
          FROM productos p
          INNER JOIN unidades_medida u ON u.id = p.unidad_base_id
@@ -977,7 +975,7 @@ function inv_registrar_operacion_stock(PDO $conexion, string $tipoCodigo, string
     );
     $stmt->execute([':id' => $productoId]);
     $producto = $stmt->fetch();
-    if (!$producto || (int) $producto['activo'] !== 1 || $producto['deleted_at'] !== null || (int) $producto['controla_inventario'] !== 1) {
+    if (!$producto || (int) $producto['activo'] !== 1 || (int) $producto['controla_inventario'] !== 1) {
         inv_cancelar_transaccion($conexion, 'El producto seleccionado ya no está disponible para inventario.', 409);
     }
     if ((int) $producto['permite_fraccion'] !== 1 && abs($cantidad - round($cantidad)) > 0.000001) {
@@ -1494,7 +1492,6 @@ function inv_filtros_base_existencias(
     string $buscar
 ): array {
     $where = "WHERE p.controla_inventario = 1
-              AND p.deleted_at IS NULL
               AND a.activo = 1";
     $params = [];
 

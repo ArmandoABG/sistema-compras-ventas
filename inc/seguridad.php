@@ -261,7 +261,6 @@ function si_validar_sesion_en_bd(bool $json): void
         $stmt = $conexion->prepare(
             "SELECT
                 u.activo,
-                u.deleted_at,
                 s.activa
              FROM sesiones_usuario s
              INNER JOIN usuarios u
@@ -281,7 +280,6 @@ function si_validar_sesion_en_bd(bool $json): void
         if (
             !$estado
             || (int) $estado['activo'] !== 1
-            || $estado['deleted_at'] !== null
             || (int) $estado['activa'] !== 1
         ) {
             si_cerrar_sesion_local();
@@ -447,7 +445,6 @@ function si_cargar_identidad_sesion(
          INNER JOIN usuarios u
             ON u.id = ur.usuario_id
          WHERE ur.usuario_id = :usuario_id
-           AND u.deleted_at IS NULL
            AND u.activo = 1
            AND r.activo = 1
          ORDER BY
@@ -480,7 +477,6 @@ function si_cargar_identidad_sesion(
          INNER JOIN usuarios u
             ON u.id = ur.usuario_id
          WHERE ur.usuario_id = :usuario_id
-           AND u.deleted_at IS NULL
            AND u.activo = 1
          ORDER BY p.codigo"
     );

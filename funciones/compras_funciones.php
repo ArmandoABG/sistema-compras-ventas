@@ -242,7 +242,7 @@ function cmp_buscar_proveedores(PDO $conexion): void
          FROM proveedores p
          LEFT JOIN monedas m
             ON m.id = p.moneda_default_id
-         WHERE p.deleted_at IS NULL
+         WHERE 1=1
            AND p.activo = 1
            AND (
                 p.codigo = :exacto
@@ -303,7 +303,6 @@ function cmp_datos_proveedor(PDO $conexion): void
          LEFT JOIN monedas m
             ON m.id = p.moneda_default_id
          WHERE p.id = :id
-           AND p.deleted_at IS NULL
            AND p.activo = 1
          LIMIT 1"
     );
@@ -385,9 +384,7 @@ function cmp_buscar_productos_proveedor(PDO $conexion): void
          WHERE pp.proveedor_id = :proveedor_id
            AND pp.activo = 1
            AND pr.activo = 1
-           AND pr.deleted_at IS NULL
            AND p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.tipo = 'MATERIA_PRIMA'
            AND (
                 pp.presentacion_id IS NULL
@@ -818,7 +815,7 @@ function cmp_guardar_compra(PDO $conexion): void
 
     $proveedor = cmp_bloquear_proveedor($conexion, $proveedorId);
 
-    if (!$proveedor || (int) $proveedor['activo'] !== 1 || $proveedor['deleted_at'] !== null) {
+    if (!$proveedor || (int) $proveedor['activo'] !== 1) {
         cmp_cancelar($conexion, 'Selecciona un proveedor activo.', 409);
     }
 
@@ -1274,7 +1271,7 @@ function cmp_confirmar_compra(PDO $conexion): void
 
     $proveedor = cmp_bloquear_proveedor($conexion, (int) $compra['proveedor_id']);
 
-    if (!$proveedor || (int) $proveedor['activo'] !== 1 || $proveedor['deleted_at'] !== null) {
+    if (!$proveedor || (int) $proveedor['activo'] !== 1) {
         cmp_cancelar($conexion, 'El proveedor está inactivo. No se puede confirmar la compra.', 409);
     }
 
@@ -2956,9 +2953,7 @@ function cmp_bloquear_relacion_compra(PDO $conexion, int $relacionId, int $prove
            AND pp.proveedor_id = :proveedor_id
            AND pp.activo = 1
            AND pr.activo = 1
-           AND pr.deleted_at IS NULL
            AND p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.tipo = 'MATERIA_PRIMA'
            AND (
                 pp.presentacion_id IS NULL

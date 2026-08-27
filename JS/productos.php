@@ -1884,7 +1884,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                 acciones += botonAccion('Precios', 'ver-precios-producto', p.id);
 
                 if (puedeAdministrar && p.activo === 0) {
-                    acciones += botonAccion('Papelera', 'papelera-producto', p.id, null, 'danger');
                 }
 
                 return '<tr>'
@@ -1975,17 +1974,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
         await cargarProductos();
     }
 
-    async function papeleraProducto(id) {
-        if (!window.confirm(
-            '¿Enviar este producto a la papelera? Solo se permitirá si no tiene existencia física ni reservada.'
-        )) {
-            return;
-        }
-
-        await postSimple('PAPELERA_PRODUCTO', { producto_id: id });
-        await cargarProductos();
-    }
-
     /* ==============================================================
        CATEGORÍAS
        ============================================================== */
@@ -2029,7 +2017,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                     );
 
                     if (c.activo === 0 && c.productos_asignados === 0) {
-                        acciones += botonAccion('Papelera', 'papelera-categoria', c.id, null, 'danger');
                     }
                 }
 
@@ -2080,16 +2067,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
             activo: activo
         });
 
-        await cargarCatalogos();
-        await cargarCategorias();
-    }
-
-    async function papeleraCategoria(id) {
-        if (!window.confirm('¿Enviar esta categoría a la papelera?')) {
-            return;
-        }
-
-        await postSimple('PAPELERA_CATEGORIA', { categoria_id: id });
         await cargarCatalogos();
         await cargarCategorias();
     }
@@ -2676,8 +2653,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                 editarProducto(id).catch(mostrarError);
             } else if (boton.dataset.action === 'estado-producto') {
                 cambiarEstadoProducto(id, Number(boton.dataset.value)).catch(mostrarError);
-            } else if (boton.dataset.action === 'papelera-producto') {
-                papeleraProducto(id).catch(mostrarError);
             } else if (boton.dataset.action === 'ver-presentaciones-producto') {
                 if (producto) {
                     $('buscarPresentacion').value = producto.sku;
@@ -2706,8 +2681,6 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                 editarCategoria(id).catch(mostrarError);
             } else if (boton.dataset.action === 'estado-categoria') {
                 cambiarEstadoCategoria(id, Number(boton.dataset.value)).catch(mostrarError);
-            } else if (boton.dataset.action === 'papelera-categoria') {
-                papeleraCategoria(id).catch(mostrarError);
             }
         }
     );

@@ -243,26 +243,26 @@ function rep_catalogos(PDO $conexion): void
 {
     $definiciones = rep_definiciones();
 
-    // Reportes es histórico: los filtros también deben permitir localizar
-    // registros relacionados con catálogos hoy inactivos o enviados a papelera.
+    // Reportes es histórico: los filtros también permiten localizar registros
+    // relacionados con catálogos que actualmente están inactivos.
     $almacenes = $conexion->query(
         "SELECT id, codigo, nombre, activo FROM almacenes ORDER BY nombre ASC, id ASC"
     )->fetchAll();
 
     $productos = $conexion->query(
-        "SELECT id, sku, nombre, tipo, activo, deleted_at FROM productos ORDER BY nombre ASC, id ASC"
+        "SELECT id, sku, nombre, tipo, activo FROM productos ORDER BY nombre ASC, id ASC"
     )->fetchAll();
 
     $proveedores = $conexion->query(
-        "SELECT id, codigo, razon_social AS nombre, activo, deleted_at FROM proveedores ORDER BY razon_social ASC, id ASC"
+        "SELECT id, codigo, razon_social AS nombre, activo FROM proveedores ORDER BY razon_social ASC, id ASC"
     )->fetchAll();
 
     $clientes = $conexion->query(
-        "SELECT id, codigo, nombre_razon_social AS nombre, activo, deleted_at FROM clientes ORDER BY nombre_razon_social ASC, id ASC"
+        "SELECT id, codigo, nombre_razon_social AS nombre, activo FROM clientes ORDER BY nombre_razon_social ASC, id ASC"
     )->fetchAll();
 
     $usuarios = $conexion->query(
-        "SELECT id, usuario, TRIM(CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)) AS nombre, activo, deleted_at
+        "SELECT id, usuario, TRIM(CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)) AS nombre, activo
          FROM usuarios
          ORDER BY usuario ASC, id ASC"
     )->fetchAll();

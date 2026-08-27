@@ -51,7 +51,6 @@ function rp_inicial(PDO $conexion): void
                    FROM usuarios_roles ur
                    INNER JOIN usuarios u ON u.id = ur.usuario_id
                   WHERE ur.rol_id = r.id
-                    AND u.deleted_at IS NULL
                     AND u.activo = 1) AS usuarios_activos
            FROM roles r
            LEFT JOIN roles_permisos rp ON rp.rol_id = r.id

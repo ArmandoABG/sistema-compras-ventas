@@ -287,7 +287,6 @@ function tra_buscar_productos(PDO $conexion): void
             ON ea.producto_id = p.id
            AND ea.almacen_id = :almacen_id
          WHERE p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.controla_inventario = 1
            AND (p.sku LIKE :buscar_sku OR p.nombre LIKE :buscar_nombre)
          ORDER BY
@@ -967,7 +966,6 @@ function tra_bloquear_productos(PDO $conexion, array $ids): array
          FROM productos
          WHERE id IN ({$marcas})
            AND activo = 1
-           AND deleted_at IS NULL
            AND controla_inventario = 1
          ORDER BY id ASC
          FOR UPDATE"

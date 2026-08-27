@@ -77,11 +77,7 @@ try {
             break;
         case 'RECETA_GUARDAR':
             prod_receta_guardar($conexion);
-            break;
-        case 'RECETA_ELIMINAR':
-            prod_receta_eliminar($conexion);
-            break;
-        default:
+            break;        default:
             si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
     }
 } catch (PDOException $e) {
@@ -453,7 +449,6 @@ function prod_buscar_productos(PDO $conexion): void
               ON e.almacen_id = :almacen_id
              AND e.producto_id = p.id
             WHERE p.activo = 1
-              AND p.deleted_at IS NULL
               AND p.controla_inventario = 1
               AND p.tipo = :tipo_producto
               AND (p.sku LIKE :buscar_sku OR p.nombre LIKE :buscar_nombre OR p.codigo_barras LIKE :buscar_codigo)";
@@ -501,7 +496,6 @@ function prod_opciones_unidad(PDO $conexion): void
          INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
          WHERE p.id = :id
            AND p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.controla_inventario = 1
          LIMIT 1"
     );
@@ -576,10 +570,10 @@ function prod_guardar(PDO $conexion, bool $confirmar): void
     $recetaId = prod_entero($payload['receta_id'] ?? 0, 0, PHP_INT_MAX, 0);
     $recetaVersion = prod_entero($payload['receta_version'] ?? 0, 0, PHP_INT_MAX, 0);
     if ($recetaId > 0) {
-        $stmtReceta = $conexion->prepare("SELECT id, version, activo, deleted_at FROM recetas_produccion WHERE id = :id LIMIT 1");
+        $stmtReceta = $conexion->prepare("SELECT id, version, activo FROM recetas_produccion WHERE id = :id LIMIT 1");
         $stmtReceta->execute([':id' => $recetaId]);
         $recetaActual = $stmtReceta->fetch();
-        if (!$recetaActual || (int) $recetaActual['activo'] !== 1 || $recetaActual['deleted_at'] !== null) {
+        if (!$recetaActual || (int) $recetaActual['activo'] !== 1) {
             si_responder_json(false, 'La receta seleccionada ya no está disponible.', [], 409);
         }
         if ($recetaVersion <= 0 || $recetaVersion !== (int) $recetaActual['version']) {
@@ -1275,7 +1269,6 @@ function prod_validar_renglon(PDO $conexion, array $raw, string $tipo, int $alma
          INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
          WHERE p.id = :id
            AND p.activo = 1
-           AND p.deleted_at IS NULL
          LIMIT 1"
     );
     $stmt->execute([':id' => $productoId]);
@@ -1415,7 +1408,6 @@ function prod_cargar_insumos_confirmacion(PDO $conexion, int $produccionId): arr
             p.sku,
             p.tipo,
             p.activo,
-            p.deleted_at,
             p.controla_inventario,
             p.permite_fraccion,
             ub.simbolo AS simbolo_base
@@ -1429,7 +1421,7 @@ function prod_cargar_insumos_confirmacion(PDO $conexion, int $produccionId): arr
     $stmt->execute([':produccion_id' => $produccionId]);
     $filas = $stmt->fetchAll();
     foreach ($filas as $f) {
-        if ($f['tipo'] !== 'MATERIA_PRIMA' || (int) $f['activo'] !== 1 || $f['deleted_at'] !== null || (int) $f['controla_inventario'] !== 1) {
+        if ($f['tipo'] !== 'MATERIA_PRIMA' || (int) $f['activo'] !== 1 || (int) $f['controla_inventario'] !== 1) {
             prod_abort($conexion, 'Uno de los insumos ya no está disponible para producción.', 409);
         }
     }
@@ -1445,7 +1437,6 @@ function prod_cargar_resultados_confirmacion(PDO $conexion, int $produccionId): 
             p.sku,
             p.tipo,
             p.activo,
-            p.deleted_at,
             p.controla_inventario,
             p.permite_fraccion,
             ub.simbolo AS simbolo_base
@@ -1459,7 +1450,7 @@ function prod_cargar_resultados_confirmacion(PDO $conexion, int $produccionId): 
     $stmt->execute([':produccion_id' => $produccionId]);
     $filas = $stmt->fetchAll();
     foreach ($filas as $f) {
-        if ($f['tipo'] !== 'PRODUCTO_TERMINADO' || (int) $f['activo'] !== 1 || $f['deleted_at'] !== null || (int) $f['controla_inventario'] !== 1) {
+        if ($f['tipo'] !== 'PRODUCTO_TERMINADO' || (int) $f['activo'] !== 1 || (int) $f['controla_inventario'] !== 1) {
             prod_abort($conexion, 'El producto terminado ya no está disponible para producción.', 409);
         }
     }
@@ -1698,7 +1689,8 @@ function prod_recetas_listar(PDO $conexion): void
         $estado = 'ACTIVAS';
     }
 
-    $where = ['r.deleted_at IS NULL'];
+    // Condición base: permite la vista TODAS aun cuando no hay búsqueda.
+    $where = ['1=1'];
     $params = [];
     if ($estado === 'ACTIVAS') $where[] = 'r.activo = 1';
     if ($estado === 'INACTIVAS') $where[] = 'r.activo = 0';
@@ -1789,9 +1781,7 @@ function prod_recetas_selector(PDO $conexion): void
          INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
          LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
          WHERE r.activo = 1
-           AND r.deleted_at IS NULL
            AND p.activo = 1
-           AND p.deleted_at IS NULL
          ORDER BY r.nombre, r.id"
     );
     $rows = $st->fetchAll();
@@ -1828,7 +1818,7 @@ function prod_receta_detalle(PDO $conexion): void
          INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
-         WHERE r.id = :id AND r.deleted_at IS NULL
+         WHERE r.id = :id
          LIMIT 1"
     );
     $st->execute([':id' => $id]);
@@ -1902,7 +1892,6 @@ function prod_receta_buscar_productos(PDO $conexion): void
          FROM productos p
          INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
          WHERE p.activo = 1
-           AND p.deleted_at IS NULL
            AND p.controla_inventario = 1
            AND p.tipo = :tipo
            AND (p.sku LIKE :s OR p.nombre LIKE :n OR p.codigo_barras LIKE :c)
@@ -1944,7 +1933,7 @@ function prod_receta_escalar(PDO $conexion): void
          INNER JOIN unidades_medida um ON um.id = r.unidad_resultado_id
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN presentaciones_producto pp ON pp.id = r.presentacion_resultado_id
-         WHERE r.id = :id AND r.activo = 1 AND r.deleted_at IS NULL
+         WHERE r.id = :id AND r.activo = 1
          LIMIT 1"
     );
     $st->execute([':id' => $id]);
@@ -2086,7 +2075,7 @@ function prod_receta_guardar(PDO $conexion): void
 
     $conexion->beginTransaction();
     if ($id > 0) {
-        $st = $conexion->prepare("SELECT id, codigo, version FROM recetas_produccion WHERE id = :id AND deleted_at IS NULL FOR UPDATE");
+        $st = $conexion->prepare("SELECT id, codigo, version FROM recetas_produccion WHERE id = :id FOR UPDATE");
         $st->execute([':id' => $id]);
         $anterior = $st->fetch();
         if (!$anterior) {
@@ -2204,35 +2193,6 @@ function prod_receta_guardar(PDO $conexion): void
     ]);
 }
 
-function prod_receta_eliminar(PDO $conexion): void
-{
-    $id = prod_entero($_POST['receta_id'] ?? 0, 1, PHP_INT_MAX, 0);
-    $usuario = (int) ($_SESSION['usuario_id'] ?? 0);
-    if ($id <= 0) {
-        si_responder_json(false, 'La receta no es válida.', [], 422);
-    }
-
-    $conexion->beginTransaction();
-    $st = $conexion->prepare("SELECT id, codigo, nombre FROM recetas_produccion WHERE id = :id AND deleted_at IS NULL FOR UPDATE");
-    $st->execute([':id' => $id]);
-    $r = $st->fetch();
-    if (!$r) {
-        prod_abort($conexion, 'La receta ya no existe.', 404);
-    }
-
-    $conexion->prepare(
-        "UPDATE recetas_produccion
-         SET activo = 0, deleted_at = NOW(), deleted_by = :usuario, updated_by = :actualizado
-         WHERE id = :id"
-    )->execute([':usuario' => $usuario, ':actualizado' => $usuario, ':id' => $id]);
-
-    prod_auditar($conexion, 'RECETA_ELIMINADA', $id, 'Se retiró la receta ' . $r['codigo'] . ' del catálogo.', null, [
-        'codigo' => $r['codigo'], 'nombre' => $r['nombre'],
-    ], 'recetas_produccion', 'Produccion');
-
-    $conexion->commit();
-    si_responder_json(true, 'Receta eliminada del catálogo.');
-}
 
 function prod_receta_validar_renglon(PDO $conexion, array $raw, string $tipo): ?array
 {
@@ -2250,7 +2210,7 @@ function prod_receta_validar_renglon(PDO $conexion, array $raw, string $tipo): ?
             um.nombre AS unidad_base, um.simbolo AS simbolo_base, um.codigo AS codigo_unidad_base, um.tipo AS tipo_unidad_base
          FROM productos p
          INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
-         WHERE p.id = :id AND p.activo = 1 AND p.deleted_at IS NULL
+         WHERE p.id = :id AND p.activo = 1
          LIMIT 1"
     );
     $st->execute([':id' => $productoId]);

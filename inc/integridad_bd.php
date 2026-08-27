@@ -68,8 +68,6 @@ function si_permisos_oficiales(): array
         ['reportes.ver', 'reportes', 'Ver reportes'],
         ['contabilidad.exportar', 'contabilidad', 'Exportar información contable'],
         ['auditoria.ver', 'auditoria', 'Ver auditoría'],
-        ['papelera.ver', 'papelera', 'Ver papelera'],
-        ['papelera.restaurar', 'papelera', 'Restaurar registros'],
         ['configuracion.administrar', 'configuracion', 'Administrar configuración'],
     ];
 }
@@ -206,7 +204,7 @@ function si_recuperar_admin_desde_auditoria(PDO $conexion): bool
          FROM usuarios u
          INNER JOIN usuarios_roles ur ON ur.usuario_id = u.id
          INNER JOIN roles r ON r.id = ur.rol_id
-         WHERE u.deleted_at IS NULL
+         WHERE 1=1
            AND u.activo = 1
            AND r.activo = 1
            AND r.codigo = 'ADMINISTRADOR'"
@@ -223,7 +221,6 @@ function si_recuperar_admin_desde_auditoria(PDO $conexion): bool
          WHERE a.accion = 'ADMIN_INICIAL_CREADO'
            AND a.entidad_tabla = 'usuarios'
            AND a.entidad_id IS NOT NULL
-           AND u.deleted_at IS NULL
            AND u.activo = 1
          ORDER BY a.id ASC
          LIMIT 1"
@@ -265,7 +262,7 @@ function si_recuperar_administrador_unico(PDO $conexion, int $usuarioId): bool
     $totalActivos = (int) $conexion->query(
         "SELECT COUNT(*)
          FROM usuarios
-         WHERE deleted_at IS NULL AND activo = 1"
+         WHERE 1=1 AND activo = 1"
     )->fetchColumn();
 
     if ($totalActivos !== 1) {
@@ -277,7 +274,7 @@ function si_recuperar_administrador_unico(PDO $conexion, int $usuarioId): bool
          FROM usuarios u
          INNER JOIN usuarios_roles ur ON ur.usuario_id = u.id
          INNER JOIN roles r ON r.id = ur.rol_id
-         WHERE u.deleted_at IS NULL
+         WHERE 1=1
            AND u.activo = 1
            AND r.activo = 1
            AND r.codigo = 'ADMINISTRADOR'"

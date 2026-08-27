@@ -106,20 +106,12 @@ try {
             cat_cambiar_estado_producto($conexion);
             break;
 
-        case 'PAPELERA_PRODUCTO':
-            cat_papelera_producto($conexion);
-            break;
-
         case 'GUARDAR_CATEGORIA':
             cat_guardar_categoria($conexion);
             break;
 
         case 'CAMBIAR_ESTADO_CATEGORIA':
             cat_cambiar_estado_categoria($conexion);
-            break;
-
-        case 'PAPELERA_CATEGORIA':
-            cat_papelera_categoria($conexion);
             break;
 
         case 'GUARDAR_UNIDAD':
@@ -227,7 +219,8 @@ function cat_listar_productos(PDO $conexion): void
         $estado = 'TODOS';
     }
 
-    $where = ['p.deleted_at IS NULL'];
+    // Condición base: evita generar un WHERE vacío cuando no hay filtros.
+    $where = ['1=1'];
     $params = [];
 
     if ($busqueda !== '') {
@@ -386,7 +379,7 @@ function cat_listar_productos(PDO $conexion): void
                 )
             ) AS sin_precio_vigente
          FROM productos p
-         WHERE p.deleted_at IS NULL"
+         WHERE 1=1"
     )->fetch();
 
     si_responder_json(
@@ -431,7 +424,6 @@ function cat_detalle_producto(PDO $conexion): void
             activo
          FROM productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1"
     );
 
@@ -599,8 +591,7 @@ function cat_guardar_producto(PDO $conexion): void
                 tasa_impuesto_id = :tasa_impuesto_id,
                 controla_inventario = :controla_inventario,
                 permite_fraccion = :permite_fraccion
-             WHERE id = :id
-               AND deleted_at IS NULL"
+             WHERE id = :id"
         );
 
         $stmt->execute([
@@ -673,8 +664,7 @@ function cat_cambiar_estado_producto(PDO $conexion): void
     $conexion->prepare(
         "UPDATE productos
          SET activo = :activo
-         WHERE id = :id
-           AND deleted_at IS NULL"
+         WHERE id = :id"
     )->execute([
         ':activo' => $activo,
         ':id' => $id,
@@ -707,68 +697,6 @@ function cat_cambiar_estado_producto(PDO $conexion): void
     );
 }
 
-function cat_papelera_producto(PDO $conexion): void
-{
-    $id = cat_id($_POST['producto_id'] ?? null, 'producto');
-
-    $conexion->beginTransaction();
-    $p = cat_bloquear_producto($conexion, $id);
-
-    if (!$p) {
-        cat_cancelar($conexion, 'El producto ya no existe.', 404);
-    }
-
-    $stmtStock = $conexion->prepare(
-        "SELECT
-            COALESCE(SUM(ABS(existencia_fisica)), 0)
-            + COALESCE(SUM(ABS(cantidad_reservada)), 0)
-         FROM existencias_almacen
-         WHERE producto_id = :producto_id"
-    );
-
-    $stmtStock->execute([':producto_id' => $id]);
-
-    if ((float) $stmtStock->fetchColumn() > 0.0000001) {
-        cat_cancelar(
-            $conexion,
-            'No puedes enviar a papelera un producto que todavía tiene existencia física o cantidad reservada.',
-            409
-        );
-    }
-
-    $conexion->prepare(
-        "UPDATE productos
-         SET
-            activo = 0,
-            deleted_at = NOW(),
-            deleted_by = :deleted_by
-         WHERE id = :id
-           AND deleted_at IS NULL"
-    )->execute([
-        ':deleted_by' => (int) $_SESSION['usuario_id'],
-        ':id' => $id,
-    ]);
-
-    $conexion->prepare(
-        "UPDATE presentaciones_producto
-         SET activo = 0
-         WHERE producto_id = :producto_id"
-    )->execute([':producto_id' => $id]);
-
-    cat_auditar(
-        $conexion,
-        'PRODUCTO_PAPELERA',
-        'productos',
-        $id,
-        'Se envió un producto a la papelera.',
-        cat_producto_auditoria($p),
-        ['activo' => 0, 'deleted_at' => date('Y-m-d H:i:s')]
-    );
-
-    $conexion->commit();
-
-    si_responder_json(true, 'Producto enviado a la papelera correctamente.');
-}
 
 function cat_buscar_productos(PDO $conexion): void
 {
@@ -776,7 +704,6 @@ function cat_buscar_productos(PDO $conexion): void
     $id = cat_entero_rango($_GET['id'] ?? 0, 0, PHP_INT_MAX, 0);
 
     $where = [
-        'p.deleted_at IS NULL',
         'p.activo = 1',
     ];
 
@@ -854,7 +781,8 @@ function cat_listar_categorias(PDO $conexion): void
     $porPagina = cat_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
     $q = cat_texto($_GET['busqueda'] ?? '', 120);
 
-    $where = ['c.deleted_at IS NULL'];
+    // Condición base: permite listar todas las categorías sin búsqueda.
+    $where = ['1=1'];
     $params = [];
 
     if ($q !== '') {
@@ -895,7 +823,6 @@ function cat_listar_categorias(PDO $conexion): void
                 SELECT COUNT(*)
                 FROM productos p
                 WHERE p.categoria_id = c.id
-                  AND p.deleted_at IS NULL
             ) AS productos_asignados
          FROM categorias_productos c
          WHERE {$whereSql}
@@ -944,7 +871,6 @@ function cat_detalle_categoria(PDO $conexion): void
         "SELECT id, nombre, descripcion, activo
          FROM categorias_productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1"
     );
 
@@ -983,7 +909,6 @@ function cat_guardar_categoria(PDO $conexion): void
             "SELECT id, nombre, descripcion, activo
              FROM categorias_productos
              WHERE id = :id
-               AND deleted_at IS NULL
              LIMIT 1
              FOR UPDATE"
         );
@@ -997,7 +922,7 @@ function cat_guardar_categoria(PDO $conexion): void
     }
 
     $stmtExiste = $conexion->prepare(
-        "SELECT id, deleted_at
+        "SELECT id
          FROM categorias_productos
          WHERE nombre = :nombre
            AND id <> :id
@@ -1014,9 +939,7 @@ function cat_guardar_categoria(PDO $conexion): void
     if ($duplicada) {
         cat_cancelar(
             $conexion,
-            $duplicada['deleted_at'] !== null
-                ? 'Ya existe una categoría con ese nombre en la papelera.'
-                : 'Ya existe una categoría con ese nombre.',
+            'Ya existe una categoría con ese nombre.',
             409
         );
     }
@@ -1042,8 +965,7 @@ function cat_guardar_categoria(PDO $conexion): void
              SET
                 nombre = :nombre,
                 descripcion = :descripcion
-             WHERE id = :id
-               AND deleted_at IS NULL"
+             WHERE id = :id"
         );
 
         $stmt->execute([
@@ -1089,7 +1011,6 @@ function cat_cambiar_estado_categoria(PDO $conexion): void
         "SELECT id, nombre, activo
          FROM categorias_productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1
          FOR UPDATE"
     );
@@ -1135,71 +1056,6 @@ function cat_cambiar_estado_categoria(PDO $conexion): void
     );
 }
 
-function cat_papelera_categoria(PDO $conexion): void
-{
-    $id = cat_id($_POST['categoria_id'] ?? null, 'categoría');
-
-    $conexion->beginTransaction();
-
-    $stmt = $conexion->prepare(
-        "SELECT id, nombre, descripcion, activo
-         FROM categorias_productos
-         WHERE id = :id
-           AND deleted_at IS NULL
-         LIMIT 1
-         FOR UPDATE"
-    );
-
-    $stmt->execute([':id' => $id]);
-    $c = $stmt->fetch();
-
-    if (!$c) {
-        cat_cancelar($conexion, 'La categoría ya no existe.', 404);
-    }
-
-    $stmtUso = $conexion->prepare(
-        "SELECT COUNT(*)
-         FROM productos
-         WHERE categoria_id = :categoria_id
-           AND deleted_at IS NULL"
-    );
-
-    $stmtUso->execute([':categoria_id' => $id]);
-
-    if ((int) $stmtUso->fetchColumn() > 0) {
-        cat_cancelar(
-            $conexion,
-            'No puedes enviar esta categoría a papelera porque todavía tiene productos asignados. Puedes desactivarla.',
-            409
-        );
-    }
-
-    $conexion->prepare(
-        "UPDATE categorias_productos
-         SET
-            activo = 0,
-            deleted_at = NOW(),
-            deleted_by = :deleted_by
-         WHERE id = :id"
-    )->execute([
-        ':deleted_by' => (int) $_SESSION['usuario_id'],
-        ':id' => $id,
-    ]);
-
-    cat_auditar(
-        $conexion,
-        'CATEGORIA_PAPELERA',
-        'categorias_productos',
-        $id,
-        'Se envió una categoría a la papelera.',
-        $c,
-        ['activo' => 0, 'deleted_at' => date('Y-m-d H:i:s')]
-    );
-
-    $conexion->commit();
-
-    si_responder_json(true, 'Categoría enviada a la papelera correctamente.');
-}
 
 /* =========================================================================
    UNIDADES DE MEDIDA
@@ -1261,7 +1117,6 @@ function cat_listar_unidades(PDO $conexion): void
                 SELECT COUNT(*)
                 FROM productos p
                 WHERE p.unidad_base_id = u.id
-                  AND p.deleted_at IS NULL
             ) AS productos_base,
             (
                 SELECT COUNT(*)
@@ -1548,7 +1403,8 @@ function cat_listar_presentaciones(PDO $conexion): void
     $porPagina = cat_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
     $q = cat_texto($_GET['busqueda'] ?? '', 140);
 
-    $where = ['p.deleted_at IS NULL'];
+    // Condición base: permite listar todas las presentaciones sin búsqueda.
+    $where = ['1=1'];
     $params = [];
 
     if ($q !== '') {
@@ -1679,7 +1535,6 @@ function cat_detalle_presentacion(PDO $conexion): void
          FROM presentaciones_producto pp
          INNER JOIN productos p
             ON p.id = pp.producto_id
-           AND p.deleted_at IS NULL
          INNER JOIN unidades_medida ub
             ON ub.id = p.unidad_base_id
          WHERE pp.id = :id
@@ -1739,7 +1594,6 @@ function cat_guardar_presentacion(PDO $conexion): void
         "SELECT id, sku, nombre, unidad_base_id, activo
          FROM productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1
          FOR UPDATE"
     );
@@ -1917,8 +1771,7 @@ function cat_cambiar_estado_presentacion(PDO $conexion): void
             pp.id,
             pp.nombre,
             pp.activo,
-            p.activo AS producto_activo,
-            p.deleted_at AS producto_deleted_at
+            p.activo AS producto_activo
          FROM presentaciones_producto pp
          INNER JOIN productos p
             ON p.id = pp.producto_id
@@ -1938,12 +1791,11 @@ function cat_cambiar_estado_presentacion(PDO $conexion): void
         $activo === 1
         && (
             (int) $p['producto_activo'] !== 1
-            || $p['producto_deleted_at'] !== null
         )
     ) {
         cat_cancelar(
             $conexion,
-            'No puedes activar una presentación de un producto inactivo o enviado a papelera.',
+            'No puedes activar una presentación de un producto inactivo.',
             409
         );
     }
@@ -2008,7 +1860,8 @@ function cat_listar_precios_venta(PDO $conexion): void
         $estado = 'ACTUALES';
     }
 
-    $where = ['p.deleted_at IS NULL'];
+    // Condición base: mantiene válido el filtro TODOS sin criterios adicionales.
+    $where = ['1=1'];
     $params = [];
 
     if ($busqueda !== '') {
@@ -2252,7 +2105,6 @@ function cat_opciones_precio_producto(PDO $conexion): void
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN tasas_impuesto ti ON ti.id = p.tasa_impuesto_id
          WHERE p.id = :id
-           AND p.deleted_at IS NULL
            AND p.activo = 1
          LIMIT 1"
     );
@@ -2368,8 +2220,7 @@ function cat_guardar_precio_venta(PDO $conexion): void
             p.nombre,
             p.unidad_base_id,
             p.tasa_impuesto_id,
-            p.activo,
-            p.deleted_at
+            p.activo
          FROM productos p
          WHERE p.id = :id
          FOR UPDATE"
@@ -2377,7 +2228,7 @@ function cat_guardar_precio_venta(PDO $conexion): void
     $stmt->execute([':id' => $productoId]);
     $producto = $stmt->fetch();
 
-    if (!$producto || $producto['deleted_at'] !== null || (int) $producto['activo'] !== 1) {
+    if (!$producto || (int) $producto['activo'] !== 1) {
         cat_cancelar($conexion, 'Selecciona un producto activo.', 422, ['campo' => 'producto_id']);
     }
 
@@ -2634,7 +2485,7 @@ function cat_catalogos(PDO $conexion): void
     $categorias = $conexion->query(
         "SELECT id, nombre, activo
          FROM categorias_productos
-         WHERE deleted_at IS NULL
+         WHERE 1=1
          ORDER BY activo DESC, nombre ASC"
     )->fetchAll();
 
@@ -2715,7 +2566,6 @@ function cat_bloquear_producto(PDO $conexion, int $id): ?array
             activo
          FROM productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1
          FOR UPDATE"
     );
@@ -2821,7 +2671,6 @@ function cat_unidad_tiene_uso_activo(PDO $conexion, int $unidadId): bool
                 SELECT 1
                 FROM productos
                 WHERE unidad_base_id = :unidad_producto
-                  AND deleted_at IS NULL
                   AND activo = 1
                 LIMIT 1
             )
@@ -2832,7 +2681,6 @@ function cat_unidad_tiene_uso_activo(PDO $conexion, int $unidadId): bool
                     ON p.id = pp.producto_id
                 WHERE pp.unidad_id = :unidad_presentacion
                   AND pp.activo = 1
-                  AND p.deleted_at IS NULL
                   AND p.activo = 1
                 LIMIT 1
             )"
@@ -2856,7 +2704,6 @@ function cat_validar_categoria(PDO $conexion, ?int $categoriaId): void
         "SELECT activo
          FROM categorias_productos
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1"
     );
 

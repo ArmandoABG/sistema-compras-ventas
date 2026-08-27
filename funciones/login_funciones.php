@@ -68,7 +68,6 @@ try {
             bloqueado_hasta
          FROM usuarios
          WHERE usuario = :usuario
-           AND deleted_at IS NULL
          LIMIT 1"
     );
 

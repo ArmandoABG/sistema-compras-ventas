@@ -114,7 +114,7 @@ try {
     $existeUsuario = $conexion->query(
         "SELECT id
          FROM usuarios
-         WHERE deleted_at IS NULL
+         WHERE 1=1
          LIMIT 1"
     )->fetchColumn();
 

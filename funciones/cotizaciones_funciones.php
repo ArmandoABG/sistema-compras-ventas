@@ -216,7 +216,7 @@ function cot_buscar_clientes(PDO $conexion): void
             c.limite_credito
          FROM clientes c
          LEFT JOIN niveles_cliente n ON n.id = c.nivel_cliente_id
-         WHERE c.deleted_at IS NULL
+         WHERE 1=1
            AND c.activo = 1
            AND (
                 c.codigo LIKE :q_codigo
@@ -285,7 +285,7 @@ function cot_buscar_productos(PDO $conexion): void
          FROM productos p
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN tasas_impuesto ti ON ti.id = p.tasa_impuesto_id
-         WHERE p.deleted_at IS NULL
+         WHERE 1=1
            AND p.activo = 1
            AND (
                 p.sku LIKE :q_sku
@@ -1617,7 +1617,6 @@ function cot_cliente_activo(PDO $conexion, int $id): ?array
          FROM clientes c
          LEFT JOIN niveles_cliente n ON n.id = c.nivel_cliente_id
          WHERE c.id = :id
-           AND c.deleted_at IS NULL
            AND c.activo = 1
          LIMIT 1"
     );
@@ -1678,7 +1677,6 @@ function cot_producto(PDO $conexion, int $id): ?array
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN tasas_impuesto ti ON ti.id = p.tasa_impuesto_id
          WHERE p.id = :id
-           AND p.deleted_at IS NULL
            AND p.activo = 1
          LIMIT 1"
     );

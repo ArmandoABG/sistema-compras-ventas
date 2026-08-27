@@ -86,11 +86,6 @@ try {
             prov_cambiar_estado_proveedor($conexion);
             break;
 
-        case 'PAPELERA_PROVEEDOR':
-            prov_requerir_admin();
-            prov_papelera_proveedor($conexion);
-            break;
-
         case 'GUARDAR_RELACION':
             prov_requerir_admin();
             prov_guardar_relacion($conexion);
@@ -182,7 +177,8 @@ function prov_listar_proveedores(PDO $conexion): void
         $estado = 'TODOS';
     }
 
-    $where = ['p.deleted_at IS NULL'];
+    // Condición base: evita generar un WHERE vacío cuando no hay filtros.
+    $where = ['1=1'];
     $params = [];
 
     if ($busqueda !== '') {
@@ -305,7 +301,7 @@ function prov_listar_proveedores(PDO $conexion): void
             SUM(activo = 0) AS inactivos,
             SUM(dias_credito > 0) AS con_credito
          FROM proveedores
-         WHERE deleted_at IS NULL"
+         WHERE 1=1"
     )->fetch();
 
     si_responder_json(
@@ -360,7 +356,6 @@ function prov_detalle_proveedor(PDO $conexion): void
             updated_at
          FROM proveedores
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1"
     );
 
@@ -576,8 +571,7 @@ function prov_guardar_proveedor(PDO $conexion): void
                 dias_credito = :dias_credito,
                 limite_credito = :limite_credito,
                 observaciones = :observaciones
-             WHERE id = :id
-               AND deleted_at IS NULL"
+             WHERE id = :id"
         );
 
         $stmt->execute([
@@ -682,8 +676,7 @@ function prov_cambiar_estado_proveedor(PDO $conexion): void
     $conexion->prepare(
         "UPDATE proveedores
          SET activo = :activo
-         WHERE id = :id
-           AND deleted_at IS NULL"
+         WHERE id = :id"
     )->execute([
         ':activo' => $activo,
         ':id' => $id,
@@ -715,91 +708,6 @@ function prov_cambiar_estado_proveedor(PDO $conexion): void
     );
 }
 
-function prov_papelera_proveedor(PDO $conexion): void
-{
-    $id = prov_id($_POST['proveedor_id'] ?? null, 'proveedor');
-
-    $conexion->beginTransaction();
-
-    $proveedor = prov_bloquear_proveedor($conexion, $id);
-
-    if (!$proveedor) {
-        prov_cancelar($conexion, 'El proveedor ya no existe.', 404);
-    }
-
-    $stmtCompra = $conexion->prepare(
-        "SELECT COUNT(*)
-         FROM compras
-         WHERE proveedor_id = :proveedor_id
-           AND estado IN ('BORRADOR','PENDIENTE_RECEPCION','RECIBIDA_PARCIAL')"
-    );
-
-    $stmtCompra->execute([':proveedor_id' => $id]);
-
-    if ((int) $stmtCompra->fetchColumn() > 0) {
-        prov_cancelar(
-            $conexion,
-            'No puedes enviar este proveedor a la papelera porque tiene compras abiertas.',
-            409
-        );
-    }
-
-    $stmtCxP = $conexion->prepare(
-        "SELECT COUNT(*)
-         FROM cuentas_por_pagar
-         WHERE proveedor_id = :proveedor_id
-           AND estado <> 'CANCELADA'
-           AND saldo_pendiente > 0"
-    );
-
-    $stmtCxP->execute([':proveedor_id' => $id]);
-
-    if ((int) $stmtCxP->fetchColumn() > 0) {
-        prov_cancelar(
-            $conexion,
-            'No puedes enviar este proveedor a la papelera porque tiene saldo pendiente por pagar.',
-            409
-        );
-    }
-
-    $conexion->prepare(
-        "UPDATE proveedores
-         SET
-            activo = 0,
-            deleted_at = NOW(),
-            deleted_by = :deleted_by
-         WHERE id = :id
-           AND deleted_at IS NULL"
-    )->execute([
-        ':deleted_by' => (int) $_SESSION['usuario_id'],
-        ':id' => $id,
-    ]);
-
-    $conexion->prepare(
-        "UPDATE proveedores_productos
-         SET activo = 0
-         WHERE proveedor_id = :proveedor_id"
-    )->execute([
-        ':proveedor_id' => $id,
-    ]);
-
-    prov_auditar(
-        $conexion,
-        'PROVEEDOR_PAPELERA',
-        'proveedores',
-        $id,
-        'Se envió un proveedor a la papelera.',
-        prov_proveedor_auditoria($proveedor),
-        [
-            'activo' => 0,
-            'deleted_at' => date('Y-m-d H:i:s'),
-        ]
-    );
-
-    $conexion->commit();
-
-    si_responder_json(true, 'Proveedor enviado a la papelera correctamente.');
-}
 
 /* =========================================================================
    PRODUCTOS SUMINISTRADOS
@@ -819,7 +727,6 @@ function prov_listar_relaciones(PDO $conexion): void
 
     $where = [
         'pp.proveedor_id = :proveedor_id',
-        'p.deleted_at IS NULL',
     ];
 
     $params = [
@@ -1015,10 +922,8 @@ function prov_detalle_relacion(PDO $conexion): void
          FROM proveedores_productos pp
          INNER JOIN proveedores pr
             ON pr.id = pp.proveedor_id
-           AND pr.deleted_at IS NULL
          INNER JOIN productos p
             ON p.id = pp.producto_id
-           AND p.deleted_at IS NULL
          LEFT JOIN presentaciones_producto pres
             ON pres.id = pp.presentacion_id
          WHERE pp.id = :id
@@ -1249,9 +1154,7 @@ function prov_cambiar_estado_relacion(PDO $conexion): void
             pp.producto_id,
             pp.activo,
             pr.activo AS proveedor_activo,
-            pr.deleted_at AS proveedor_deleted_at,
-            p.activo AS producto_activo,
-            p.deleted_at AS producto_deleted_at
+            p.activo AS producto_activo
          FROM proveedores_productos pp
          INNER JOIN proveedores pr
             ON pr.id = pp.proveedor_id
@@ -1273,9 +1176,7 @@ function prov_cambiar_estado_relacion(PDO $conexion): void
         $activo === 1
         && (
             (int) $fila['proveedor_activo'] !== 1
-            || $fila['proveedor_deleted_at'] !== null
             || (int) $fila['producto_activo'] !== 1
-            || $fila['producto_deleted_at'] !== null
         )
     ) {
         prov_cancelar(
@@ -1458,10 +1359,8 @@ function prov_registrar_precio(PDO $conexion): void
             pp.presentacion_id,
             pp.activo,
             pr.activo AS proveedor_activo,
-            pr.deleted_at AS proveedor_deleted_at,
             p.nombre AS producto,
             p.activo AS producto_activo,
-            p.deleted_at AS producto_deleted_at,
             p.unidad_base_id,
             ub.codigo AS unidad_base_codigo,
             ub.nombre AS unidad_base_nombre,
@@ -1497,9 +1396,7 @@ function prov_registrar_precio(PDO $conexion): void
     if (
         (int) $relacion['activo'] !== 1
         || (int) $relacion['proveedor_activo'] !== 1
-        || $relacion['proveedor_deleted_at'] !== null
         || (int) $relacion['producto_activo'] !== 1
-        || $relacion['producto_deleted_at'] !== null
     ) {
         prov_cancelar(
             $conexion,
@@ -1705,9 +1602,7 @@ function prov_comparador(PDO $conexion): void
               AND (hpp.vigencia_hasta IS NULL OR hpp.vigencia_hasta >= NOW())
               AND pp.activo = 1
               AND pr.activo = 1
-              AND pr.deleted_at IS NULL
               AND p.activo = 1
-              AND p.deleted_at IS NULL
               AND NOT EXISTS (
                     SELECT 1
                     FROM historial_precios_proveedor h2
@@ -1886,7 +1781,7 @@ function prov_buscar_proveedores(PDO $conexion): void
          FROM proveedores p
          LEFT JOIN monedas m
             ON m.id = p.moneda_default_id
-         WHERE p.deleted_at IS NULL
+         WHERE 1=1
            AND p.activo = 1
            AND (
                 p.codigo = :codigo_exacto
@@ -1943,7 +1838,7 @@ function prov_buscar_materias_primas(PDO $conexion): void
          FROM productos p
          INNER JOIN unidades_medida u
             ON u.id = p.unidad_base_id
-         WHERE p.deleted_at IS NULL
+         WHERE 1=1
            AND p.activo = 1
            AND p.tipo = 'MATERIA_PRIMA'
            AND (
@@ -1993,7 +1888,6 @@ function prov_opciones_producto(PDO $conexion): void
          INNER JOIN unidades_medida u
             ON u.id = p.unidad_base_id
          WHERE p.id = :id
-           AND p.deleted_at IS NULL
            AND p.activo = 1
            AND p.tipo = 'MATERIA_PRIMA'
          LIMIT 1"
@@ -2126,7 +2020,6 @@ function prov_bloquear_proveedor(PDO $conexion, int $id): ?array
             activo
          FROM proveedores
          WHERE id = :id
-           AND deleted_at IS NULL
          LIMIT 1
          FOR UPDATE"
     );
@@ -2150,7 +2043,6 @@ function prov_bloquear_materia_prima(PDO $conexion, int $id): ?array
             tipo
          FROM productos
          WHERE id = :id
-           AND deleted_at IS NULL
            AND activo = 1
            AND tipo = 'MATERIA_PRIMA'
          LIMIT 1
@@ -2276,7 +2168,7 @@ function prov_validar_rfc_unico(PDO $conexion, ?string $rfc, int $excluirId): vo
     }
 
     $stmt = $conexion->prepare(
-        "SELECT id, deleted_at
+        "SELECT id
          FROM proveedores
          WHERE rfc = :rfc
            AND id <> :id
@@ -2293,9 +2185,7 @@ function prov_validar_rfc_unico(PDO $conexion, ?string $rfc, int $excluirId): vo
     if ($fila) {
         prov_cancelar(
             $conexion,
-            $fila['deleted_at'] !== null
-                ? 'Ese RFC pertenece a un proveedor que está en la papelera.'
-                : 'Ya existe un proveedor con ese RFC.',
+            'Ya existe un proveedor con ese RFC.',
             409,
             ['campo' => 'rfc']
         );

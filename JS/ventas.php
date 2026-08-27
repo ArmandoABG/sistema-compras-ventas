@@ -923,11 +923,23 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 linea.impuesto_pct = Number(r.impuesto_pct || 0);
                 linea.precio_manual = false;
             } else {
-                linea.precio_venta_id = 0; linea.nivel_precio = 'MANUAL';
+                // Si no existe precio para ESTA presentación/cantidad/moneda,
+                // nunca conservar el precio automático de la opción anterior.
+                // Ejemplo: Litro $25 -> Garrafa 20 L sin precio configurado.
+                linea.precio = 0;
+                linea.precio_venta_id = 0;
+                linea.nivel_precio = 'SIN_CONFIGURAR';
+                linea.precio_manual = false;
             }
         } catch (e) {
             if (estado.solicitudPrecio[linea.key] === solicitud) {
-                linea.precio_venta_id = 0; linea.nivel_precio = 'MANUAL';
+                // En un cambio forzado (presentación/moneda) es más seguro dejar
+                // la línea sin precio que conservar un importe de otra opción.
+                if (forzar && !linea.precio_manual) {
+                    linea.precio = 0;
+                }
+                linea.precio_venta_id = 0;
+                linea.nivel_precio = 'SIN_CONFIGURAR';
             }
         }
     }
@@ -959,7 +971,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 + '<td><strong>' + escapeHtml(l.nombre) + '</strong><small class="cell-secondary">' + escapeHtml(l.sku) + '</small></td>'
                 + '<td>' + presentacion + '</td>'
                 + '<td>' + (l.bloqueada ? '<strong>' + numero(l.cantidad, 3) + '</strong>' : '<input class="line-input line-input--number" data-line-field="cantidad" type="number" min="0.000001" step="0.001" value="' + Number(l.cantidad || 0) + '">') + '</td>'
-                + '<td>' + (l.bloqueada ? '<strong>' + moneda(l.precio, m.codigo, m.simbolo) + '</strong>' : '<input class="line-input line-input--number" data-line-field="precio" type="number" min="0.0001" step="0.01" value="' + Number(l.precio || 0) + '"><small class="cell-secondary">' + (l.precio_manual ? 'Manual' : 'Automático') + '</small>') + '</td>'
+                + '<td>' + (l.bloqueada ? '<strong>' + moneda(l.precio, m.codigo, m.simbolo) + '</strong>' : '<input class="line-input line-input--number" data-line-field="precio" type="number" min="0.0001" step="0.01" value="' + Number(l.precio || 0) + '"><small class="cell-secondary">' + (l.precio_manual ? 'Manual' : (Number(l.precio_venta_id || 0) > 0 ? 'Automático' : 'Sin precio configurado')) + '</small>') + '</td>'
                 + '<td>' + badge(l.nivel_precio === 'HISTORICO' ? 'Histórico' : l.nivel_precio) + '</td>'
                 + '<td>' + numero(l.descuento, 2) + '%</td>'
                 + '<td>' + numero(l.impuesto_pct, 2) + '%</td>'
@@ -1175,7 +1187,14 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             l.factor = p ? Number(p.factor_a_unidad_base || 1) : 1;
             l.presentacion_nombre = p ? p.nombre : 'Unidad base';
             l.cantidad_base = Number(l.cantidad || 0) * l.factor;
-            l.precio_manual = false; l.precio_venta_id = 0;
+            // La presentación tiene su propia regla de precio. Limpiamos el
+            // importe anterior antes de resolver el precio de la nueva opción.
+            l.precio = 0;
+            l.precio_manual = false;
+            l.precio_venta_id = 0;
+            l.nivel_precio = 'SIN_CONFIGURAR';
+            renderLineas();
+            renderTotales();
             await sugerirPrecio(l, true); renderLineas(); renderTotales();
         }
     });

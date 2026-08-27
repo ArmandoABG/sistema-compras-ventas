@@ -1186,7 +1186,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             ${x.observaciones ? `<div class="detail-note"><strong>Observaciones</strong><p>${escapar(x.observaciones)}</p></div>` : ''}
             <section class="detail-section"><h3>Ingredientes por ${escapar(x.referencia)}</h3><div class="recipe-detail-ingredients">${ins.map(i => `<div><div><strong>${escapar(i.producto)}</strong><small>${escapar(i.sku)}</small></div><span>${numero(i.cantidad)} ${escapar(i.presentacion || i.unidad || i.simbolo)} <small>= ${numero(i.cantidad_base)} ${escapar(i.simbolo_base)} base</small></span></div>`).join('')}</div></section>
             ${bal.mensaje ? `<div class="recipe-balance ${Number(bal.requiere_confirmacion) === 1 ? 'is-danger' : 'is-neutral'}">${escapar(bal.mensaje)}</div>` : ''}`;
-            $('recetaDetalleAcciones').innerHTML = PUEDE_REGISTRAR ? `<button type="button" class="btn-primary" data-receta-accion="usar">Usar en producción</button><button type="button" class="btn-secondary" data-receta-accion="editar">Editar</button><button type="button" class="btn-danger" data-receta-accion="eliminar">Eliminar</button>` : '';
+            $('recetaDetalleAcciones').innerHTML = PUEDE_REGISTRAR ? `${Number(x.activo) === 1 ? '<button type="button" class="btn-primary" data-receta-accion="usar">Usar en producción</button>' : ''}<button type="button" class="btn-secondary" data-receta-accion="editar">Editar</button>` : '';
             $('modalReceta').hidden = false;
             document.body.classList.add('modal-open');
         } catch (e) { mensaje(e.message, 'error'); }
@@ -1263,17 +1263,6 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         actualizarSelectorProduccionReceta();
     }
 
-    async function eliminarReceta(id) {
-        if (!confirm('La receta se retirará del catálogo, pero las producciones históricas conservarán su información. ¿Continuar?')) return;
-        try {
-            const r = await apiPost('RECETA_ELIMINAR', { receta_id: id });
-            cerrarRecetaDetalle();
-            mensaje(r.mensaje, 'success');
-            await cargarRecetasSelector();
-            await listarRecetas();
-        } catch (e) { mensaje(e.message, 'error'); }
-    }
-
     async function aplicarReceta() {
         const rid = Number($('produccionReceta').value || 0);
         const almacen = Number($('almacenProduccion').value || 0);
@@ -1334,7 +1323,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('recetaSiguiente').addEventListener('click',()=>{if(estado.recetaPagina<estado.recetaPaginas){estado.recetaPagina++;listarRecetas();}});
         $('recetaCards').addEventListener('click',e=>{const b=e.target.closest('[data-ver-receta]');if(b)verReceta(Number(b.dataset.verReceta));});
         $('btnCerrarRecetaDetalle').addEventListener('click',cerrarRecetaDetalle);
-        $('recetaDetalleAcciones').addEventListener('click',e=>{const a=e.target.closest('[data-receta-accion]');if(!a)return;if(a.dataset.recetaAccion==='usar')usarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='editar')editarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='eliminar')eliminarReceta(estado.recetaDetalleId);});
+        $('recetaDetalleAcciones').addEventListener('click',e=>{const a=e.target.closest('[data-receta-accion]');if(!a)return;if(a.dataset.recetaAccion==='usar')usarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='editar')editarReceta(estado.recetaDetalleId);});
         if (PUEDE_REGISTRAR) {
             $('btnNuevaReceta').addEventListener('click',abrirRecetaEditor);
             $('btnVolverRecetas').addEventListener('click',cerrarRecetaEditor);

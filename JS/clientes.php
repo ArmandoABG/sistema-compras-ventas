@@ -754,7 +754,6 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
                 );
 
                 if (c.activo === 0) {
-                    acciones += botonAccion('Papelera', 'papelera-cliente', c.id, null, 'danger');
                 }
             }
 
@@ -931,16 +930,6 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
             activo: activo
         });
 
-        await cargarCatalogos();
-        await cargarSeccionActual();
-    }
-
-    async function papeleraCliente(id) {
-        if (!window.confirm('¿Enviar este cliente a la papelera? El historial comercial anterior se conservará.')) {
-            return;
-        }
-
-        await postSimple('PAPELERA_CLIENTE', {cliente_id: id});
         await cargarCatalogos();
         await cargarSeccionActual();
     }
@@ -1283,8 +1272,6 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
             case 'estado-cliente':
                 cambiarEstadoCliente(id, Number(boton.dataset.value)).catch(function () {});
                 break;
-            case 'papelera-cliente':
-                papeleraCliente(id).catch(function () {});
                 break;
         }
     });

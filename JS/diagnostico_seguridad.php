@@ -24,8 +24,7 @@ $stmt = $conexion->prepare(
         id,
         usuario,
         nombres,
-        activo,
-        deleted_at
+        activo
      FROM usuarios
      WHERE id = :id
      LIMIT 1"

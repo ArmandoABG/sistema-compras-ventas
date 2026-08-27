@@ -181,7 +181,7 @@ function apa_buscar_clientes(PDO $conexion): void
             END AS origen_descuento
          FROM clientes c
          LEFT JOIN niveles_cliente n ON n.id = c.nivel_cliente_id
-         WHERE c.deleted_at IS NULL
+         WHERE 1=1
            AND c.activo = 1
            AND (
                 c.codigo LIKE :codigo
@@ -249,7 +249,7 @@ function apa_buscar_productos(PDO $conexion): void
          LEFT JOIN existencias_almacen ea
             ON ea.producto_id = p.id
            AND ea.almacen_id = :almacen_id
-         WHERE p.deleted_at IS NULL
+         WHERE 1=1
            AND p.activo = 1
            AND p.controla_inventario = 1
            AND (
@@ -1367,7 +1367,7 @@ function apa_cliente_activo(PDO $conexion, int $id): ?array
                 COALESCE(c.descuento_personal_pct, n.descuento_default_pct, 0) AS descuento_efectivo_pct
          FROM clientes c
          LEFT JOIN niveles_cliente n ON n.id = c.nivel_cliente_id
-         WHERE c.id = :id AND c.deleted_at IS NULL AND c.activo = 1
+         WHERE c.id = :id AND c.activo = 1
          LIMIT 1"
     );
     $stmt->execute([':id' => $id]);
@@ -1393,7 +1393,7 @@ function apa_producto_activo(PDO $conexion, int $id): ?array
          FROM productos p
          INNER JOIN unidades_medida ub ON ub.id = p.unidad_base_id
          LEFT JOIN tasas_impuesto ti ON ti.id = p.tasa_impuesto_id
-         WHERE p.id = :id AND p.deleted_at IS NULL AND p.activo = 1 AND p.controla_inventario = 1 AND ub.activo = 1
+         WHERE p.id = :id AND p.activo = 1 AND p.controla_inventario = 1 AND ub.activo = 1
          LIMIT 1"
     );
     $stmt->execute([':id' => $id]);

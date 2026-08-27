@@ -204,7 +204,7 @@ function alm_inventario(PDO $conexion): void
         si_responder_json(false, 'El almacén seleccionado no es válido.', [], 422);
     }
 
-    $where = ['p.deleted_at IS NULL', 'p.controla_inventario = 1'];
+    $where = ['p.controla_inventario = 1'];
     $params = [':almacen_id' => $id];
     if ($buscar !== '') {
         $where[] = '(p.sku LIKE :sku OR p.nombre LIKE :nombre OR COALESCE(p.codigo_barras, \'\') LIKE :barra)';

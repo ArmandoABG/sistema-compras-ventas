@@ -57,7 +57,8 @@ function usr_listar(PDO $conexion): void
 
     if (!in_array($estado, ['TODOS', 'ACTIVOS', 'INACTIVOS', 'BLOQUEADOS'], true)) $estado = 'TODOS';
 
-    $where = ['u.deleted_at IS NULL'];
+    // Condición base: evita generar un WHERE vacío cuando no hay filtros.
+    $where = ['1=1'];
     $params = [];
 
     if ($busqueda !== '') {
@@ -139,7 +140,7 @@ function usr_listar(PDO $conexion): void
 function usr_detalle(PDO $conexion): void
 {
     $id = usr_id($_GET['id'] ?? null);
-    $stmt = $conexion->prepare("SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, debe_cambiar_password, ultimo_acceso, intentos_fallidos, bloqueado_hasta, created_at FROM usuarios WHERE id = :id AND deleted_at IS NULL LIMIT 1");
+    $stmt = $conexion->prepare("SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, debe_cambiar_password, ultimo_acceso, intentos_fallidos, bloqueado_hasta, created_at FROM usuarios WHERE id = :id LIMIT 1");
     $stmt->execute([':id' => $id]);
     $usuario = $stmt->fetch();
     if (!$usuario) si_responder_json(false, 'No se encontró el usuario seleccionado.', [], 404);
@@ -407,7 +408,7 @@ function usr_cambiar_password(PDO $conexion): void
     if ($passwordActor === '') si_responder_json(false, 'Ingresa tu contraseña actual para autorizar el cambio.', ['campo' => 'password_actor'], 422);
 
     $actorId = (int) $_SESSION['usuario_id'];
-    $stmtActor = $conexion->prepare("SELECT password_hash FROM usuarios WHERE id = :id AND activo = 1 AND deleted_at IS NULL LIMIT 1");
+    $stmtActor = $conexion->prepare("SELECT password_hash FROM usuarios WHERE id = :id AND activo = 1 LIMIT 1");
     $stmtActor->execute([':id' => $actorId]);
     $hashActor = $stmtActor->fetchColumn();
     if (!$hashActor || !password_verify($passwordActor, (string) $hashActor)) si_responder_json(false, 'Tu contraseña de autorización es incorrecta.', ['campo' => 'password_actor'], 403);
@@ -432,7 +433,7 @@ function usr_cambiar_password(PDO $conexion): void
 
 function usr_resumen_general(PDO $conexion): array
 {
-    $f = $conexion->query("SELECT COUNT(*) AS total, SUM(activo = 1) AS activos, SUM(activo = 0) AS inactivos, SUM(bloqueado_hasta IS NOT NULL AND bloqueado_hasta > NOW()) AS bloqueados, SUM(ultimo_acceso IS NULL) AS sin_ingreso FROM usuarios WHERE deleted_at IS NULL")->fetch();
+    $f = $conexion->query("SELECT COUNT(*) AS total, SUM(activo = 1) AS activos, SUM(activo = 0) AS inactivos, SUM(bloqueado_hasta IS NOT NULL AND bloqueado_hasta > NOW()) AS bloqueados, SUM(ultimo_acceso IS NULL) AS sin_ingreso FROM usuarios WHERE 1=1")->fetch();
     return [
         'total' => (int) ($f['total'] ?? 0),
         'activos' => (int) ($f['activos'] ?? 0),
@@ -444,7 +445,7 @@ function usr_resumen_general(PDO $conexion): array
 
 function usr_bloquear_usuario(PDO $conexion, int $id): ?array
 {
-    $stmt = $conexion->prepare("SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, intentos_fallidos, bloqueado_hasta, deleted_at FROM usuarios WHERE id = :id AND deleted_at IS NULL LIMIT 1 FOR UPDATE");
+    $stmt = $conexion->prepare("SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, intentos_fallidos, bloqueado_hasta FROM usuarios WHERE id = :id LIMIT 1 FOR UPDATE");
     $stmt->execute([':id' => $id]);
     $f = $stmt->fetch();
     return $f ?: null;
@@ -459,7 +460,7 @@ function usr_obtener_role_ids(PDO $conexion, int $usuarioId): array
 
 function usr_refrescar_sesion_actor(PDO $conexion, int $usuarioId): void
 {
-    $stmt = $conexion->prepare("SELECT usuario, nombres, apellido_paterno, apellido_materno FROM usuarios WHERE id = :id AND activo = 1 AND deleted_at IS NULL LIMIT 1");
+    $stmt = $conexion->prepare("SELECT usuario, nombres, apellido_paterno, apellido_materno FROM usuarios WHERE id = :id AND activo = 1 LIMIT 1");
     $stmt->execute([':id' => $usuarioId]);
     $usuario = $stmt->fetch();
     if (!$usuario) return;
@@ -481,7 +482,7 @@ function usr_refrescar_sesion_actor(PDO $conexion, int $usuarioId): void
 
 function usr_contar_administradores_activos(PDO $conexion, int $excluirId = 0): int
 {
-    $sql = "SELECT COUNT(DISTINCT u.id) FROM usuarios u INNER JOIN usuarios_roles ur ON ur.usuario_id = u.id INNER JOIN roles r ON r.id = ur.rol_id WHERE u.deleted_at IS NULL AND u.activo = 1 AND r.codigo = 'ADMINISTRADOR' AND r.activo = 1";
+    $sql = "SELECT COUNT(DISTINCT u.id) FROM usuarios u INNER JOIN usuarios_roles ur ON ur.usuario_id = u.id INNER JOIN roles r ON r.id = ur.rol_id WHERE 1=1 AND u.activo = 1 AND r.codigo = 'ADMINISTRADOR' AND r.activo = 1";
     if ($excluirId > 0) $sql .= " AND u.id <> :excluir";
     $stmt = $conexion->prepare($sql);
     if ($excluirId > 0) $stmt->bindValue(':excluir', $excluirId, PDO::PARAM_INT);

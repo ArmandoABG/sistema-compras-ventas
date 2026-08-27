@@ -27,7 +27,7 @@ if ($conexion instanceof PDO) {
         $hayUsuarios = (int) $conexion->query(
             "SELECT COUNT(*)
              FROM usuarios
-             WHERE deleted_at IS NULL"
+             WHERE 1=1"
         )->fetchColumn() > 0;
     } catch (Throwable $e) {
         error_log(
