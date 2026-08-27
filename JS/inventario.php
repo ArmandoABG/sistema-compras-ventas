@@ -225,6 +225,10 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                         <h2>Historial Kardex</h2>
                         <p>Los movimientos aplicados y sus reversos permanecen visibles para conservar la trazabilidad del inventario.</p>
                     </div>
+                    <div class="kardex-export-actions">
+                        <button type="button" class="btn-secondary" id="btnExportarKardexCsv">Exportar CSV</button>
+                        <button type="button" class="btn-primary" id="btnExportarKardexXlsx">Exportar Excel</button>
+                    </div>
                 </div>
 
                 <div id="productoKardexActivo" class="active-filter" hidden>
@@ -234,6 +238,53 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                     </div>
                     <button type="button" class="btn-secondary" id="btnQuitarProductoKardex">Ver todos</button>
                 </div>
+
+                <section class="kardex-kpis" aria-label="Resumen del Kardex filtrado">
+                    <article><span>Movimientos</span><strong id="kardexKpiMovimientos">0</strong><small>folios distintos</small></article>
+                    <article><span>Renglones</span><strong id="kardexKpiRenglones">0</strong><small>entradas y salidas</small></article>
+                    <article><span>Productos</span><strong id="kardexKpiProductos">0</strong><small>productos involucrados</small></article>
+                    <article><span>Almacenes</span><strong id="kardexKpiAlmacenes">0</strong><small>ubicaciones involucradas</small></article>
+                    <article><span>Transferencias</span><strong id="kardexKpiTransferencias">0</strong><small>movimientos internos</small></article>
+                    <article><span>Reversos</span><strong id="kardexKpiReversos">0</strong><small>regularizaciones históricas</small></article>
+                </section>
+
+                <section id="kardexProductoResumen" class="kardex-product-summary" hidden>
+                    <div><span>Entradas filtradas</span><strong id="kardexProductoEntradas">0</strong></div>
+                    <div><span>Salidas filtradas</span><strong id="kardexProductoSalidas">0</strong></div>
+                    <div><span>Movimiento neto</span><strong id="kardexProductoNeto">0</strong></div>
+                    <div><span>Existencia actual</span><strong id="kardexProductoActual">0</strong></div>
+                    <div><span>Disponible actual</span><strong id="kardexProductoDisponible">0</strong></div>
+                </section>
+
+                <section class="kardex-analysis-grid">
+                    <article class="module-card kardex-analysis-card">
+                        <header><div><h3>Movimientos por tipo</h3><p>Conteo del periodo filtrado; no mezcla cantidades de unidades diferentes.</p></div></header>
+                        <div class="table-wrap table-wrap--analysis">
+                            <table class="module-table module-table--analysis">
+                                <thead><tr><th>Tipo</th><th class="text-right">Mov.</th><th class="text-right">Renglones</th><th class="text-right">Productos</th></tr></thead>
+                                <tbody id="tablaKardexPorTipo"><tr><td colspan="4" class="empty-cell">Cargando...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </article>
+                    <article class="module-card kardex-analysis-card">
+                        <header><div><h3>Resumen por producto</h3><p>Las cantidades se muestran por producto, respetando su unidad base.</p></div></header>
+                        <div class="table-wrap table-wrap--analysis">
+                            <table class="module-table module-table--analysis module-table--products-summary">
+                                <thead><tr><th>Producto</th><th class="text-right">Entradas</th><th class="text-right">Salidas</th><th class="text-right">Neto</th></tr></thead>
+                                <tbody id="tablaKardexPorProducto"><tr><td colspan="4" class="empty-cell">Cargando...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </article>
+                    <article class="module-card kardex-analysis-card">
+                        <header><div><h3>Resumen por almacén</h3><p>Actividad por ubicación sin mezclar cantidades de unidades distintas.</p></div></header>
+                        <div class="table-wrap table-wrap--analysis">
+                            <table class="module-table module-table--analysis">
+                                <thead><tr><th>Almacén</th><th class="text-right">Mov.</th><th class="text-right">Productos</th><th class="text-right">Entr./sal.</th></tr></thead>
+                                <tbody id="tablaKardexPorAlmacen"><tr><td colspan="4" class="empty-cell">Cargando...</td></tr></tbody>
+                            </table>
+                        </div>
+                    </article>
+                </section>
 
                 <section class="module-card">
                     <div class="filters-grid filters-grid--kardex">
@@ -629,6 +680,23 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         productoKardexActivo: $('productoKardexActivo'),
         productoKardexNombre: $('productoKardexNombre'),
         btnQuitarProductoKardex: $('btnQuitarProductoKardex'),
+        btnExportarKardexCsv: $('btnExportarKardexCsv'),
+        btnExportarKardexXlsx: $('btnExportarKardexXlsx'),
+        kardexKpiMovimientos: $('kardexKpiMovimientos'),
+        kardexKpiRenglones: $('kardexKpiRenglones'),
+        kardexKpiProductos: $('kardexKpiProductos'),
+        kardexKpiAlmacenes: $('kardexKpiAlmacenes'),
+        kardexKpiTransferencias: $('kardexKpiTransferencias'),
+        kardexKpiReversos: $('kardexKpiReversos'),
+        kardexProductoResumen: $('kardexProductoResumen'),
+        kardexProductoEntradas: $('kardexProductoEntradas'),
+        kardexProductoSalidas: $('kardexProductoSalidas'),
+        kardexProductoNeto: $('kardexProductoNeto'),
+        kardexProductoActual: $('kardexProductoActual'),
+        kardexProductoDisponible: $('kardexProductoDisponible'),
+        tablaKardexPorTipo: $('tablaKardexPorTipo'),
+        tablaKardexPorProducto: $('tablaKardexPorProducto'),
+        tablaKardexPorAlmacen: $('tablaKardexPorAlmacen'),
 
         formOperacion: $('formOperacionInventario'),
         operacionAlmacen: $('operacionAlmacen'),
@@ -1180,6 +1248,78 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         }).join('');
     }
 
+    function renderResumenKardex(resumen) {
+        const g = resumen?.general || {};
+        const set = (el, val) => { if (el) el.textContent = numero(Number(val || 0)); };
+        set(dom.kardexKpiMovimientos, g.movimientos);
+        set(dom.kardexKpiRenglones, g.renglones);
+        set(dom.kardexKpiProductos, g.productos);
+        set(dom.kardexKpiAlmacenes, g.almacenes);
+        set(dom.kardexKpiTransferencias, g.transferencias);
+        set(dom.kardexKpiReversos, g.reversos);
+
+        const tipos = Array.isArray(resumen?.por_tipo) ? resumen.por_tipo : [];
+        if (dom.tablaKardexPorTipo) {
+            dom.tablaKardexPorTipo.innerHTML = tipos.length ? tipos.map((r) => `
+                <tr>
+                    <td><strong>${escapar(r.nombre)}</strong><span class="cell-secondary">${escapar(r.codigo)}</span></td>
+                    <td class="number-cell">${numero(r.movimientos)}</td>
+                    <td class="number-cell">${numero(r.renglones)}</td>
+                    <td class="number-cell">${numero(r.productos)}</td>
+                </tr>`).join('') : '<tr><td colspan="4" class="empty-cell">Sin movimientos para estos filtros.</td></tr>';
+        }
+
+        const productos = Array.isArray(resumen?.por_producto) ? resumen.por_producto : [];
+        if (dom.tablaKardexPorProducto) {
+            dom.tablaKardexPorProducto.innerHTML = productos.length ? productos.map((r) => {
+                const unidad = r.unidad_simbolo || r.unidad_codigo || '';
+                return `<tr>
+                    <td><strong>${escapar(r.producto)}</strong><span class="cell-secondary">${escapar(r.sku)} · ${escapar(unidad)}</span></td>
+                    <td class="number-cell number-cell--entry">${numero(r.entradas)} ${escapar(unidad)}</td>
+                    <td class="number-cell number-cell--exit">${numero(r.salidas)} ${escapar(unidad)}</td>
+                    <td class="number-cell"><strong>${numero(r.neto)} ${escapar(unidad)}</strong></td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="4" class="empty-cell">Sin productos para estos filtros.</td></tr>';
+        }
+
+        const almacenes = Array.isArray(resumen?.por_almacen) ? resumen.por_almacen : [];
+        if (dom.tablaKardexPorAlmacen) {
+            dom.tablaKardexPorAlmacen.innerHTML = almacenes.length ? almacenes.map((r) => `
+                <tr>
+                    <td><strong>${escapar(r.nombre)}</strong><span class="cell-secondary">${escapar(r.codigo)}</span></td>
+                    <td class="number-cell">${numero(r.movimientos)}</td>
+                    <td class="number-cell">${numero(r.productos)}</td>
+                    <td class="number-cell">${numero(r.renglones_entrada)} / ${numero(r.renglones_salida)}</td>
+                </tr>`).join('') : '<tr><td colspan="4" class="empty-cell">Sin almacenes para estos filtros.</td></tr>';
+        }
+
+        const ps = resumen?.producto_seleccionado || null;
+        if (dom.kardexProductoResumen) dom.kardexProductoResumen.hidden = !ps;
+        if (ps) {
+            const unidad = ps.unidad_simbolo || ps.unidad_codigo || '';
+            if (dom.kardexProductoEntradas) dom.kardexProductoEntradas.textContent = `${numero(ps.entradas)} ${unidad}`;
+            if (dom.kardexProductoSalidas) dom.kardexProductoSalidas.textContent = `${numero(ps.salidas)} ${unidad}`;
+            if (dom.kardexProductoNeto) dom.kardexProductoNeto.textContent = `${numero(ps.neto)} ${unidad}`;
+            if (dom.kardexProductoActual) dom.kardexProductoActual.textContent = `${numero(ps.existencia_actual)} ${unidad}`;
+            if (dom.kardexProductoDisponible) dom.kardexProductoDisponible.textContent = `${numero(ps.disponible_actual)} ${unidad}`;
+        }
+    }
+
+    function descargarKardex(formato) {
+        const accion = formato === 'xlsx' ? 'EXPORTAR_KARDEX_XLSX' : 'EXPORTAR_KARDEX_CSV';
+        const url = new URL(window.location.href);
+        url.search = '';
+        url.searchParams.set('inv_api', '1');
+        url.searchParams.set('accion', accion);
+        const params = parametrosKardex();
+        delete params.pagina;
+        delete params.por_pagina;
+        Object.entries(params).forEach(([clave, valor]) => {
+            if (valor !== '' && valor !== null && valor !== undefined) url.searchParams.set(clave, String(valor));
+        });
+        window.location.href = url.toString();
+    }
+
     function actualizarPaginacionKardex(paginacion) {
         const p = paginacion || {};
         estado.kardex.pagina = Number(p.pagina || 1);
@@ -1214,6 +1354,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             if (!data || requestId !== estado.requestKardex) return;
 
             renderKardex(data.registros || []);
+            renderResumenKardex(data.resumen || {});
             actualizarPaginacionKardex(data.paginacion || {});
         } catch (error) {
             if (requestId !== estado.requestKardex) return;
@@ -1625,6 +1766,9 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             refrescarProductoKardex();
             cargarKardex();
         });
+
+        dom.btnExportarKardexCsv?.addEventListener('click', () => descargarKardex('csv'));
+        dom.btnExportarKardexXlsx?.addEventListener('click', () => descargarKardex('xlsx'));
     }
 
     async function iniciar() {

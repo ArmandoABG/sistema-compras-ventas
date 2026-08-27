@@ -38,6 +38,24 @@ if ($accion !== 'RESUMEN') {
 try {
     $usuarioId = (int) $_SESSION['usuario_id'];
 
+
+    $monedaBase = (string) ($conexion->query(
+        "SELECT codigo
+         FROM monedas
+         WHERE es_base = 1
+           AND activo = 1
+         ORDER BY id
+         LIMIT 1"
+    )->fetchColumn() ?: 'MXN');
+
+    $calcularVariacion = static function (float $actual, float $anterior): ?float {
+        if (abs($anterior) < 0.000001) {
+            return abs($actual) < 0.000001 ? 0.0 : null;
+        }
+
+        return (($actual - $anterior) / abs($anterior)) * 100;
+    };
+
     /*
     |--------------------------------------------------------------------------
     | KPIs
@@ -372,6 +390,173 @@ try {
 
     /*
     |--------------------------------------------------------------------------
+    | Tendencias semanales y mensuales
+    |--------------------------------------------------------------------------
+    | Todo se normaliza a la moneda base usando el tipo de cambio histórico
+    | guardado en cada operación. Las compras BORRADOR/CANCELADA no cuentan.
+    |--------------------------------------------------------------------------
+    */
+
+    $hoy = new DateTimeImmutable('today');
+    $inicioSemana = $hoy->modify('-6 days');
+    $finSemana = $hoy->modify('+1 day');
+    $inicioSemanaAnterior = $inicioSemana->modify('-7 days');
+
+    $stmt = $conexion->prepare(
+        "SELECT
+            DATE(fecha_venta) AS periodo,
+            COUNT(*) AS operaciones,
+            COALESCE(SUM(total * tipo_cambio_a_base), 0) AS importe_base
+         FROM ventas
+         WHERE estado = 'CONFIRMADA'
+           AND fecha_venta >= :inicio
+           AND fecha_venta < :fin
+         GROUP BY DATE(fecha_venta)"
+    );
+    $stmt->execute([
+        ':inicio' => $inicioSemanaAnterior->format('Y-m-d 00:00:00'),
+        ':fin' => $finSemana->format('Y-m-d 00:00:00'),
+    ]);
+    $ventasDias = [];
+    foreach ($stmt->fetchAll() as $fila) {
+        $ventasDias[(string) $fila['periodo']] = [
+            'importe' => (float) $fila['importe_base'],
+            'operaciones' => (int) $fila['operaciones'],
+        ];
+    }
+
+    $stmt = $conexion->prepare(
+        "SELECT
+            DATE(fecha_compra) AS periodo,
+            COUNT(*) AS operaciones,
+            COALESCE(SUM(total * tipo_cambio_a_base), 0) AS importe_base
+         FROM compras
+         WHERE estado IN ('PENDIENTE_RECEPCION', 'RECIBIDA_PARCIAL', 'RECIBIDA')
+           AND fecha_compra >= :inicio
+           AND fecha_compra < :fin
+         GROUP BY DATE(fecha_compra)"
+    );
+    $stmt->execute([
+        ':inicio' => $inicioSemanaAnterior->format('Y-m-d 00:00:00'),
+        ':fin' => $finSemana->format('Y-m-d 00:00:00'),
+    ]);
+    $comprasDias = [];
+    foreach ($stmt->fetchAll() as $fila) {
+        $comprasDias[(string) $fila['periodo']] = [
+            'importe' => (float) $fila['importe_base'],
+            'operaciones' => (int) $fila['operaciones'],
+        ];
+    }
+
+    $diasCortos = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    $serieSemanal = [];
+    $totalVentasSemana = 0.0;
+    $totalComprasSemana = 0.0;
+    $totalVentasSemanaAnterior = 0.0;
+    $totalComprasSemanaAnterior = 0.0;
+
+    for ($i = 0; $i < 14; $i++) {
+        $fecha = $inicioSemanaAnterior->modify('+' . $i . ' days');
+        $clave = $fecha->format('Y-m-d');
+        $venta = (float) ($ventasDias[$clave]['importe'] ?? 0);
+        $compra = (float) ($comprasDias[$clave]['importe'] ?? 0);
+
+        if ($fecha < $inicioSemana) {
+            $totalVentasSemanaAnterior += $venta;
+            $totalComprasSemanaAnterior += $compra;
+            continue;
+        }
+
+        $totalVentasSemana += $venta;
+        $totalComprasSemana += $compra;
+        $serieSemanal[] = [
+            'periodo' => $clave,
+            'etiqueta' => $diasCortos[(int) $fecha->format('w')] . ' ' . $fecha->format('d'),
+            'ventas' => round($venta, 2),
+            'compras' => round($compra, 2),
+            'ventas_operaciones' => (int) ($ventasDias[$clave]['operaciones'] ?? 0),
+            'compras_operaciones' => (int) ($comprasDias[$clave]['operaciones'] ?? 0),
+        ];
+    }
+
+    $inicioMeses = $hoy->modify('first day of this month')->modify('-5 months');
+    $finMeses = $hoy->modify('first day of next month');
+
+    $stmt = $conexion->prepare(
+        "SELECT
+            DATE_FORMAT(fecha_venta, '%Y-%m') AS periodo,
+            COUNT(*) AS operaciones,
+            COALESCE(SUM(total * tipo_cambio_a_base), 0) AS importe_base
+         FROM ventas
+         WHERE estado = 'CONFIRMADA'
+           AND fecha_venta >= :inicio
+           AND fecha_venta < :fin
+         GROUP BY DATE_FORMAT(fecha_venta, '%Y-%m')"
+    );
+    $stmt->execute([
+        ':inicio' => $inicioMeses->format('Y-m-d 00:00:00'),
+        ':fin' => $finMeses->format('Y-m-d 00:00:00'),
+    ]);
+    $ventasMeses = [];
+    foreach ($stmt->fetchAll() as $fila) {
+        $ventasMeses[(string) $fila['periodo']] = [
+            'importe' => (float) $fila['importe_base'],
+            'operaciones' => (int) $fila['operaciones'],
+        ];
+    }
+
+    $stmt = $conexion->prepare(
+        "SELECT
+            DATE_FORMAT(fecha_compra, '%Y-%m') AS periodo,
+            COUNT(*) AS operaciones,
+            COALESCE(SUM(total * tipo_cambio_a_base), 0) AS importe_base
+         FROM compras
+         WHERE estado IN ('PENDIENTE_RECEPCION', 'RECIBIDA_PARCIAL', 'RECIBIDA')
+           AND fecha_compra >= :inicio
+           AND fecha_compra < :fin
+         GROUP BY DATE_FORMAT(fecha_compra, '%Y-%m')"
+    );
+    $stmt->execute([
+        ':inicio' => $inicioMeses->format('Y-m-d 00:00:00'),
+        ':fin' => $finMeses->format('Y-m-d 00:00:00'),
+    ]);
+    $comprasMeses = [];
+    foreach ($stmt->fetchAll() as $fila) {
+        $comprasMeses[(string) $fila['periodo']] = [
+            'importe' => (float) $fila['importe_base'],
+            'operaciones' => (int) $fila['operaciones'],
+        ];
+    }
+
+    $mesesCortos = [
+        1 => 'Ene', 2 => 'Feb', 3 => 'Mar', 4 => 'Abr',
+        5 => 'May', 6 => 'Jun', 7 => 'Jul', 8 => 'Ago',
+        9 => 'Sep', 10 => 'Oct', 11 => 'Nov', 12 => 'Dic',
+    ];
+    $serieMensual = [];
+
+    for ($i = 0; $i < 6; $i++) {
+        $fecha = $inicioMeses->modify('+' . $i . ' months');
+        $clave = $fecha->format('Y-m');
+        $serieMensual[] = [
+            'periodo' => $clave,
+            'etiqueta' => $mesesCortos[(int) $fecha->format('n')] . ' ' . $fecha->format('y'),
+            'ventas' => round((float) ($ventasMeses[$clave]['importe'] ?? 0), 2),
+            'compras' => round((float) ($comprasMeses[$clave]['importe'] ?? 0), 2),
+            'ventas_operaciones' => (int) ($ventasMeses[$clave]['operaciones'] ?? 0),
+            'compras_operaciones' => (int) ($comprasMeses[$clave]['operaciones'] ?? 0),
+        ];
+    }
+
+    $mesActualClave = $hoy->format('Y-m');
+    $mesAnteriorClave = $hoy->modify('-1 month')->format('Y-m');
+    $ventasMesActual = (float) ($ventasMeses[$mesActualClave]['importe'] ?? 0);
+    $comprasMesActual = (float) ($comprasMeses[$mesActualClave]['importe'] ?? 0);
+    $ventasMesAnterior = (float) ($ventasMeses[$mesAnteriorClave]['importe'] ?? 0);
+    $comprasMesAnterior = (float) ($comprasMeses[$mesAnteriorClave]['importe'] ?? 0);
+
+    /*
+    |--------------------------------------------------------------------------
     | Índice de merma del mes calculado por costo base histórico.
     | Evita mezclar kg, toneladas, piezas, etc. en un mismo porcentaje.
     |--------------------------------------------------------------------------
@@ -490,6 +675,33 @@ try {
             'inventario_critico' => $inventarioCritico,
             'top_productos' => $topProductos,
             'top_clientes' => $topClientes,
+            'grafica_semanal' => [
+                'moneda_base' => $monedaBase,
+                'periodo' => $inicioSemana->format('d/m/Y') . ' - ' . $hoy->format('d/m/Y'),
+                'serie' => $serieSemanal,
+                'totales' => [
+                    'ventas' => round($totalVentasSemana, 2),
+                    'compras' => round($totalComprasSemana, 2),
+                    'ventas_anterior' => round($totalVentasSemanaAnterior, 2),
+                    'compras_anterior' => round($totalComprasSemanaAnterior, 2),
+                    'variacion_ventas_pct' => $calcularVariacion($totalVentasSemana, $totalVentasSemanaAnterior),
+                    'variacion_compras_pct' => $calcularVariacion($totalComprasSemana, $totalComprasSemanaAnterior),
+                ],
+            ],
+            'grafica_mensual' => [
+                'moneda_base' => $monedaBase,
+                'periodo' => $mesesCortos[(int) $inicioMeses->format('n')] . ' ' . $inicioMeses->format('Y')
+                    . ' - ' . $mesesCortos[(int) $hoy->format('n')] . ' ' . $hoy->format('Y'),
+                'serie' => $serieMensual,
+                'totales' => [
+                    'ventas_actual' => round($ventasMesActual, 2),
+                    'compras_actual' => round($comprasMesActual, 2),
+                    'ventas_anterior' => round($ventasMesAnterior, 2),
+                    'compras_anterior' => round($comprasMesAnterior, 2),
+                    'variacion_ventas_pct' => $calcularVariacion($ventasMesActual, $ventasMesAnterior),
+                    'variacion_compras_pct' => $calcularVariacion($comprasMesActual, $comprasMesAnterior),
+                ],
+            ],
             'merma_mes' => [
                 'costo_merma_base' => $costoMermaBase,
                 'costo_salidas_base' => $costoSalidasBase,

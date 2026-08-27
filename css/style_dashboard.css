@@ -854,3 +854,293 @@ tbody tr:hover {
         align-items: flex-start;
     }
 }
+
+/* Dashboard v3: tendencias semanales/mensuales y actualización automática */
+.dashboard-trends-heading {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 4px 0 12px;
+}
+
+.dashboard-trends-heading h2 {
+    margin: 0 0 4px;
+    color: #26352c;
+    font-size: 20px;
+}
+
+.dashboard-trends-heading > div > p:last-child {
+    margin: 0;
+    max-width: 780px;
+    color: #68766d;
+    font-size: 12.5px;
+    line-height: 1.45;
+}
+
+.dashboard-auto-badge {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 1px solid #cfe2d5;
+    border-radius: 999px;
+    background: #f3faf5;
+    color: #166534;
+    font-size: 11px;
+    font-weight: 800;
+    white-space: nowrap;
+}
+
+.dashboard-auto-badge::before {
+    content: '';
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #22a35a;
+    box-shadow: 0 0 0 3px rgba(34, 163, 90, .12);
+}
+
+.dashboard-auto-badge.is-warning {
+    border-color: #ead8a2;
+    background: #fffaf0;
+    color: #8a4b00;
+}
+
+.dashboard-auto-badge.is-warning::before {
+    background: #d79b00;
+    box-shadow: 0 0 0 3px rgba(215, 155, 0, .12);
+}
+
+.dashboard-chart-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin-bottom: 18px;
+}
+
+.dashboard-chart-card {
+    min-width: 0;
+    padding: 16px;
+    border: 1px solid #dce6e0;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 3px 14px rgba(35, 55, 43, .035);
+}
+
+.dashboard-chart-card__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 13px;
+}
+
+.dashboard-chart-card__kicker {
+    display: block;
+    margin-bottom: 3px;
+    color: #26734a;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: .08em;
+}
+
+.dashboard-chart-card__head h3 {
+    margin: 0 0 3px;
+    color: #26352c;
+    font-size: 17px;
+}
+
+.dashboard-chart-card__head p {
+    margin: 0;
+    color: #748078;
+    font-size: 11px;
+}
+
+.dashboard-chart-card__currency {
+    flex: 0 0 auto;
+    padding: 5px 8px;
+    border-radius: 8px;
+    background: #f1f5f2;
+    color: #536159;
+    font-size: 10px;
+    font-weight: 900;
+}
+
+.dashboard-chart-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin-bottom: 11px;
+}
+
+.dashboard-chart-metrics > div {
+    min-width: 0;
+    padding: 10px 11px;
+    border: 1px solid #e5ece8;
+    border-radius: 10px;
+    background: #fafcfb;
+}
+
+.dashboard-chart-metrics span,
+.dashboard-chart-metrics strong,
+.dashboard-chart-metrics small {
+    display: block;
+}
+
+.dashboard-chart-metrics span {
+    margin-bottom: 4px;
+    color: #728078;
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+
+.dashboard-chart-metrics strong {
+    overflow: hidden;
+    color: #29382f;
+    font-size: 18px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-chart-metrics small {
+    margin-top: 4px;
+    color: #748078;
+    font-size: 10px;
+    line-height: 1.35;
+}
+
+.dashboard-chart-metrics small.is-up { color: #28754a; }
+.dashboard-chart-metrics small.is-down { color: #7a5b36; }
+.dashboard-chart-metrics small.is-neutral { color: #748078; }
+
+.dashboard-chart-legend {
+    display: flex;
+    justify-content: flex-end;
+    gap: 13px;
+    margin: 0 2px 4px;
+    color: #65736b;
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.dashboard-chart-legend span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.dashboard-chart-legend i {
+    width: 18px;
+    height: 3px;
+    border-radius: 999px;
+}
+
+.dashboard-chart-legend i.is-sales { background: #1f7a4d; }
+.dashboard-chart-legend i.is-purchases { background: #4f79b8; }
+
+.dashboard-chart-shell {
+    width: 100%;
+    min-height: 230px;
+    overflow: hidden;
+}
+
+.dashboard-chart-svg {
+    display: block;
+    width: 100%;
+    height: auto;
+    min-height: 220px;
+    overflow: visible;
+}
+
+.dashboard-chart-gridline {
+    stroke: #e7ede9;
+    stroke-width: 1;
+    vector-effect: non-scaling-stroke;
+}
+
+.dashboard-chart-axis-label {
+    fill: #7a867f;
+    font-family: Arial, Helvetica, sans-serif;
+    font-size: 10px;
+}
+
+.dashboard-chart-axis-label--y {
+    text-anchor: end;
+}
+
+.dashboard-chart-axis-label--x {
+    text-anchor: middle;
+}
+
+.dashboard-chart-line {
+    fill: none;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+    stroke-linecap: round;
+    vector-effect: non-scaling-stroke;
+}
+
+.dashboard-chart-line--sales { stroke: #1f7a4d; }
+.dashboard-chart-line--purchases { stroke: #4f79b8; }
+
+.dashboard-chart-point {
+    stroke: #fff;
+    stroke-width: 2;
+    vector-effect: non-scaling-stroke;
+}
+
+.dashboard-chart-point--sales { fill: #1f7a4d; }
+.dashboard-chart-point--purchases { fill: #4f79b8; }
+
+.dashboard-chart-empty {
+    min-height: 220px;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    border: 1px dashed #dce5df;
+    border-radius: 10px;
+    background: #fbfdfc;
+    color: #748078;
+    font-size: 12px;
+    text-align: center;
+}
+
+@media (max-width: 1050px) {
+    .dashboard-chart-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-chart-shell {
+        min-height: 250px;
+    }
+}
+
+@media (max-width: 680px) {
+    .dashboard-trends-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .dashboard-chart-card {
+        padding: 13px;
+    }
+
+    .dashboard-chart-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .dashboard-chart-shell {
+        min-height: 210px;
+        overflow-x: auto;
+    }
+
+    .dashboard-chart-svg {
+        min-width: 620px;
+    }
+}
+

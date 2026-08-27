@@ -200,3 +200,41 @@ body.inv-modal-open { overflow: hidden; }
     .inv-stock-modal__footer { flex-direction: column-reverse; }
     .inv-stock-modal__footer button { width: 100%; min-height: 44px; }
 }
+
+/* Kardex: resumen, análisis y exportación */
+.kardex-export-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.kardex-kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.kardex-kpis article { padding: 12px 13px; border: 1px solid #dbe5df; border-radius: 10px; background: #fff; }
+.kardex-kpis span { display: block; color: #69766e; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .035em; }
+.kardex-kpis strong { display: block; margin-top: 4px; color: #173d2b; font-size: 22px; font-variant-numeric: tabular-nums; }
+.kardex-kpis small { display: block; margin-top: 2px; color: #7c8880; font-size: 10px; line-height: 1.35; }
+.kardex-product-summary { display: grid; grid-template-columns: repeat(5, minmax(0,1fr)); gap: 9px; margin: 0 0 12px; padding: 10px; border: 1px solid #cfe2d5; border-radius: 10px; background: #f5faf7; }
+.kardex-product-summary[hidden] { display: none; }
+.kardex-product-summary > div { min-width: 0; padding: 8px 10px; border-right: 1px solid #dde9e1; }
+.kardex-product-summary > div:last-child { border-right: 0; }
+.kardex-product-summary span { display: block; color: #6d7a72; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .035em; }
+.kardex-product-summary strong { display: block; margin-top: 3px; color: #173d2b; font-size: 16px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.kardex-analysis-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 12px; }
+.kardex-analysis-card { padding: 0; overflow: hidden; }
+.kardex-analysis-card > header { padding: 12px 14px 10px; border-bottom: 1px solid #e5ebe7; background: #fafcfb; }
+.kardex-analysis-card h3 { margin: 0 0 3px; color: #183d2c; font-size: 14px; }
+.kardex-analysis-card p { margin: 0; color: #6f7c74; font-size: 11px; line-height: 1.4; }
+.table-wrap--analysis { max-height: 280px; border: 0; border-radius: 0; }
+.module-table--analysis { min-width: 520px; }
+.module-table--analysis th, .module-table--analysis td { padding: 8px 10px; font-size: 11px; }
+.module-table--products-summary { min-width: 640px; }
+
+@media (max-width: 1400px) {
+    .kardex-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 1000px) {
+    .kardex-analysis-grid { grid-template-columns: 1fr; }
+    .kardex-product-summary { grid-template-columns: repeat(3, minmax(0,1fr)); }
+    .kardex-product-summary > div { border-right: 0; }
+}
+@media (max-width: 700px) {
+    .kardex-export-actions { width: 100%; }
+    .kardex-export-actions button { flex: 1; }
+    .kardex-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .kardex-product-summary { grid-template-columns: 1fr; }
+}

@@ -158,6 +158,140 @@ $versionModulo = is_file($cssModulo)
                 hidden
             ></div>
 
+
+
+            <section class="kpi-grid">
+
+                <article class="kpi-card">
+                    <span>Ventas de hoy</span>
+                    <strong id="kpiVentasHoy">0</strong>
+                    <small id="detalleVentasHoy">
+                        Sin ventas confirmadas
+                    </small>
+                </article>
+
+                <article class="kpi-card">
+                    <span>Compras por recibir</span>
+                    <strong id="kpiCompras">0</strong>
+                    <small>Pendientes o parciales</small>
+                </article>
+
+                <article class="kpi-card">
+                    <span>Inventario crítico</span>
+                    <strong id="kpiInventario">0</strong>
+                    <small>En mínimo o por debajo</small>
+                </article>
+
+                <article class="kpi-card">
+                    <span>Cobros vencidos</span>
+                    <strong id="kpiCobros">0</strong>
+                    <small>Cuentas de clientes</small>
+                </article>
+
+                <article class="kpi-card">
+                    <span>Pagos vencidos</span>
+                    <strong id="kpiPagos">0</strong>
+                    <small>Cuentas a proveedores</small>
+                </article>
+
+                <article class="kpi-card kpi-card--alerts">
+                    <span>Alertas sin leer</span>
+                    <strong id="kpiNotificaciones">0</strong>
+                    <small id="detalleAlertasKpi">Sin pendientes críticos</small>
+                </article>
+
+                <article class="kpi-card">
+                    <span>Índice de merma</span>
+                    <strong id="kpiMerma">0.00%</strong>
+                    <small id="detalleMerma">Costo de merma del mes</small>
+                </article>
+
+            </section>
+
+            <section class="dashboard-trends-heading">
+                <div>
+                    <p class="dashboard-eyebrow">TENDENCIAS CLAVE</p>
+                    <h2>Comportamiento comercial</h2>
+                    <p>
+                        Ventas confirmadas y compras operativas convertidas a la moneda base.
+                        La comparación ayuda a detectar cambios sin mezclar unidades de inventario.
+                    </p>
+                </div>
+
+                <span class="dashboard-auto-badge" id="estadoAutoActualizacion">
+                    Auto · 30 s
+                </span>
+            </section>
+
+            <section class="dashboard-chart-grid" aria-label="Tendencias comerciales">
+                <article class="dashboard-chart-card">
+                    <header class="dashboard-chart-card__head">
+                        <div>
+                            <span class="dashboard-chart-card__kicker">SEMANA</span>
+                            <h3>Últimos 7 días</h3>
+                            <p id="rangoGraficaSemanal">Cargando periodo...</p>
+                        </div>
+                        <span class="dashboard-chart-card__currency" id="monedaGraficaSemanal">MXN</span>
+                    </header>
+
+                    <div class="dashboard-chart-metrics">
+                        <div>
+                            <span>Ventas</span>
+                            <strong id="totalVentasSemana">$0.00</strong>
+                            <small id="variacionVentasSemana">Sin comparación</small>
+                        </div>
+                        <div>
+                            <span>Compras</span>
+                            <strong id="totalComprasSemana">$0.00</strong>
+                            <small id="variacionComprasSemana">Sin comparación</small>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-chart-legend" aria-hidden="true">
+                        <span><i class="is-sales"></i>Ventas</span>
+                        <span><i class="is-purchases"></i>Compras</span>
+                    </div>
+
+                    <div class="dashboard-chart-shell" id="graficaSemanal">
+                        <div class="dashboard-chart-empty">Cargando gráfica semanal...</div>
+                    </div>
+                </article>
+
+                <article class="dashboard-chart-card">
+                    <header class="dashboard-chart-card__head">
+                        <div>
+                            <span class="dashboard-chart-card__kicker">MENSUAL</span>
+                            <h3>Últimos 6 meses</h3>
+                            <p id="rangoGraficaMensual">Cargando periodo...</p>
+                        </div>
+                        <span class="dashboard-chart-card__currency" id="monedaGraficaMensual">MXN</span>
+                    </header>
+
+                    <div class="dashboard-chart-metrics">
+                        <div>
+                            <span>Ventas del mes</span>
+                            <strong id="totalVentasMes">$0.00</strong>
+                            <small id="variacionVentasMes">Sin comparación</small>
+                        </div>
+                        <div>
+                            <span>Compras del mes</span>
+                            <strong id="totalComprasMes">$0.00</strong>
+                            <small id="variacionComprasMes">Sin comparación</small>
+                        </div>
+                    </div>
+
+                    <div class="dashboard-chart-legend" aria-hidden="true">
+                        <span><i class="is-sales"></i>Ventas</span>
+                        <span><i class="is-purchases"></i>Compras</span>
+                    </div>
+
+                    <div class="dashboard-chart-shell" id="graficaMensual">
+                        <div class="dashboard-chart-empty">Cargando gráfica mensual...</div>
+                    </div>
+                </article>
+            </section>
+
+
             <section class="dashboard-alert-center" id="centroAlertas">
                 <header class="dashboard-alert-center__head">
                     <div>
@@ -211,54 +345,6 @@ $versionModulo = is_file($cssModulo)
                 <div class="dashboard-alert-list" id="listaAlertas">
                     <div class="dashboard-alert-empty">Cargando alertas operativas...</div>
                 </div>
-            </section>
-
-            <section class="kpi-grid">
-
-                <article class="kpi-card">
-                    <span>Ventas de hoy</span>
-                    <strong id="kpiVentasHoy">0</strong>
-                    <small id="detalleVentasHoy">
-                        Sin ventas confirmadas
-                    </small>
-                </article>
-
-                <article class="kpi-card">
-                    <span>Compras por recibir</span>
-                    <strong id="kpiCompras">0</strong>
-                    <small>Pendientes o parciales</small>
-                </article>
-
-                <article class="kpi-card">
-                    <span>Inventario crítico</span>
-                    <strong id="kpiInventario">0</strong>
-                    <small>En mínimo o por debajo</small>
-                </article>
-
-                <article class="kpi-card">
-                    <span>Cobros vencidos</span>
-                    <strong id="kpiCobros">0</strong>
-                    <small>Cuentas de clientes</small>
-                </article>
-
-                <article class="kpi-card">
-                    <span>Pagos vencidos</span>
-                    <strong id="kpiPagos">0</strong>
-                    <small>Cuentas a proveedores</small>
-                </article>
-
-                <article class="kpi-card kpi-card--alerts">
-                    <span>Alertas sin leer</span>
-                    <strong id="kpiNotificaciones">0</strong>
-                    <small id="detalleAlertasKpi">Sin pendientes críticos</small>
-                </article>
-
-                <article class="kpi-card">
-                    <span>Índice de merma</span>
-                    <strong id="kpiMerma">0.00%</strong>
-                    <small id="detalleMerma">Costo de merma del mes</small>
-                </article>
-
             </section>
 
             <section class="dashboard-two-columns">
@@ -478,6 +564,11 @@ $versionModulo = is_file($cssModulo)
     let estadoAlertas = { alertas: [], total: 0, total_sin_leer: 0, prioridades: {}, prioridades_sin_leer: {} };
     let filtroAlertas = 'NO_LEIDAS';
 
+    const AUTO_REFRESH_MS = 30000;
+    let cargaDashboardEnCurso = false;
+    let ultimaCargaExitosaMs = 0;
+    let cargaInicialCompleta = false;
+
     const botonActualizar =
         document.getElementById('btnActualizar');
 
@@ -553,6 +644,168 @@ $versionModulo = is_file($cssModulo)
             + escapeHtml(texto)
             + '</td>'
             + '</tr>';
+    }
+
+
+    function dineroCompacto(valor, moneda) {
+        const n = Number(valor || 0);
+        const codigo = moneda || 'MXN';
+
+        try {
+            return new Intl.NumberFormat(
+                'es-MX',
+                {
+                    style: 'currency',
+                    currency: codigo,
+                    notation: 'compact',
+                    maximumFractionDigits: 1
+                }
+            ).format(Number.isFinite(n) ? n : 0);
+        } catch (error) {
+            return numero(n, 0) + ' ' + codigo;
+        }
+    }
+
+    function textoVariacion(valor, etiqueta) {
+        if (valor === null || typeof valor === 'undefined') {
+            return 'Sin base de comparación';
+        }
+
+        const n = Number(valor);
+        if (!Number.isFinite(n)) {
+            return 'Sin base de comparación';
+        }
+
+        if (Math.abs(n) < 0.05) {
+            return 'Sin cambio vs ' + etiqueta;
+        }
+
+        return (n > 0 ? '↑ ' : '↓ ')
+            + numero(Math.abs(n), 1)
+            + '% vs '
+            + etiqueta;
+    }
+
+    function renderVariacion(id, valor, etiqueta) {
+        const elemento = document.getElementById(id);
+        if (!elemento) return;
+
+        const n = valor === null || typeof valor === 'undefined'
+            ? null
+            : Number(valor);
+
+        elemento.className = '';
+        elemento.textContent = textoVariacion(valor, etiqueta);
+
+        if (n === null || !Number.isFinite(n) || Math.abs(n) < 0.05) {
+            elemento.classList.add('is-neutral');
+        } else {
+            elemento.classList.add(n > 0 ? 'is-up' : 'is-down');
+        }
+    }
+
+    function renderGraficaLineas(id, filas, moneda) {
+        const contenedor = document.getElementById(id);
+        if (!contenedor) return;
+
+        const datos = Array.isArray(filas) ? filas : [];
+        if (!datos.length) {
+            contenedor.innerHTML = '<div class="dashboard-chart-empty">Sin información para este periodo.</div>';
+            return;
+        }
+
+        const width = 760;
+        const height = 270;
+        const pad = { top: 18, right: 20, bottom: 46, left: 72 };
+        const plotW = width - pad.left - pad.right;
+        const plotH = height - pad.top - pad.bottom;
+
+        const valores = [];
+        datos.forEach(function (item) {
+            valores.push(Number(item.ventas || 0));
+            valores.push(Number(item.compras || 0));
+        });
+
+        let maximo = Math.max.apply(null, valores.concat([0]));
+        if (!Number.isFinite(maximo) || maximo <= 0) {
+            maximo = 1;
+        }
+        maximo *= 1.12;
+
+        const x = function (indice) {
+            if (datos.length <= 1) return pad.left + (plotW / 2);
+            return pad.left + (indice * plotW / (datos.length - 1));
+        };
+
+        const y = function (valor) {
+            const n = Math.max(0, Number(valor || 0));
+            return pad.top + plotH - (n / maximo * plotH);
+        };
+
+        const puntos = function (campo) {
+            return datos.map(function (item, indice) {
+                return x(indice).toFixed(2) + ',' + y(item[campo]).toFixed(2);
+            }).join(' ');
+        };
+
+        let svg = '';
+        svg += '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Ventas y compras del periodo">';
+
+        for (let i = 0; i <= 4; i += 1) {
+            const valor = maximo * (4 - i) / 4;
+            const gy = pad.top + (plotH * i / 4);
+            svg += '<line class="dashboard-chart-gridline" x1="' + pad.left + '" y1="' + gy.toFixed(2) + '" x2="' + (width - pad.right) + '" y2="' + gy.toFixed(2) + '"></line>';
+            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--y" x="' + (pad.left - 10) + '" y="' + (gy + 4).toFixed(2) + '">' + escapeHtml(dineroCompacto(valor, moneda)) + '</text>';
+        }
+
+        datos.forEach(function (item, indice) {
+            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--x" x="' + x(indice).toFixed(2) + '" y="' + (height - 15) + '">' + escapeHtml(item.etiqueta || '') + '</text>';
+        });
+
+        svg += '<polyline class="dashboard-chart-line dashboard-chart-line--sales" points="' + puntos('ventas') + '"></polyline>';
+        svg += '<polyline class="dashboard-chart-line dashboard-chart-line--purchases" points="' + puntos('compras') + '"></polyline>';
+
+        datos.forEach(function (item, indice) {
+            const px = x(indice).toFixed(2);
+            const ventasY = y(item.ventas).toFixed(2);
+            const comprasY = y(item.compras).toFixed(2);
+            const etiqueta = escapeHtml(item.etiqueta || '');
+            const ventaTexto = escapeHtml(dinero(item.ventas || 0, moneda));
+            const compraTexto = escapeHtml(dinero(item.compras || 0, moneda));
+
+            svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2"><title>' + etiqueta + ' · Ventas: ' + ventaTexto + '</title></circle>';
+            svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2"><title>' + etiqueta + ' · Compras: ' + compraTexto + '</title></circle>';
+        });
+
+        svg += '</svg>';
+        contenedor.innerHTML = svg;
+    }
+
+    function renderGraficas(datos) {
+        const semanal = datos.grafica_semanal || {};
+        const mensual = datos.grafica_mensual || {};
+        const monedaSemana = semanal.moneda_base || 'MXN';
+        const monedaMes = mensual.moneda_base || monedaSemana;
+        const totalesSemana = semanal.totales || {};
+        const totalesMes = mensual.totales || {};
+
+        document.getElementById('monedaGraficaSemanal').textContent = monedaSemana;
+        document.getElementById('monedaGraficaMensual').textContent = monedaMes;
+        document.getElementById('rangoGraficaSemanal').textContent = semanal.periodo || 'Últimos 7 días';
+        document.getElementById('rangoGraficaMensual').textContent = mensual.periodo || 'Últimos 6 meses';
+
+        document.getElementById('totalVentasSemana').textContent = dinero(totalesSemana.ventas || 0, monedaSemana);
+        document.getElementById('totalComprasSemana').textContent = dinero(totalesSemana.compras || 0, monedaSemana);
+        document.getElementById('totalVentasMes').textContent = dinero(totalesMes.ventas_actual || 0, monedaMes);
+        document.getElementById('totalComprasMes').textContent = dinero(totalesMes.compras_actual || 0, monedaMes);
+
+        renderVariacion('variacionVentasSemana', totalesSemana.variacion_ventas_pct, '7 días anteriores');
+        renderVariacion('variacionComprasSemana', totalesSemana.variacion_compras_pct, '7 días anteriores');
+        renderVariacion('variacionVentasMes', totalesMes.variacion_ventas_pct, 'mes anterior');
+        renderVariacion('variacionComprasMes', totalesMes.variacion_compras_pct, 'mes anterior');
+
+        renderGraficaLineas('graficaSemanal', semanal.serie || [], monedaSemana);
+        renderGraficaLineas('graficaMensual', mensual.serie || [], monedaMes);
     }
 
     function renderKpis(datos) {
@@ -660,6 +913,12 @@ $versionModulo = is_file($cssModulo)
     function renderListaAlertas() {
         const lista = document.getElementById('listaAlertas');
         const items = alertasFiltradas();
+        const detallesAbiertos = new Set(
+            Array.from(lista.querySelectorAll('[data-alert-key] details[open]')).map(function (details) {
+                const fila = details.closest('[data-alert-key]');
+                return fila ? String(fila.dataset.alertKey || '') : '';
+            }).filter(Boolean)
+        );
 
         document.querySelectorAll('[data-alert-filter]').forEach(function (button) {
             button.classList.toggle('is-active', button.dataset.alertFilter === filtroAlertas);
@@ -687,8 +946,9 @@ $versionModulo = is_file($cssModulo)
         lista.innerHTML = items.map(function (item) {
             const detalles = Array.isArray(item.detalles) ? item.detalles : [];
             const leida = Boolean(item.leida);
+            const claveAlerta = String(item.clave || '');
             const detalleHtml = detalles.length
-                ? '<details class="dashboard-alert-details"><summary>Ver ' + numero(detalles.length) + (detalles.length === 1 ? ' detalle' : ' detalles') + '</summary>'
+                ? '<details class="dashboard-alert-details"' + (detallesAbiertos.has(claveAlerta) ? ' open' : '') + '><summary>Ver ' + numero(detalles.length) + (detalles.length === 1 ? ' detalle' : ' detalles') + '</summary>'
                     + '<div class="dashboard-alert-details__body">' + detalles.map(function (detalle) {
                         return '<div class="dashboard-alert-detail">'
                             + '<div><strong>' + escapeHtml(detalle.principal || '') + '</strong>'
@@ -1053,118 +1313,133 @@ $versionModulo = is_file($cssModulo)
         ).join('');
     }
 
-    async function cargarDashboard() {
-        mensaje.hidden = true;
+    async function cargarDashboard(opciones) {
+        const config = opciones || {};
+        const silencioso = config.silencioso === true;
 
-        botonActualizar.disabled = true;
+        if (cargaDashboardEnCurso) {
+            return;
+        }
 
-        const textoOriginal =
-            botonActualizar.textContent;
+        cargaDashboardEnCurso = true;
 
-        botonActualizar.textContent =
-            'Actualizando...';
+        if (!silencioso) {
+            mensaje.hidden = true;
+            botonActualizar.disabled = true;
+            botonActualizar.textContent = 'Actualizando...';
+        }
 
         try {
-            const respuesta =
-                await fetch(
-                    endpoint,
-                    {
-                        method: 'GET',
-                        credentials: 'same-origin',
-                        headers: {
-                            'X-Requested-With':
-                                'XMLHttpRequest'
-                        }
+            const separador = endpoint.indexOf('?') >= 0 ? '&' : '?';
+            const respuesta = await fetch(
+                endpoint + separador + '_=' + Date.now(),
+                {
+                    method: 'GET',
+                    credentials: 'same-origin',
+                    cache: 'no-store',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
                     }
-                );
+                }
+            );
 
-            const texto =
-                await respuesta.text();
-
+            const texto = await respuesta.text();
             let datos;
 
             try {
                 datos = JSON.parse(texto);
             } catch (error) {
-                throw new Error(
-                    'El servidor devolvió una respuesta no válida.'
-                );
+                throw new Error('El servidor devolvió una respuesta no válida.');
             }
 
-            if (
-                !respuesta.ok
-                || datos.success !== true
-            ) {
-                if (
-                    datos.sesion_expirada
-                    && datos.redirect
-                ) {
-                    window.location.href =
-                        datos.redirect;
-
+            if (!respuesta.ok || datos.success !== true) {
+                if (datos.sesion_expirada && datos.redirect) {
+                    window.location.href = datos.redirect;
                     return;
                 }
 
-                throw new Error(
-                    datos.mensaje
-                    || 'No fue posible cargar el dashboard.'
-                );
+                throw new Error(datos.mensaje || 'No fue posible cargar el dashboard.');
             }
 
             renderKpis(datos);
+            renderGraficas(datos);
             renderAlertas(datos.alertas_operativas || {});
 
-            renderCuentas(
-                'tablaCobrar',
-                datos.resumen_cobrar
-            );
+            renderCuentas('tablaCobrar', datos.resumen_cobrar);
+            renderCuentas('tablaPagar', datos.resumen_pagar);
+            renderInventario(datos.inventario_critico);
+            renderTopProductos(datos.top_productos);
+            renderTopClientes(datos.top_clientes || []);
+            renderMovimientos(datos.movimientos_recientes);
 
-            renderCuentas(
-                'tablaPagar',
-                datos.resumen_pagar
-            );
+            ultimaCargaExitosaMs = Date.now();
+            cargaInicialCompleta = true;
+            ultimaActualizacion.textContent = 'Actualizado: '
+                + (datos.fecha_servidor || '')
+                + ' · automático cada 30 s';
 
-            renderInventario(
-                datos.inventario_critico
-            );
+            const estadoAuto = document.getElementById('estadoAutoActualizacion');
+            if (estadoAuto) {
+                estadoAuto.textContent = 'Auto · 30 s';
+                estadoAuto.classList.remove('is-warning');
+            }
 
-            renderTopProductos(
-                datos.top_productos
-            );
+            if (silencioso) {
+                mensaje.hidden = true;
+            }
 
-            renderTopClientes(
-                datos.top_clientes || []
-            );
-
-            renderMovimientos(
-                datos.movimientos_recientes
-            );
-
-            ultimaActualizacion.textContent =
-                'Actualizado: '
-                + (datos.fecha_servidor || '');
+            window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
 
         } catch (error) {
-            mensaje.textContent =
-                error.message
-                || 'Ocurrió un error inesperado.';
+            const textoError = error.message || 'Ocurrió un error inesperado.';
 
-            mensaje.hidden = false;
+            if (!silencioso || !cargaInicialCompleta) {
+                mensaje.textContent = textoError;
+                mensaje.hidden = false;
+            }
+
+            const estadoAuto = document.getElementById('estadoAutoActualizacion');
+            if (estadoAuto) {
+                estadoAuto.textContent = 'Auto · reintentando';
+                estadoAuto.classList.add('is-warning');
+            }
+
+            if (silencioso && cargaInicialCompleta) {
+                ultimaActualizacion.textContent = 'Última actualización conservada · se reintentará automáticamente';
+            }
 
         } finally {
-            botonActualizar.disabled = false;
+            cargaDashboardEnCurso = false;
 
-            botonActualizar.textContent =
-                textoOriginal;
+            if (!silencioso) {
+                botonActualizar.disabled = false;
+                botonActualizar.textContent = 'Actualizar';
+            }
         }
     }
 
-    botonActualizar.addEventListener(
-        'click',
-        cargarDashboard
-    );
+    botonActualizar.addEventListener('click', function () {
+        cargarDashboard({ silencioso: false });
+    });
 
-    cargarDashboard();
+    window.setInterval(function () {
+        if (document.hidden) {
+            return;
+        }
+        cargarDashboard({ silencioso: true });
+    }, AUTO_REFRESH_MS);
+
+    document.addEventListener('visibilitychange', function () {
+        if (document.hidden) {
+            return;
+        }
+
+        if (!ultimaCargaExitosaMs || (Date.now() - ultimaCargaExitosaMs) >= AUTO_REFRESH_MS) {
+            cargarDashboard({ silencioso: true });
+        }
+    });
+
+    cargarDashboard({ silencioso: false });
 })();
 </script>
 

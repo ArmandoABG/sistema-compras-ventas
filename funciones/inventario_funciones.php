@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/xlsx_simple.php';
 
 si_requerir_permiso('inventario.ver', true);
 
@@ -45,6 +46,20 @@ try {
                     si_responder_json(false, 'No tienes permiso para consultar el Kardex.', [], 403);
                 }
                 inv_listar_kardex($conexion);
+                break;
+
+            case 'EXPORTAR_KARDEX_CSV':
+                if (!si_tiene_permiso('inventario.kardex')) {
+                    si_responder_json(false, 'No tienes permiso para exportar el Kardex.', [], 403);
+                }
+                inv_exportar_kardex_csv($conexion);
+                break;
+
+            case 'EXPORTAR_KARDEX_XLSX':
+                if (!si_tiene_permiso('inventario.kardex')) {
+                    si_responder_json(false, 'No tienes permiso para exportar el Kardex.', [], 403);
+                }
+                inv_exportar_kardex_xlsx($conexion);
                 break;
 
             case 'BUSCAR_PRODUCTOS_OPERACION':
@@ -560,83 +575,8 @@ function inv_listar_kardex(PDO $conexion): void
 {
     $pagina = inv_entero_rango($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
     $porPagina = inv_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
-    $buscar = inv_texto($_GET['buscar'] ?? '', 120);
-    $productoId = inv_entero_rango($_GET['producto_id'] ?? 0, 0, PHP_INT_MAX, 0);
-    $almacenId = inv_entero_rango($_GET['almacen_id'] ?? 0, 0, PHP_INT_MAX, 0);
-    $tipoMovimientoId = inv_entero_rango($_GET['tipo_movimiento_id'] ?? 0, 0, PHP_INT_MAX, 0);
-    $estado = inv_estado_movimiento($_GET['estado'] ?? 'TODOS');
-    $fechaDesde = inv_fecha($_GET['fecha_desde'] ?? '');
-    $fechaHasta = inv_fecha($_GET['fecha_hasta'] ?? '');
-
-    if ($fechaDesde !== '' && $fechaHasta !== '' && $fechaDesde > $fechaHasta) {
-        si_responder_json(false, 'La fecha inicial no puede ser posterior a la fecha final.', [], 422);
-    }
-
-    $where = "WHERE 1 = 1";
-    $params = [];
-
-    if ($buscar !== '') {
-        $where .= " AND (
-            p.sku LIKE :buscar_sku
-            OR p.nombre LIKE :buscar_producto
-            OR mi.folio LIKE :buscar_folio
-            OR COALESCE(mi.origen_tipo, '') LIKE :buscar_origen
-        )";
-        $patron = '%' . $buscar . '%';
-        $params[':buscar_sku'] = $patron;
-        $params[':buscar_producto'] = $patron;
-        $params[':buscar_folio'] = $patron;
-        $params[':buscar_origen'] = $patron;
-    }
-
-    if ($productoId > 0) {
-        $where .= ' AND mid.producto_id = :producto_id';
-        $params[':producto_id'] = $productoId;
-    }
-
-    if ($almacenId > 0) {
-        $where .= ' AND mid.almacen_id = :almacen_id';
-        $params[':almacen_id'] = $almacenId;
-    }
-
-    if ($tipoMovimientoId > 0) {
-        $where .= ' AND mi.tipo_movimiento_id = :tipo_movimiento_id';
-        $params[':tipo_movimiento_id'] = $tipoMovimientoId;
-    }
-
-    if ($estado !== 'TODOS') {
-        $where .= ' AND mi.estado = :estado';
-        $params[':estado'] = $estado;
-    }
-
-    if ($fechaDesde !== '') {
-        $where .= ' AND mi.fecha_movimiento >= :fecha_desde';
-        $params[':fecha_desde'] = $fechaDesde . ' 00:00:00';
-    }
-
-    if ($fechaHasta !== '') {
-        $where .= ' AND mi.fecha_movimiento <= :fecha_hasta';
-        $params[':fecha_hasta'] = $fechaHasta . ' 23:59:59';
-    }
-
-    $from = "FROM movimientos_inventario_detalle mid
-             INNER JOIN movimientos_inventario mi
-                ON mi.id = mid.movimiento_id
-             INNER JOIN tipos_movimiento_inventario tmi
-                ON tmi.id = mi.tipo_movimiento_id
-             INNER JOIN almacenes a
-                ON a.id = mid.almacen_id
-             INNER JOIN productos p
-                ON p.id = mid.producto_id
-             INNER JOIN unidades_medida um
-                ON um.id = p.unidad_base_id
-             LEFT JOIN usuarios u
-                ON u.id = COALESCE(mi.aplicado_by, mi.created_by)
-             LEFT JOIN recepciones_compra rc
-                ON rc.id = mi.origen_id
-               AND mi.origen_tipo IN ('RECEPCION_COMPRA', 'CANCELACION_RECEPCION_COMPRA')
-             LEFT JOIN compras c
-                ON c.id = rc.compra_id";
+    $filtros = inv_kardex_filtros_peticion();
+    [$from, $where, $params] = inv_kardex_contexto_sql($filtros);
 
     $stmtTotal = $conexion->prepare("SELECT COUNT(*) {$from} {$where}");
     inv_bind_params($stmtTotal, $params);
@@ -649,7 +589,121 @@ function inv_listar_kardex(PDO $conexion): void
     }
     $offset = ($pagina - 1) * $porPagina;
 
-    $sql = "SELECT
+    $sql = inv_kardex_select_sql($from, $where)
+        . " ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon DESC, mid.id DESC
+            LIMIT :limite OFFSET :offset";
+
+    $stmt = $conexion->prepare($sql);
+    inv_bind_params($stmt, $params);
+    $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    inv_kardex_normalizar_filas($filas);
+
+    $resumen = inv_kardex_resumen_filtrado($conexion, $from, $where, $params, $filtros);
+
+    si_responder_json(true, 'Kardex cargado.', [
+        'registros' => $filas,
+        'resumen' => $resumen,
+        'paginacion' => [
+            'pagina' => $pagina,
+            'por_pagina' => $porPagina,
+            'total' => $total,
+            'total_paginas' => $totalPaginas,
+        ],
+    ]);
+}
+
+function inv_kardex_filtros_peticion(): array
+{
+    $filtros = [
+        'buscar' => inv_texto($_GET['buscar'] ?? '', 120),
+        'producto_id' => inv_entero_rango($_GET['producto_id'] ?? 0, 0, PHP_INT_MAX, 0),
+        'almacen_id' => inv_entero_rango($_GET['almacen_id'] ?? 0, 0, PHP_INT_MAX, 0),
+        'tipo_movimiento_id' => inv_entero_rango($_GET['tipo_movimiento_id'] ?? 0, 0, PHP_INT_MAX, 0),
+        'estado' => inv_estado_movimiento($_GET['estado'] ?? 'TODOS'),
+        'fecha_desde' => inv_fecha($_GET['fecha_desde'] ?? ''),
+        'fecha_hasta' => inv_fecha($_GET['fecha_hasta'] ?? ''),
+    ];
+
+    if ($filtros['fecha_desde'] !== '' && $filtros['fecha_hasta'] !== '' && $filtros['fecha_desde'] > $filtros['fecha_hasta']) {
+        si_responder_json(false, 'La fecha inicial no puede ser posterior a la fecha final.', [], 422);
+    }
+
+    return $filtros;
+}
+
+function inv_kardex_contexto_sql(array $filtros): array
+{
+    $where = 'WHERE 1 = 1';
+    $params = [];
+
+    if ($filtros['buscar'] !== '') {
+        $where .= " AND (
+            p.sku LIKE :buscar_sku
+            OR p.nombre LIKE :buscar_producto
+            OR mi.folio LIKE :buscar_folio
+            OR COALESCE(mi.origen_tipo, '') LIKE :buscar_origen
+            OR COALESCE(mi.motivo, '') LIKE :buscar_motivo
+        )";
+        $patron = '%' . $filtros['buscar'] . '%';
+        $params[':buscar_sku'] = $patron;
+        $params[':buscar_producto'] = $patron;
+        $params[':buscar_folio'] = $patron;
+        $params[':buscar_origen'] = $patron;
+        $params[':buscar_motivo'] = $patron;
+    }
+
+    if ($filtros['producto_id'] > 0) {
+        $where .= ' AND mid.producto_id = :producto_id';
+        $params[':producto_id'] = $filtros['producto_id'];
+    }
+    if ($filtros['almacen_id'] > 0) {
+        $where .= ' AND mid.almacen_id = :almacen_id';
+        $params[':almacen_id'] = $filtros['almacen_id'];
+    }
+    if ($filtros['tipo_movimiento_id'] > 0) {
+        $where .= ' AND mi.tipo_movimiento_id = :tipo_movimiento_id';
+        $params[':tipo_movimiento_id'] = $filtros['tipo_movimiento_id'];
+    }
+    if ($filtros['estado'] !== 'TODOS') {
+        $where .= ' AND mi.estado = :estado';
+        $params[':estado'] = $filtros['estado'];
+    }
+    if ($filtros['fecha_desde'] !== '') {
+        $where .= ' AND mi.fecha_movimiento >= :fecha_desde';
+        $params[':fecha_desde'] = $filtros['fecha_desde'] . ' 00:00:00';
+    }
+    if ($filtros['fecha_hasta'] !== '') {
+        $where .= ' AND mi.fecha_movimiento <= :fecha_hasta';
+        $params[':fecha_hasta'] = $filtros['fecha_hasta'] . ' 23:59:59';
+    }
+
+    $from = "FROM movimientos_inventario_detalle mid
+             INNER JOIN movimientos_inventario mi ON mi.id = mid.movimiento_id
+             INNER JOIN tipos_movimiento_inventario tmi ON tmi.id = mi.tipo_movimiento_id
+             INNER JOIN almacenes a ON a.id = mid.almacen_id
+             INNER JOIN productos p ON p.id = mid.producto_id
+             INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+             LEFT JOIN usuarios u ON u.id = COALESCE(mi.aplicado_by, mi.created_by)
+             LEFT JOIN recepciones_compra rc
+                ON rc.id = mi.origen_id
+               AND mi.origen_tipo IN ('RECEPCION_COMPRA', 'CANCELACION_RECEPCION_COMPRA')
+             LEFT JOIN compras c ON c.id = rc.compra_id
+             LEFT JOIN ventas v_origen ON v_origen.id = mi.origen_id AND mi.origen_tipo = 'VENTA'
+             LEFT JOIN producciones prod_origen ON prod_origen.id = mi.origen_id AND mi.origen_tipo = 'PRODUCCION'
+             LEFT JOIN ajustes_inventario aju_origen ON aju_origen.id = mi.origen_id AND mi.origen_tipo = 'AJUSTE_INVENTARIO'
+             LEFT JOIN devoluciones_venta devv_origen ON devv_origen.id = mi.origen_id AND mi.origen_tipo = 'DEVOLUCION_VENTA'
+             LEFT JOIN devoluciones_compra devc_origen ON devc_origen.id = mi.origen_id AND mi.origen_tipo = 'DEVOLUCION_COMPRA'
+             LEFT JOIN movimientos_inventario mov_revertido ON mov_revertido.id = mi.movimiento_revertido_id";
+
+    return [$from, $where, $params];
+}
+
+function inv_kardex_select_sql(string $from, string $where): string
+{
+    return "SELECT
                 mid.id AS detalle_id,
                 mi.id AS movimiento_id,
                 mi.folio,
@@ -659,14 +713,20 @@ function inv_listar_kardex(PDO $conexion): void
                 tmi.nombre AS tipo_movimiento,
                 mi.origen_tipo,
                 mi.origen_id,
+                mi.movimiento_revertido_id,
                 CASE
-                    WHEN mi.origen_tipo IN ('RECEPCION_COMPRA', 'CANCELACION_RECEPCION_COMPRA')
-                         AND rc.id IS NOT NULL
+                    WHEN mi.movimiento_revertido_id IS NOT NULL AND mov_revertido.id IS NOT NULL
+                    THEN CONCAT('Reverso de ', mov_revertido.folio)
+                    WHEN mi.origen_tipo IN ('RECEPCION_COMPRA', 'CANCELACION_RECEPCION_COMPRA') AND rc.id IS NOT NULL
                     THEN CONCAT(rc.folio, IF(c.folio IS NULL, '', CONCAT(' / ', c.folio)))
-                    WHEN mi.origen_tipo IS NOT NULL AND mi.origen_id IS NOT NULL
-                    THEN CONCAT(mi.origen_tipo, ' #', mi.origen_id)
-                    WHEN mi.origen_tipo IS NOT NULL
-                    THEN mi.origen_tipo
+                    WHEN mi.origen_tipo = 'VENTA' AND v_origen.id IS NOT NULL THEN v_origen.folio
+                    WHEN mi.origen_tipo = 'PRODUCCION' AND prod_origen.id IS NOT NULL THEN prod_origen.folio
+                    WHEN mi.origen_tipo = 'AJUSTE_INVENTARIO' AND aju_origen.id IS NOT NULL THEN aju_origen.folio
+                    WHEN mi.origen_tipo = 'DEVOLUCION_VENTA' AND devv_origen.id IS NOT NULL THEN devv_origen.folio
+                    WHEN mi.origen_tipo = 'DEVOLUCION_COMPRA' AND devc_origen.id IS NOT NULL THEN devc_origen.folio
+                    WHEN mi.origen_tipo = 'TRANSFERENCIA' THEN mi.folio
+                    WHEN mi.origen_tipo IS NOT NULL AND mi.origen_id IS NOT NULL THEN CONCAT(mi.origen_tipo, ' #', mi.origen_id)
+                    WHEN mi.origen_tipo IS NOT NULL THEN mi.origen_tipo
                     ELSE 'Movimiento manual / interno'
                 END AS origen_referencia,
                 p.id AS producto_id,
@@ -674,6 +734,7 @@ function inv_listar_kardex(PDO $conexion): void
                 p.nombre AS producto,
                 um.nombre AS unidad_base,
                 um.simbolo AS unidad_simbolo,
+                um.codigo AS unidad_codigo,
                 a.id AS almacen_id,
                 a.codigo AS almacen_codigo,
                 a.nombre AS almacen,
@@ -683,56 +744,414 @@ function inv_listar_kardex(PDO $conexion): void
                 mid.existencia_antes,
                 mid.existencia_despues,
                 mid.costo_unitario_base,
-                COALESCE(
-                    NULLIF(TRIM(CONCAT_WS(' ', u.nombres, u.apellido_paterno, u.apellido_materno)), ''),
-                    u.usuario,
-                    'Sistema'
-                ) AS usuario_aplico,
+                COALESCE(NULLIF(TRIM(CONCAT_WS(' ', u.nombres, u.apellido_paterno, u.apellido_materno)), ''), u.usuario, 'Sistema') AS usuario_aplico,
                 mi.motivo,
                 COALESCE(mid.observaciones, mi.observaciones) AS observaciones
-            {$from}
-            {$where}
-            ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon DESC, mid.id DESC
-            LIMIT :limite
-            OFFSET :offset";
+            {$from} {$where}";
+}
 
-    $stmt = $conexion->prepare($sql);
-    inv_bind_params($stmt, $params);
-    $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
-    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-    $stmt->execute();
-    $filas = $stmt->fetchAll();
-
+function inv_kardex_normalizar_filas(array &$filas): void
+{
     foreach ($filas as &$fila) {
-        $fila['detalle_id'] = (int) $fila['detalle_id'];
-        $fila['movimiento_id'] = (int) $fila['movimiento_id'];
-        $fila['origen_id'] = $fila['origen_id'] !== null ? (int) $fila['origen_id'] : null;
-        $fila['producto_id'] = (int) $fila['producto_id'];
-        $fila['almacen_id'] = (int) $fila['almacen_id'];
-        $fila['cantidad_delta'] = (float) $fila['cantidad_delta'];
-        $fila['cantidad_entrada'] = (float) $fila['cantidad_entrada'];
-        $fila['cantidad_salida'] = (float) $fila['cantidad_salida'];
-        $fila['existencia_antes'] = (float) $fila['existencia_antes'];
-        $fila['existencia_despues'] = (float) $fila['existencia_despues'];
-        $fila['costo_unitario_base'] = $fila['costo_unitario_base'] !== null
-            ? (float) $fila['costo_unitario_base']
-            : null;
+        foreach (['detalle_id', 'movimiento_id', 'producto_id', 'almacen_id'] as $campo) {
+            $fila[$campo] = (int) $fila[$campo];
+        }
+        foreach (['origen_id', 'movimiento_revertido_id'] as $campo) {
+            $fila[$campo] = $fila[$campo] !== null ? (int) $fila[$campo] : null;
+        }
+        foreach (['cantidad_delta', 'cantidad_entrada', 'cantidad_salida', 'existencia_antes', 'existencia_despues'] as $campo) {
+            $fila[$campo] = (float) $fila[$campo];
+        }
+        $fila['costo_unitario_base'] = $fila['costo_unitario_base'] !== null ? (float) $fila['costo_unitario_base'] : null;
+    }
+    unset($fila);
+}
+
+function inv_kardex_resumen_filtrado(PDO $conexion, string $from, string $where, array $params, array $filtros): array
+{
+    $sqlGeneral = "SELECT
+            COUNT(DISTINCT mi.id) AS movimientos,
+            COUNT(*) AS renglones,
+            COUNT(DISTINCT mid.producto_id) AS productos,
+            COUNT(DISTINCT mid.almacen_id) AS almacenes,
+            SUM(CASE WHEN mid.cantidad_delta > 0 THEN 1 ELSE 0 END) AS renglones_entrada,
+            SUM(CASE WHEN mid.cantidad_delta < 0 THEN 1 ELSE 0 END) AS renglones_salida,
+            COUNT(DISTINCT CASE WHEN tmi.codigo = 'TRANSFERENCIA' THEN mi.id END) AS transferencias,
+            COUNT(DISTINCT CASE WHEN tmi.codigo = 'REVERSO' OR mi.movimiento_revertido_id IS NOT NULL THEN mi.id END) AS reversos,
+            COUNT(DISTINCT CASE WHEN mi.estado = 'APLICADO' THEN mi.id END) AS aplicados,
+            COUNT(DISTINCT CASE WHEN mi.estado = 'REVERTIDO' THEN mi.id END) AS revertidos
+        {$from} {$where}";
+    $stmt = $conexion->prepare($sqlGeneral);
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    $general = $stmt->fetch(PDO::FETCH_ASSOC) ?: [];
+    foreach (['movimientos','renglones','productos','almacenes','renglones_entrada','renglones_salida','transferencias','reversos','aplicados','revertidos'] as $campo) {
+        $general[$campo] = (int) ($general[$campo] ?? 0);
+    }
+
+    $sqlTipos = "SELECT tmi.codigo, tmi.nombre,
+                        COUNT(DISTINCT mi.id) AS movimientos,
+                        COUNT(*) AS renglones,
+                        COUNT(DISTINCT mid.producto_id) AS productos,
+                        COUNT(DISTINCT mid.almacen_id) AS almacenes
+                 {$from} {$where}
+                 GROUP BY tmi.id, tmi.codigo, tmi.nombre
+                 ORDER BY movimientos DESC, tmi.nombre ASC";
+    $stmt = $conexion->prepare($sqlTipos);
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    $porTipo = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($porTipo as &$fila) {
+        foreach (['movimientos','renglones','productos','almacenes'] as $campo) {
+            $fila[$campo] = (int) $fila[$campo];
+        }
     }
     unset($fila);
 
-    si_responder_json(
-        true,
-        'Kardex cargado.',
+    $sqlAlmacenes = "SELECT a.id AS almacen_id, a.codigo, a.nombre,
+                            COUNT(DISTINCT mi.id) AS movimientos,
+                            COUNT(DISTINCT mid.producto_id) AS productos,
+                            SUM(CASE WHEN mid.cantidad_delta > 0 THEN 1 ELSE 0 END) AS renglones_entrada,
+                            SUM(CASE WHEN mid.cantidad_delta < 0 THEN 1 ELSE 0 END) AS renglones_salida,
+                            COUNT(DISTINCT CASE WHEN tmi.codigo = 'TRANSFERENCIA' THEN mi.id END) AS transferencias
+                     {$from} {$where}
+                     GROUP BY a.id, a.codigo, a.nombre
+                     ORDER BY movimientos DESC, a.nombre ASC";
+    $stmt = $conexion->prepare($sqlAlmacenes);
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    $porAlmacen = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($porAlmacen as &$fila) {
+        foreach (['almacen_id','movimientos','productos','renglones_entrada','renglones_salida','transferencias'] as $campo) {
+            $fila[$campo] = (int) $fila[$campo];
+        }
+    }
+    unset($fila);
+
+    $sqlProductos = "SELECT p.id AS producto_id, p.sku, p.nombre AS producto,
+                            um.codigo AS unidad_codigo, um.simbolo AS unidad_simbolo,
+                            COUNT(DISTINCT mi.id) AS movimientos,
+                            COUNT(DISTINCT mid.almacen_id) AS almacenes,
+                            SUM(CASE WHEN mid.cantidad_delta > 0 THEN mid.cantidad_delta ELSE 0 END) AS entradas,
+                            SUM(CASE WHEN mid.cantidad_delta < 0 THEN ABS(mid.cantidad_delta) ELSE 0 END) AS salidas,
+                            SUM(mid.cantidad_delta) AS neto
+                     {$from} {$where}
+                     GROUP BY p.id, p.sku, p.nombre, um.codigo, um.simbolo
+                     ORDER BY movimientos DESC, p.nombre ASC
+                     LIMIT 20";
+    $stmt = $conexion->prepare($sqlProductos);
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    $porProducto = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($porProducto as &$fila) {
+        $fila['producto_id'] = (int) $fila['producto_id'];
+        $fila['movimientos'] = (int) $fila['movimientos'];
+        $fila['almacenes'] = (int) $fila['almacenes'];
+        $fila['entradas'] = (float) $fila['entradas'];
+        $fila['salidas'] = (float) $fila['salidas'];
+        $fila['neto'] = (float) $fila['neto'];
+    }
+    unset($fila);
+
+    $productoSeleccionado = null;
+    if ($filtros['producto_id'] > 0) {
+        $sqlProducto = "SELECT p.id, p.sku, p.nombre, um.codigo AS unidad_codigo, um.simbolo AS unidad_simbolo,
+                               COALESCE(SUM(CASE WHEN mid.cantidad_delta > 0 THEN mid.cantidad_delta ELSE 0 END),0) AS entradas,
+                               COALESCE(SUM(CASE WHEN mid.cantidad_delta < 0 THEN ABS(mid.cantidad_delta) ELSE 0 END),0) AS salidas,
+                               COALESCE(SUM(mid.cantidad_delta),0) AS neto
+                        {$from} {$where}
+                        GROUP BY p.id, p.sku, p.nombre, um.codigo, um.simbolo
+                        LIMIT 1";
+        $stmt = $conexion->prepare($sqlProducto);
+        inv_bind_params($stmt, $params);
+        $stmt->execute();
+        $productoSeleccionado = $stmt->fetch(PDO::FETCH_ASSOC) ?: null;
+
+        if ($productoSeleccionado) {
+            $sqlActual = "SELECT COALESCE(SUM(ea.existencia_fisica),0) AS fisica,
+                                 COALESCE(SUM(ea.cantidad_reservada),0) AS reservada,
+                                 COALESCE(SUM(ea.cantidad_disponible),0) AS disponible
+                          FROM existencias_almacen ea
+                          WHERE ea.producto_id = :producto_actual"
+                          . ($filtros['almacen_id'] > 0 ? ' AND ea.almacen_id = :almacen_actual' : '');
+            $stmtActual = $conexion->prepare($sqlActual);
+            $stmtActual->bindValue(':producto_actual', $filtros['producto_id'], PDO::PARAM_INT);
+            if ($filtros['almacen_id'] > 0) {
+                $stmtActual->bindValue(':almacen_actual', $filtros['almacen_id'], PDO::PARAM_INT);
+            }
+            $stmtActual->execute();
+            $actual = $stmtActual->fetch(PDO::FETCH_ASSOC) ?: ['fisica' => 0, 'reservada' => 0, 'disponible' => 0];
+            $productoSeleccionado['id'] = (int) $productoSeleccionado['id'];
+            foreach (['entradas','salidas','neto'] as $campo) {
+                $productoSeleccionado[$campo] = (float) $productoSeleccionado[$campo];
+            }
+            $productoSeleccionado['existencia_actual'] = (float) $actual['fisica'];
+            $productoSeleccionado['reservada_actual'] = (float) $actual['reservada'];
+            $productoSeleccionado['disponible_actual'] = (float) $actual['disponible'];
+        }
+    }
+
+    return [
+        'general' => $general,
+        'por_tipo' => $porTipo,
+        'por_almacen' => $porAlmacen,
+        'por_producto' => $porProducto,
+        'producto_seleccionado' => $productoSeleccionado,
+    ];
+}
+
+function inv_exportar_kardex_csv(PDO $conexion): void
+{
+    $filtros = inv_kardex_filtros_peticion();
+    [$from, $where, $params] = inv_kardex_contexto_sql($filtros);
+    $total = inv_kardex_total_exportacion($conexion, $from, $where, $params);
+    inv_kardex_validar_limite_exportacion($total);
+
+    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY mi.fecha_movimiento ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+
+    $nombre = 'kardex_' . date('Ymd_His') . '.csv';
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="' . $nombre . '"');
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    echo "\xEF\xBB\xBF";
+    $out = fopen('php://output', 'wb');
+    if ($out === false) {
+        throw new RuntimeException('No fue posible preparar la exportación CSV.');
+    }
+    fputcsv($out, inv_kardex_export_headers(), ',', '"', '');
+    while ($fila = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        fputcsv($out, inv_kardex_export_row($fila), ',', '"', '');
+    }
+    fclose($out);
+    exit;
+}
+
+function inv_exportar_kardex_xlsx(PDO $conexion): void
+{
+    $filtros = inv_kardex_filtros_peticion();
+    [$from, $where, $params] = inv_kardex_contexto_sql($filtros);
+    $total = inv_kardex_total_exportacion($conexion, $from, $where, $params);
+    inv_kardex_validar_limite_exportacion($total);
+
+    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY mi.fecha_movimiento ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    $filasDb = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    inv_kardex_normalizar_filas($filasDb);
+
+    $filas = [];
+    foreach ($filasDb as $fila) {
+        $filas[] = inv_kardex_export_row_assoc($fila);
+    }
+
+    $resumen = inv_kardex_resumen_filtrado($conexion, $from, $where, $params, $filtros);
+    $filasResumen = [
+        ['concepto' => 'Fecha de exportación', 'valor' => date('Y-m-d H:i:s')],
+        ['concepto' => 'Movimientos', 'valor' => $resumen['general']['movimientos']],
+        ['concepto' => 'Renglones', 'valor' => $resumen['general']['renglones']],
+        ['concepto' => 'Productos', 'valor' => $resumen['general']['productos']],
+        ['concepto' => 'Almacenes', 'valor' => $resumen['general']['almacenes']],
+        ['concepto' => 'Transferencias', 'valor' => $resumen['general']['transferencias']],
+        ['concepto' => 'Reversos', 'valor' => $resumen['general']['reversos']],
+    ];
+    if ($resumen['producto_seleccionado']) {
+        $ps = $resumen['producto_seleccionado'];
+        $unidad = $ps['unidad_simbolo'] ?: $ps['unidad_codigo'];
+        $filasResumen[] = ['concepto' => 'Producto', 'valor' => $ps['sku'] . ' · ' . $ps['nombre']];
+        $filasResumen[] = ['concepto' => 'Entradas filtradas (' . $unidad . ')', 'valor' => $ps['entradas']];
+        $filasResumen[] = ['concepto' => 'Salidas filtradas (' . $unidad . ')', 'valor' => $ps['salidas']];
+        $filasResumen[] = ['concepto' => 'Movimiento neto (' . $unidad . ')', 'valor' => $ps['neto']];
+        $filasResumen[] = ['concepto' => 'Existencia física actual (' . $unidad . ')', 'valor' => $ps['existencia_actual']];
+        $filasResumen[] = ['concepto' => 'Disponible actual (' . $unidad . ')', 'valor' => $ps['disponible_actual']];
+    }
+
+    $filasPorProducto = array_map(static function (array $r): array {
+        return [
+            'sku' => (string) $r['sku'],
+            'producto' => (string) $r['producto'],
+            'unidad' => (string) (($r['unidad_simbolo'] ?? '') ?: ($r['unidad_codigo'] ?? '')),
+            'movimientos' => (int) $r['movimientos'],
+            'almacenes' => (int) $r['almacenes'],
+            'entradas' => (float) $r['entradas'],
+            'salidas' => (float) $r['salidas'],
+            'neto' => (float) $r['neto'],
+        ];
+    }, inv_kardex_resumen_productos_completo($conexion, $from, $where, $params));
+
+    $filasPorTipo = array_map(static fn(array $r): array => [
+        'codigo' => (string) $r['codigo'],
+        'tipo' => (string) $r['nombre'],
+        'movimientos' => (int) $r['movimientos'],
+        'renglones' => (int) $r['renglones'],
+        'productos' => (int) $r['productos'],
+        'almacenes' => (int) $r['almacenes'],
+    ], $resumen['por_tipo']);
+
+    $filasPorAlmacen = array_map(static fn(array $r): array => [
+        'codigo' => (string) $r['codigo'],
+        'almacen' => (string) $r['nombre'],
+        'movimientos' => (int) $r['movimientos'],
+        'productos' => (int) $r['productos'],
+        'entradas' => (int) $r['renglones_entrada'],
+        'salidas' => (int) $r['renglones_salida'],
+        'transferencias' => (int) $r['transferencias'],
+    ], $resumen['por_almacen']);
+
+    si_xlsx_descargar('kardex_' . date('Ymd_His') . '.xlsx', [
         [
-            'registros' => $filas,
-            'paginacion' => [
-                'pagina' => $pagina,
-                'por_pagina' => $porPagina,
-                'total' => $total,
-                'total_paginas' => $totalPaginas,
+            'nombre' => 'Kardex',
+            'columnas' => inv_kardex_xlsx_columnas(),
+            'filas' => $filas,
+        ],
+        [
+            'nombre' => 'Por producto',
+            'columnas' => [
+                ['campo'=>'sku','titulo'=>'SKU','tipo'=>'texto','ancho'=>17],
+                ['campo'=>'producto','titulo'=>'Producto','tipo'=>'texto','ancho'=>32],
+                ['campo'=>'unidad','titulo'=>'Unidad','tipo'=>'texto','ancho'=>12],
+                ['campo'=>'movimientos','titulo'=>'Movimientos','tipo'=>'numero','ancho'=>13],
+                ['campo'=>'almacenes','titulo'=>'Almacenes','tipo'=>'numero','ancho'=>12],
+                ['campo'=>'entradas','titulo'=>'Entradas','tipo'=>'numero','ancho'=>14],
+                ['campo'=>'salidas','titulo'=>'Salidas','tipo'=>'numero','ancho'=>14],
+                ['campo'=>'neto','titulo'=>'Neto','tipo'=>'numero','ancho'=>14],
             ],
-        ]
-    );
+            'filas' => $filasPorProducto,
+        ],
+        [
+            'nombre' => 'Por tipo',
+            'columnas' => [
+                ['campo'=>'codigo','titulo'=>'Código','tipo'=>'texto','ancho'=>22],
+                ['campo'=>'tipo','titulo'=>'Movimiento','tipo'=>'texto','ancho'=>28],
+                ['campo'=>'movimientos','titulo'=>'Movimientos','tipo'=>'numero','ancho'=>13],
+                ['campo'=>'renglones','titulo'=>'Renglones','tipo'=>'numero','ancho'=>12],
+                ['campo'=>'productos','titulo'=>'Productos','tipo'=>'numero','ancho'=>12],
+                ['campo'=>'almacenes','titulo'=>'Almacenes','tipo'=>'numero','ancho'=>12],
+            ],
+            'filas' => $filasPorTipo,
+        ],
+        [
+            'nombre' => 'Por almacén',
+            'columnas' => [
+                ['campo'=>'codigo','titulo'=>'Código','tipo'=>'texto','ancho'=>18],
+                ['campo'=>'almacen','titulo'=>'Almacén','tipo'=>'texto','ancho'=>28],
+                ['campo'=>'movimientos','titulo'=>'Movimientos','tipo'=>'numero','ancho'=>13],
+                ['campo'=>'productos','titulo'=>'Productos','tipo'=>'numero','ancho'=>12],
+                ['campo'=>'entradas','titulo'=>'Renglones entrada','tipo'=>'numero','ancho'=>16],
+                ['campo'=>'salidas','titulo'=>'Renglones salida','tipo'=>'numero','ancho'=>16],
+                ['campo'=>'transferencias','titulo'=>'Transferencias','tipo'=>'numero','ancho'=>15],
+            ],
+            'filas' => $filasPorAlmacen,
+        ],
+        [
+            'nombre' => 'Resumen',
+            'columnas' => [
+                ['campo' => 'concepto', 'titulo' => 'Concepto', 'tipo' => 'texto', 'ancho' => 34],
+                ['campo' => 'valor', 'titulo' => 'Valor', 'tipo' => 'texto', 'ancho' => 28],
+            ],
+            'filas' => $filasResumen,
+        ],
+    ]);
+}
+
+function inv_kardex_resumen_productos_completo(PDO $conexion, string $from, string $where, array $params): array
+{
+    $sql = "SELECT p.id AS producto_id, p.sku, p.nombre AS producto,
+                   um.codigo AS unidad_codigo, um.simbolo AS unidad_simbolo,
+                   COUNT(DISTINCT mi.id) AS movimientos,
+                   COUNT(DISTINCT mid.almacen_id) AS almacenes,
+                   SUM(CASE WHEN mid.cantidad_delta > 0 THEN mid.cantidad_delta ELSE 0 END) AS entradas,
+                   SUM(CASE WHEN mid.cantidad_delta < 0 THEN ABS(mid.cantidad_delta) ELSE 0 END) AS salidas,
+                   SUM(mid.cantidad_delta) AS neto
+            {$from} {$where}
+            GROUP BY p.id, p.sku, p.nombre, um.codigo, um.simbolo
+            ORDER BY p.nombre ASC";
+    $stmt = $conexion->prepare($sql);
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function inv_kardex_total_exportacion(PDO $conexion, string $from, string $where, array $params): int
+{
+    $stmt = $conexion->prepare("SELECT COUNT(*) {$from} {$where}");
+    inv_bind_params($stmt, $params);
+    $stmt->execute();
+    return (int) $stmt->fetchColumn();
+}
+
+function inv_kardex_validar_limite_exportacion(int $total): void
+{
+    if ($total > 50000) {
+        http_response_code(422);
+        header('Content-Type: text/plain; charset=utf-8');
+        echo 'La exportación contiene más de 50,000 renglones. Reduce el periodo o aplica filtros antes de exportar.';
+        exit;
+    }
+}
+
+function inv_kardex_export_headers(): array
+{
+    return ['Fecha', 'Folio movimiento', 'Estado', 'Tipo', 'Código tipo', 'SKU', 'Producto', 'Almacén', 'Código almacén', 'Entrada', 'Salida', 'Delta', 'Antes', 'Después', 'Unidad', 'Costo unitario base', 'Origen', 'Usuario', 'Motivo', 'Observaciones'];
+}
+
+function inv_kardex_export_row(array $fila): array
+{
+    $a = inv_kardex_export_row_assoc($fila);
+    return array_values($a);
+}
+
+function inv_kardex_export_row_assoc(array $fila): array
+{
+    return [
+        'fecha' => (string) ($fila['fecha_movimiento'] ?? ''),
+        'folio' => (string) ($fila['folio'] ?? ''),
+        'estado' => (string) ($fila['estado'] ?? ''),
+        'tipo' => (string) ($fila['tipo_movimiento'] ?? ''),
+        'tipo_codigo' => (string) ($fila['tipo_codigo'] ?? ''),
+        'sku' => (string) ($fila['sku'] ?? ''),
+        'producto' => (string) ($fila['producto'] ?? ''),
+        'almacen' => (string) ($fila['almacen'] ?? ''),
+        'almacen_codigo' => (string) ($fila['almacen_codigo'] ?? ''),
+        'entrada' => (float) ($fila['cantidad_entrada'] ?? 0),
+        'salida' => (float) ($fila['cantidad_salida'] ?? 0),
+        'delta' => (float) ($fila['cantidad_delta'] ?? 0),
+        'antes' => (float) ($fila['existencia_antes'] ?? 0),
+        'despues' => (float) ($fila['existencia_despues'] ?? 0),
+        'unidad' => (string) (($fila['unidad_simbolo'] ?? '') ?: ($fila['unidad_codigo'] ?? '') ?: ($fila['unidad_base'] ?? '')),
+        'costo' => $fila['costo_unitario_base'] !== null ? (float) $fila['costo_unitario_base'] : '',
+        'origen' => (string) ($fila['origen_referencia'] ?? ''),
+        'usuario' => (string) ($fila['usuario_aplico'] ?? ''),
+        'motivo' => (string) ($fila['motivo'] ?? ''),
+        'observaciones' => (string) ($fila['observaciones'] ?? ''),
+    ];
+}
+
+function inv_kardex_xlsx_columnas(): array
+{
+    return [
+        ['campo'=>'fecha','titulo'=>'Fecha','tipo'=>'texto','ancho'=>20],
+        ['campo'=>'folio','titulo'=>'Folio movimiento','tipo'=>'texto','ancho'=>20],
+        ['campo'=>'estado','titulo'=>'Estado','tipo'=>'texto','ancho'=>12],
+        ['campo'=>'tipo','titulo'=>'Movimiento','tipo'=>'texto','ancho'=>25],
+        ['campo'=>'tipo_codigo','titulo'=>'Código tipo','tipo'=>'texto','ancho'=>22],
+        ['campo'=>'sku','titulo'=>'SKU','tipo'=>'texto','ancho'=>17],
+        ['campo'=>'producto','titulo'=>'Producto','tipo'=>'texto','ancho'=>32],
+        ['campo'=>'almacen','titulo'=>'Almacén','tipo'=>'texto','ancho'=>24],
+        ['campo'=>'almacen_codigo','titulo'=>'Código almacén','tipo'=>'texto','ancho'=>17],
+        ['campo'=>'entrada','titulo'=>'Entrada','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'salida','titulo'=>'Salida','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'delta','titulo'=>'Delta','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'antes','titulo'=>'Antes','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'despues','titulo'=>'Después','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'unidad','titulo'=>'Unidad','tipo'=>'texto','ancho'=>12],
+        ['campo'=>'costo','titulo'=>'Costo unitario base','tipo'=>'numero','ancho'=>18],
+        ['campo'=>'origen','titulo'=>'Origen','tipo'=>'texto','ancho'=>28],
+        ['campo'=>'usuario','titulo'=>'Usuario','tipo'=>'texto','ancho'=>24],
+        ['campo'=>'motivo','titulo'=>'Motivo','tipo'=>'texto','ancho'=>32],
+        ['campo'=>'observaciones','titulo'=>'Observaciones','tipo'=>'texto','ancho'=>36],
+    ];
 }
 
 
