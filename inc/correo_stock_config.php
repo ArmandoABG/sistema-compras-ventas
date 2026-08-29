@@ -13,13 +13,13 @@ if (
 /**
  * Configuración central del remitente para alertas de inventario.
  *
- * IMPORTANTE: este archivo contiene una contraseña de aplicación SMTP.
- * No debe publicarse en repositorios públicos.
+ * Los secretos SMTP se cargan desde correo_stock_config.local.php,
+ * que debe permanecer fuera del control de versiones.
  */
 function si_correo_stock_config(): array
 {
-    return [
-        'activo' => true,
+    $config = [
+        'activo' => false,
         'smtp_host' => 'smtp.gmail.com',
         'smtp_port' => 587,
         'smtp_usuario' => 'gymportezuelo585@gmail.com',
@@ -31,4 +31,16 @@ function si_correo_stock_config(): array
         'reintento_minutos' => 30,
         'intervalo_proceso_segundos' => 45,
     ];
+
+    $archivoLocal = __DIR__ . '/correo_stock_config.local.php';
+    if (!is_file($archivoLocal)) {
+        return $config;
+    }
+
+    $local = require $archivoLocal;
+    if (!is_array($local)) {
+        return $config;
+    }
+
+    return array_replace($config, $local);
 }

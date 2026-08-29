@@ -1785,13 +1785,14 @@ function rep_sql(string $codigo, array $f): array
             return [$sql, $params, 'ORDER BY mi.fecha_movimiento DESC, mi.id DESC'];
 
         case 'CUENTAS_PAGAR':
+            $estadoCuenta = rep_estado_cuenta_expr('cxp');
             rep_fecha($where, $params, 'cxp.fecha_documento', $f);
             rep_id($where, $params, 'cxp.proveedor_id', 'proveedor_id', $f['proveedor_id']);
-            rep_estado($where, $params, 'cxp.estado', $f['estado']);
+            rep_estado($where, $params, '(' . $estadoCuenta . ')', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['cxp.folio', 'c.folio', 'pr.razon_social']);
             $sql = "SELECT cxp.fecha_documento AS fecha, cxp.folio, c.folio AS compra, pr.razon_social AS proveedor,
                            mon.codigo AS moneda_codigo, cxp.importe_original, cxp.importe_pagado AS pagado, cxp.saldo_pendiente AS saldo,
-                           cxp.fecha_vencimiento AS vencimiento, cxp.estado
+                           cxp.fecha_vencimiento AS vencimiento, {$estadoCuenta} AS estado
                     FROM cuentas_por_pagar cxp
                     INNER JOIN compras c ON c.id = cxp.compra_id
                     INNER JOIN proveedores pr ON pr.id = cxp.proveedor_id
@@ -1800,13 +1801,14 @@ function rep_sql(string $codigo, array $f): array
             return [$sql, $params, 'ORDER BY cxp.fecha_documento DESC, cxp.id DESC'];
 
         case 'CUENTAS_COBRAR':
+            $estadoCuenta = rep_estado_cuenta_expr('cxc');
             rep_fecha($where, $params, 'cxc.fecha_documento', $f);
             rep_id($where, $params, 'cxc.cliente_id', 'cliente_id', $f['cliente_id']);
-            rep_estado($where, $params, 'cxc.estado', $f['estado']);
+            rep_estado($where, $params, '(' . $estadoCuenta . ')', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['cxc.folio', 'v.folio', 'cl.nombre_razon_social']);
             $sql = "SELECT cxc.fecha_documento AS fecha, cxc.folio, v.folio AS venta, cl.nombre_razon_social AS cliente,
                            mon.codigo AS moneda_codigo, cxc.importe_original, cxc.importe_pagado AS pagado, cxc.saldo_pendiente AS saldo,
-                           cxc.fecha_vencimiento AS vencimiento, cxc.estado
+                           cxc.fecha_vencimiento AS vencimiento, {$estadoCuenta} AS estado
                     FROM cuentas_por_cobrar cxc
                     INNER JOIN ventas v ON v.id = cxc.venta_id
                     INNER JOIN clientes cl ON cl.id = cxc.cliente_id
@@ -1973,6 +1975,21 @@ function rep_estado(array &$where, array &$params, string $campo, string $estado
         $where[] = $campo . ' = :estado_filtro';
         $params['estado_filtro'] = $estado;
     }
+}
+
+function rep_estado_cuenta_expr(string $alias): string
+{
+    if (!in_array($alias, ['cxp', 'cxc'], true)) {
+        throw new InvalidArgumentException('Alias de cuenta no permitido.');
+    }
+
+    return "CASE
+                WHEN {$alias}.estado = 'CANCELADA' THEN 'CANCELADA'
+                WHEN {$alias}.saldo_pendiente <= 0.00005 THEN 'PAGADA'
+                WHEN {$alias}.fecha_vencimiento < CURDATE() THEN 'VENCIDA'
+                WHEN {$alias}.importe_pagado > 0.00005 THEN 'PARCIAL'
+                ELSE 'PENDIENTE'
+            END";
 }
 
 function rep_buscar(array &$where, array &$params, string $buscar, array $campos): void

@@ -1,3 +1,4 @@
 inc/conexion.php
 
 
+inc/correo_stock_config.local.php
