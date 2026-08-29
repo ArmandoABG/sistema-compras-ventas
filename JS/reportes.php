@@ -50,7 +50,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <p>Consulta información formal derivada de los módulos operativos. Este apartado no modifica inventario ni movimientos financieros.</p>
                 </div>
                 <?php if ($puedeExportar): ?>
-                    <button type="button" class="btn-secondary" id="btnExportar" disabled>Exportar CSV</button>
+                    <div class="filter-actions">
+                        <button type="button" class="btn-secondary" id="btnExportarCsv" disabled>Exportar CSV</button>
+                        <button type="button" class="btn-secondary" id="btnExportarXlsx" disabled>Exportar Excel</button>
+                    </div>
                 <?php endif; ?>
             </header>
 
@@ -169,6 +172,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     const CONFIG = {
         endpoint: 'reportes.php?rep_api=1',
         puedeExportar: <?= $puedeExportar ? 'true' : 'false' ?>,
+        monedaBase: 'MXN',
     };
 
     const $ = (id) => document.getElementById(id);
@@ -177,7 +181,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         panelSelector: $('panelSelector'),
         panelReporte: $('panelReporte'),
         grid: $('reportesGrid'),
-        btnExportar: $('btnExportar'),
+        btnExportarCsv: $('btnExportarCsv'),
+        btnExportarXlsx: $('btnExportarXlsx'),
         btnCambiar: $('btnCambiarReporte'),
         titulo: $('reporteTitulo'),
         descripcion: $('reporteDescripcion'),
@@ -329,6 +334,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         estado.catalogos.clientes = Array.isArray(data.clientes) ? data.clientes : [];
         estado.catalogos.usuarios = Array.isArray(data.usuarios) ? data.usuarios : [];
         CONFIG.puedeExportar = Boolean(data.puede_exportar ?? CONFIG.puedeExportar);
+        CONFIG.monedaBase = normalizarMoneda(data.moneda_base || CONFIG.monedaBase);
 
         llenarSelect(dom.almacen, estado.catalogos.almacenes, (x) => `${x.codigo || ''}${x.codigo ? ' · ' : ''}${x.nombre || ''}`);
         llenarSelect(dom.producto, estado.catalogos.productos, (x) => `${x.sku || ''}${x.sku ? ' · ' : ''}${x.nombre || ''}`);
@@ -370,7 +376,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
         dom.panelSelector.hidden = true;
         dom.panelReporte.hidden = false;
-        if (dom.btnExportar) dom.btnExportar.disabled = !CONFIG.puedeExportar;
+        [dom.btnExportarCsv, dom.btnExportarXlsx].forEach((btn) => { if (btn) btn.disabled = !CONFIG.puedeExportar; });
         cargarReporte();
     }
 
@@ -381,7 +387,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         estado.total = 0;
         dom.panelReporte.hidden = true;
         dom.panelSelector.hidden = false;
-        if (dom.btnExportar) dom.btnExportar.disabled = true;
+        [dom.btnExportarCsv, dom.btnExportarXlsx].forEach((btn) => { if (btn) btn.disabled = true; });
         mostrarMensaje('');
     }
 
@@ -408,10 +414,20 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         return new Intl.NumberFormat('es-MX', { maximumFractionDigits: decimales }).format(n);
     }
 
-    function formatMoneda(valor) {
+    function normalizarMoneda(codigo) {
+        const limpio = String(codigo || '').trim().toUpperCase();
+        return /^[A-Z]{3}$/.test(limpio) ? limpio : 'MXN';
+    }
+
+    function formatMoneda(valor, codigo = CONFIG.monedaBase) {
         const n = Number(valor);
         if (!Number.isFinite(n)) return '—';
-        return new Intl.NumberFormat('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 2 }).format(n);
+        const moneda = normalizarMoneda(codigo);
+        try {
+            return new Intl.NumberFormat('es-MX', { style: 'currency', currency: moneda, maximumFractionDigits: 2 }).format(n);
+        } catch (_) {
+            return `${formatNumero(n, 2)} ${moneda}`;
+        }
     }
 
     function formatFecha(valor, conHora = false) {
@@ -431,8 +447,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         ).format(d);
     }
 
-    function renderValor(valor, tipo) {
-        if (tipo === 'moneda') return escapar(formatMoneda(valor));
+    function renderValor(valor, tipo, fila = {}) {
+        if (tipo === 'moneda') return escapar(formatMoneda(valor, fila.moneda_codigo || CONFIG.monedaBase));
+        if (tipo === 'moneda_base') return escapar(formatMoneda(valor, CONFIG.monedaBase));
         if (tipo === 'cantidad') return escapar(formatNumero(valor, 6));
         if (tipo === 'entero') return escapar(formatNumero(valor, 0));
         if (tipo === 'fecha') return escapar(formatFecha(valor, false));
@@ -452,7 +469,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         }
 
         dom.body.innerHTML = rows.map((fila) => `
-            <tr>${cols.map((c) => `<td>${renderValor(fila[c.campo], c.tipo)}</td>`).join('')}</tr>
+            <tr>${cols.map((c) => `<td>${renderValor(fila[c.campo], c.tipo, fila)}</td>`).join('')}</tr>
         `).join('');
     }
 
@@ -503,10 +520,11 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if (recargar && estado.reporte) cargarReporte();
     }
 
-    function exportar() {
+    function exportar(formato) {
         if (!estado.reporte || !CONFIG.puedeExportar) return;
+        const accion = formato === 'xlsx' ? 'EXPORTAR_XLSX' : 'EXPORTAR_CSV';
         const url = new URL(CONFIG.endpoint, window.location.href);
-        url.searchParams.set('accion', 'EXPORTAR_CSV');
+        url.searchParams.set('accion', accion);
         Object.entries(parametros()).forEach(([clave, valor]) => {
             if (clave === 'pagina' || clave === 'por_pagina') return;
             if (valor !== undefined && valor !== null && String(valor) !== '') url.searchParams.set(clave, String(valor));
@@ -527,7 +545,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     dom.btnLimpiar.addEventListener('click', () => limpiarFiltros(true));
     dom.anterior.addEventListener('click', () => { if (estado.pagina > 1) { estado.pagina -= 1; cargarReporte(); } });
     dom.siguiente.addEventListener('click', () => { if (estado.pagina < estado.paginas) { estado.pagina += 1; cargarReporte(); } });
-    if (dom.btnExportar) dom.btnExportar.addEventListener('click', exportar);
+    if (dom.btnExportarCsv) dom.btnExportarCsv.addEventListener('click', () => exportar('csv'));
+    if (dom.btnExportarXlsx) dom.btnExportarXlsx.addEventListener('click', () => exportar('xlsx'));
 
     dom.porPagina.addEventListener('change', () => { estado.pagina = 1; cargarReporte(); });
     [dom.desde, dom.hasta, dom.almacen, dom.producto, dom.proveedor, dom.cliente, dom.usuario, dom.estado].forEach((control) => {

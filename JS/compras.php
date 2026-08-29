@@ -14,6 +14,7 @@ $tituloPagina = 'Compras';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('compras.crear');
 $puedeCancelar = si_tiene_permiso('compras.cancelar');
+$puedeVerRecepciones = si_tiene_permiso('recepciones.ver');
 $puedeRecepcionar = si_tiene_permiso('recepciones.confirmar');
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
@@ -23,6 +24,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
 $seccionInicial = strtolower(trim((string) ($_GET['seccion'] ?? 'compras')));
 if (!in_array($seccionInicial, ['compras', 'recepciones', 'historial'], true)) {
+    $seccionInicial = 'compras';
+}
+if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     $seccionInicial = 'compras';
 }
 ?>
@@ -54,7 +58,9 @@ if (!in_array($seccionInicial, ['compras', 'recepciones', 'historial'], true)) {
 
             <nav class="module-tabs" aria-label="Compras">
                 <button type="button" class="module-tab" data-seccion="compras">Compras</button>
-                <button type="button" class="module-tab" data-seccion="recepciones">Recepciones</button>
+                <?php if ($puedeVerRecepciones): ?>
+                    <button type="button" class="module-tab" data-seccion="recepciones">Recepciones</button>
+                <?php endif; ?>
                 <button type="button" class="module-tab" data-seccion="historial">Historial</button>
             </nav>
 

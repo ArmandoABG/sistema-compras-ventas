@@ -202,7 +202,6 @@ function tra_listar(PDO $conexion): void
                 ad.codigo AS destino_codigo,
                 ad.nombre AS destino,
                 x.productos,
-                x.total_unidades,
                 x.renglones
             FROM movimientos_inventario mi
             INNER JOIN tipos_movimiento_inventario tmi ON tmi.id = mi.tipo_movimiento_id
@@ -213,7 +212,6 @@ function tra_listar(PDO $conexion): void
                     MIN(CASE WHEN mid.cantidad_delta < 0 THEN mid.almacen_id END) AS origen_id,
                     MIN(CASE WHEN mid.cantidad_delta > 0 THEN mid.almacen_id END) AS destino_id,
                     COUNT(DISTINCT mid.producto_id) AS productos,
-                    COALESCE(SUM(CASE WHEN mid.cantidad_delta > 0 THEN mid.cantidad_delta ELSE 0 END), 0) AS total_unidades,
                     COUNT(*) AS renglones
                 FROM movimientos_inventario_detalle mid
                 GROUP BY mid.movimiento_id
@@ -237,7 +235,6 @@ function tra_listar(PDO $conexion): void
         $fila['origen_id'] = $fila['origen_id'] !== null ? (int) $fila['origen_id'] : null;
         $fila['destino_id'] = $fila['destino_id'] !== null ? (int) $fila['destino_id'] : null;
         $fila['productos'] = (int) $fila['productos'];
-        $fila['total_unidades'] = (float) $fila['total_unidades'];
         $fila['renglones'] = (int) $fila['renglones'];
     }
     unset($fila);

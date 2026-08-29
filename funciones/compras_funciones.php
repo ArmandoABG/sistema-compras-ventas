@@ -52,18 +52,22 @@ try {
                 break;
 
             case 'BUSCAR_COMPRAS_PENDIENTES':
+                cmp_requerir_permiso('recepciones.confirmar');
                 cmp_buscar_compras_pendientes($conexion);
                 break;
 
             case 'LISTAR_RECEPCIONES':
+                cmp_requerir_permiso('recepciones.ver');
                 cmp_listar_recepciones($conexion);
                 break;
 
             case 'PREPARAR_RECEPCION':
+                cmp_requerir_permiso('recepciones.confirmar');
                 cmp_preparar_recepcion($conexion);
                 break;
 
             case 'DETALLE_RECEPCION':
+                cmp_requerir_permiso('recepciones.ver');
                 cmp_detalle_recepcion($conexion);
                 break;
 

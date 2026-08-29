@@ -708,12 +708,11 @@ function si_alertas_tabla_lecturas_disponible(PDO $conexion): bool
     try {
         $stmt = $conexion->query(
             "SELECT 1
-             FROM information_schema.tables
-             WHERE table_schema = DATABASE()
-               AND table_name = 'alertas_operativas_lecturas'
+             FROM alertas_operativas_lecturas
              LIMIT 1"
         );
-        $disponible = (bool) $stmt->fetchColumn();
+        // Si la tabla existe, la consulta es válida aunque todavía no tenga filas.
+        $disponible = $stmt !== false;
     } catch (Throwable $e) {
         $disponible = false;
     }

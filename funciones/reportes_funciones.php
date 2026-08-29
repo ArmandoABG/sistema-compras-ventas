@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/xlsx_simple.php';
 
 si_requerir_permiso('reportes.ver', true);
 
@@ -26,13 +27,18 @@ try {
             break;
 
         case 'EXPORTAR_CSV':
+        case 'EXPORTAR_XLSX':
             if (!si_tiene_permiso('contabilidad.exportar')) {
                 http_response_code(403);
                 header('Content-Type: text/plain; charset=utf-8');
                 echo 'No tienes permiso para exportar información.';
                 exit;
             }
-            rep_exportar_csv($conexion);
+            if ($accion === 'EXPORTAR_XLSX') {
+                rep_exportar_xlsx($conexion);
+            } else {
+                rep_exportar_csv($conexion);
+            }
             break;
 
         default:
@@ -57,54 +63,68 @@ function rep_definiciones(): array
 {
     $estadosCompra = ['BORRADOR', 'PENDIENTE_RECEPCION', 'RECIBIDA_PARCIAL', 'RECIBIDA', 'CANCELADA'];
     $estadosVenta = ['BORRADOR', 'CONFIRMADA', 'CANCELADA'];
+    $estadosRecepcion = ['BORRADOR', 'CONFIRMADA', 'CANCELADA'];
     $estadosCuenta = ['PENDIENTE', 'PARCIAL', 'PAGADA', 'VENCIDA', 'CANCELADA'];
     $estadosPago = ['APLICADO', 'CANCELADO'];
     $estadosCotizacion = ['BORRADOR', 'GENERADA', 'ACEPTADA', 'RECHAZADA', 'VENCIDA', 'CONVERTIDA'];
     $estadosApartado = ['ACTIVO', 'COMPLETADO', 'VENCIDO', 'CANCELADO'];
     $estadosProduccion = ['BORRADOR', 'CONFIRMADA', 'CANCELADA'];
+    $estadosAjuste = ['BORRADOR', 'CONFIRMADO', 'CANCELADO'];
+    $estadosDevolucion = ['BORRADOR', 'CONFIRMADA', 'CANCELADA'];
+    $estadosRegularizacion = ['PENDIENTE', 'LIQUIDADA', 'CANCELADA'];
     $estadosInventario = ['NORMAL', 'REORDEN', 'CRITICO', 'SIN_DISPONIBLE', 'SIN_STOCK'];
     $estadosKardex = ['BORRADOR', 'APLICADO', 'REVERTIDO'];
+    $estadosTransferencia = ['BORRADOR', 'APLICADO', 'REVERTIDO'];
     $accionesAuditoria = ['CREAR', 'MODIFICAR', 'CANCELAR', 'RESTAURAR', 'DESACTIVAR', 'REALIZAR_AJUSTE', 'REGISTRAR_PAGO', 'INICIAR_SESION', 'INICIAR_SESIÓN'];
 
     return [
         'COMPRAS' => [
             'codigo' => 'COMPRAS', 'nombre' => 'Compras',
-            'descripcion' => 'Compras registradas con proveedor, condición de pago e importes históricos.',
+            'descripcion' => 'Compras registradas con proveedor, condición de pago, moneda e importes históricos.',
             'filtros' => ['fecha', 'proveedor', 'producto', 'estado', 'usuario'], 'estados' => $estadosCompra,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('proveedor', 'Proveedor'),
-                rep_col('factura', 'Factura'), rep_col('condicion_pago', 'Condición'), rep_col('estado', 'Estado', 'estado'),
-                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
+                rep_col('factura', 'Factura'), rep_col('condicion_pago', 'Condición'), rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'),
+                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('descuento', 'Descuento', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
                 rep_col('usuario', 'Usuario'),
             ],
         ],
         'VENTAS' => [
             'codigo' => 'VENTAS', 'nombre' => 'Ventas',
-            'descripcion' => 'Ventas registradas con cliente, condición financiera e importes históricos.',
+            'descripcion' => 'Ventas registradas con cliente, condición financiera, moneda e importes históricos.',
             'filtros' => ['fecha', 'cliente', 'producto', 'estado', 'usuario'], 'estados' => $estadosVenta,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('cliente', 'Cliente'),
-                rep_col('condicion_pago', 'Condición'), rep_col('estado', 'Estado', 'estado'),
-                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
+                rep_col('condicion_pago', 'Condición'), rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'),
+                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('descuento', 'Descuento', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
                 rep_col('usuario', 'Usuario'),
             ],
         ],
         'COMPRAS_PROVEEDOR' => [
             'codigo' => 'COMPRAS_PROVEEDOR', 'nombre' => 'Compras por proveedor',
-            'descripcion' => 'Resumen acumulado de compras agrupado por proveedor.',
+            'descripcion' => 'Resumen de compras operativas por proveedor convertido a moneda base para poder comparar importes.',
             'filtros' => ['fecha', 'proveedor', 'producto', 'estado'], 'estados' => $estadosCompra,
             'columnas' => [
-                rep_col('proveedor', 'Proveedor'), rep_col('rfc', 'RFC'), rep_col('operaciones', 'Compras', 'entero'),
-                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
+                rep_col('proveedor', 'Proveedor'), rep_col('rfc', 'RFC'), rep_col('operaciones', 'Compras', 'entero'), rep_col('moneda_codigo', 'Moneda base'),
+                rep_col('subtotal', 'Subtotal base', 'moneda_base'), rep_col('descuento', 'Descuento base', 'moneda_base'), rep_col('impuesto', 'Impuesto base', 'moneda_base'), rep_col('total', 'Total base', 'moneda_base'),
             ],
         ],
         'VENTAS_CLIENTE' => [
             'codigo' => 'VENTAS_CLIENTE', 'nombre' => 'Ventas por cliente',
-            'descripcion' => 'Resumen acumulado de ventas agrupado por cliente.',
+            'descripcion' => 'Resumen de ventas confirmadas por cliente convertido a moneda base para poder comparar importes.',
             'filtros' => ['fecha', 'cliente', 'producto', 'estado'], 'estados' => $estadosVenta,
             'columnas' => [
-                rep_col('cliente', 'Cliente'), rep_col('rfc', 'RFC'), rep_col('operaciones', 'Ventas', 'entero'),
-                rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'),
+                rep_col('cliente', 'Cliente'), rep_col('rfc', 'RFC'), rep_col('operaciones', 'Ventas', 'entero'), rep_col('moneda_codigo', 'Moneda base'),
+                rep_col('subtotal', 'Subtotal base', 'moneda_base'), rep_col('descuento', 'Descuento base', 'moneda_base'), rep_col('impuesto', 'Impuesto base', 'moneda_base'), rep_col('total', 'Total base', 'moneda_base'),
+            ],
+        ],
+        'RECEPCIONES' => [
+            'codigo' => 'RECEPCIONES', 'nombre' => 'Recepciones de compra',
+            'descripcion' => 'Recepciones físicas de compras por proveedor, documento, productos y almacenes involucrados.',
+            'filtros' => ['fecha', 'proveedor', 'producto', 'almacen', 'estado', 'usuario'], 'estados' => $estadosRecepcion,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Recepción'), rep_col('compra', 'Compra'), rep_col('proveedor', 'Proveedor'),
+                rep_col('estado', 'Estado', 'estado'), rep_col('documento', 'Documento'), rep_col('productos', 'Productos', 'entero'), rep_col('almacenes', 'Almacenes', 'entero'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'INVENTARIO' => [
@@ -114,13 +134,13 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Producto'), rep_col('tipo_producto', 'Tipo'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
-                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
-                rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('valor_inventario', 'Valor físico', 'moneda'), rep_col('estado', 'Stock', 'estado'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'), rep_col('unidad', 'Unidad'), rep_col('moneda_codigo', 'Moneda base'),
+                rep_col('costo_promedio', 'Costo prom.', 'moneda_base'), rep_col('valor_inventario', 'Valor físico', 'moneda_base'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
         'KARDEX' => [
             'codigo' => 'KARDEX', 'nombre' => 'Kardex',
-            'descripcion' => 'Historial de entradas y salidas de inventario con antes y después.',
+            'descripcion' => 'Consulta rápida de movimientos. Para análisis y exportación avanzada usa Inventario → Kardex.',
             'filtros' => ['fecha', 'almacen', 'producto', 'estado', 'usuario'], 'estados' => $estadosKardex,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Movimiento'), rep_col('tipo_movimiento', 'Tipo'), rep_col('almacen', 'Almacén'),
@@ -136,8 +156,8 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Materia prima'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
-                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
-                rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('estado', 'Stock', 'estado'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'), rep_col('unidad', 'Unidad'), rep_col('moneda_codigo', 'Moneda base'),
+                rep_col('costo_promedio', 'Costo prom.', 'moneda_base'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
         'PRODUCTO_TERMINADO' => [
@@ -147,8 +167,8 @@ function rep_definiciones(): array
             'columnas' => [
                 rep_col('almacen', 'Almacén'), rep_col('sku', 'SKU'), rep_col('producto', 'Producto terminado'),
                 rep_col('existencia_fisica', 'Física', 'cantidad'), rep_col('reservada', 'Reservada', 'cantidad'), rep_col('disponible', 'Disponible', 'cantidad'),
-                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'),
-                rep_col('unidad', 'Unidad'), rep_col('costo_promedio', 'Costo prom.', 'moneda'), rep_col('estado', 'Stock', 'estado'),
+                rep_col('stock_minimo', 'Mínimo', 'cantidad'), rep_col('punto_reorden', 'Punto reorden', 'cantidad'), rep_col('unidad', 'Unidad'), rep_col('moneda_codigo', 'Moneda base'),
+                rep_col('costo_promedio', 'Costo prom.', 'moneda_base'), rep_col('estado', 'Stock', 'estado'),
             ],
         ],
         'MERMAS' => [
@@ -161,6 +181,15 @@ function rep_definiciones(): array
                 rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
             ],
         ],
+        'AJUSTES' => [
+            'codigo' => 'AJUSTES', 'nombre' => 'Ajustes de inventario',
+            'descripcion' => 'Ajustes positivos y negativos de inventario, excluyendo mermas que tienen su propio reporte.',
+            'filtros' => ['fecha', 'almacen', 'producto', 'estado', 'usuario'], 'estados' => $estadosAjuste,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('tipo', 'Tipo'), rep_col('estado', 'Estado', 'estado'),
+                rep_col('productos', 'Productos', 'entero'), rep_col('almacenes', 'Almacenes', 'entero'), rep_col('motivo', 'Motivo'), rep_col('usuario', 'Usuario'),
+            ],
+        ],
         'PRODUCCION' => [
             'codigo' => 'PRODUCCION', 'nombre' => 'Producción',
             'descripcion' => 'Producciones registradas, producto obtenido, receta y cantidades reales.',
@@ -171,60 +200,99 @@ function rep_definiciones(): array
                 rep_col('unidad_resultado', 'Unidad'), rep_col('almacen', 'Almacén'), rep_col('insumos', 'Insumos', 'entero'), rep_col('usuario', 'Usuario'),
             ],
         ],
+        'DEVOLUCIONES_VENTA' => [
+            'codigo' => 'DEVOLUCIONES_VENTA', 'nombre' => 'Devoluciones de clientes',
+            'descripcion' => 'Devoluciones vinculadas a ventas con entrada física, compensación de CxC y reembolso cuando aplica.',
+            'filtros' => ['fecha', 'cliente', 'producto', 'almacen', 'estado', 'usuario'], 'estados' => $estadosDevolucion,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Devolución'), rep_col('venta', 'Venta'), rep_col('cliente', 'Cliente'), rep_col('estado', 'Estado', 'estado'),
+                rep_col('moneda_codigo', 'Moneda'), rep_col('total', 'Total devuelto', 'moneda'), rep_col('compensado', 'Compensado CxC', 'moneda'), rep_col('reembolso', 'Reembolso', 'moneda'),
+                rep_col('regularizacion_estado', 'Regularización', 'estado'), rep_col('motivo', 'Motivo'), rep_col('usuario', 'Usuario'),
+            ],
+        ],
+        'DEVOLUCIONES_COMPRA' => [
+            'codigo' => 'DEVOLUCIONES_COMPRA', 'nombre' => 'Devoluciones a proveedores',
+            'descripcion' => 'Devoluciones vinculadas a compras con salida física, compensación de CxP y reintegro cuando aplica.',
+            'filtros' => ['fecha', 'proveedor', 'producto', 'almacen', 'estado', 'usuario'], 'estados' => $estadosDevolucion,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Devolución'), rep_col('compra', 'Compra'), rep_col('proveedor', 'Proveedor'), rep_col('estado', 'Estado', 'estado'),
+                rep_col('moneda_codigo', 'Moneda'), rep_col('total', 'Total devuelto', 'moneda'), rep_col('compensado', 'Compensado CxP', 'moneda'), rep_col('reintegro', 'Reintegro', 'moneda'),
+                rep_col('regularizacion_estado', 'Regularización', 'estado'), rep_col('motivo', 'Motivo'), rep_col('usuario', 'Usuario'),
+            ],
+        ],
+        'REGULARIZACIONES_DEVOLUCIONES' => [
+            'codigo' => 'REGULARIZACIONES_DEVOLUCIONES', 'nombre' => 'Regularizaciones de devoluciones',
+            'descripcion' => 'Reembolsos a clientes y reintegros de proveedores generados por devoluciones.',
+            'filtros' => ['fecha', 'cliente', 'proveedor', 'estado', 'usuario'], 'estados' => $estadosRegularizacion,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Regularización'), rep_col('tipo', 'Tipo'), rep_col('devolucion', 'Devolución'), rep_col('tercero', 'Cliente / proveedor'),
+                rep_col('moneda_codigo', 'Moneda'), rep_col('importe', 'Importe', 'moneda'), rep_col('estado', 'Estado', 'estado'), rep_col('metodo', 'Método'), rep_col('referencia', 'Referencia'), rep_col('usuario', 'Usuario'),
+            ],
+        ],
+        'TRANSFERENCIAS' => [
+            'codigo' => 'TRANSFERENCIAS', 'nombre' => 'Transferencias entre almacenes',
+            'descripcion' => 'Transferencias internas entre almacenes. No suma cantidades de productos con unidades diferentes.',
+            'filtros' => ['fecha', 'almacen', 'producto', 'estado', 'usuario'], 'estados' => $estadosTransferencia,
+            'columnas' => [
+                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Transferencia'), rep_col('estado', 'Estado', 'estado'), rep_col('origen', 'Origen'), rep_col('destino', 'Destino'),
+                rep_col('productos', 'Productos', 'entero'), rep_col('reverso', 'Reverso'), rep_col('motivo', 'Motivo'), rep_col('usuario', 'Usuario'),
+            ],
+        ],
         'CUENTAS_PAGAR' => [
             'codigo' => 'CUENTAS_PAGAR', 'nombre' => 'Cuentas por pagar',
-            'descripcion' => 'Deudas con proveedores, pagos acumulados, saldos y vencimientos.',
+            'descripcion' => 'Deudas con proveedores, pagos acumulados, saldos y vencimientos en su moneda original.',
             'filtros' => ['fecha', 'proveedor', 'estado'], 'estados' => $estadosCuenta,
             'columnas' => [
-                rep_col('fecha', 'Documento', 'fecha'), rep_col('folio', 'Cuenta'), rep_col('compra', 'Compra'), rep_col('proveedor', 'Proveedor'),
+                rep_col('fecha', 'Documento', 'fecha'), rep_col('folio', 'Cuenta'), rep_col('compra', 'Compra'), rep_col('proveedor', 'Proveedor'), rep_col('moneda_codigo', 'Moneda'),
                 rep_col('importe_original', 'Original', 'moneda'), rep_col('pagado', 'Pagado', 'moneda'), rep_col('saldo', 'Saldo', 'moneda'),
                 rep_col('vencimiento', 'Vencimiento', 'fecha'), rep_col('estado', 'Estado', 'estado'),
             ],
         ],
         'CUENTAS_COBRAR' => [
             'codigo' => 'CUENTAS_COBRAR', 'nombre' => 'Cuentas por cobrar',
-            'descripcion' => 'Créditos de clientes, abonos acumulados, saldos y vencimientos.',
+            'descripcion' => 'Créditos de clientes, abonos acumulados, saldos y vencimientos en su moneda original.',
             'filtros' => ['fecha', 'cliente', 'estado'], 'estados' => $estadosCuenta,
             'columnas' => [
-                rep_col('fecha', 'Documento', 'fecha'), rep_col('folio', 'Cuenta'), rep_col('venta', 'Venta'), rep_col('cliente', 'Cliente'),
+                rep_col('fecha', 'Documento', 'fecha'), rep_col('folio', 'Cuenta'), rep_col('venta', 'Venta'), rep_col('cliente', 'Cliente'), rep_col('moneda_codigo', 'Moneda'),
                 rep_col('importe_original', 'Original', 'moneda'), rep_col('pagado', 'Pagado', 'moneda'), rep_col('saldo', 'Saldo', 'moneda'),
                 rep_col('vencimiento', 'Vencimiento', 'fecha'), rep_col('estado', 'Estado', 'estado'),
             ],
         ],
         'PAGOS' => [
             'codigo' => 'PAGOS', 'nombre' => 'Pagos a proveedores',
-            'descripcion' => 'Pagos realizados a proveedores y su estado.',
+            'descripcion' => 'Pagos realizados a proveedores en la moneda histórica del pago.',
             'filtros' => ['fecha', 'proveedor', 'estado', 'usuario'], 'estados' => $estadosPago,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('proveedor', 'Proveedor'), rep_col('metodo', 'Método'),
-                rep_col('importe', 'Importe', 'moneda'), rep_col('moneda', 'Moneda'), rep_col('referencia', 'Referencia'), rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
+                rep_col('importe', 'Importe', 'moneda'), rep_col('moneda_codigo', 'Moneda'), rep_col('referencia', 'Referencia'), rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'ABONOS' => [
             'codigo' => 'ABONOS', 'nombre' => 'Abonos de clientes',
-            'descripcion' => 'Pagos y abonos recibidos de clientes para sus cuentas por cobrar.',
+            'descripcion' => 'Pagos y abonos recibidos de clientes en la moneda histórica del pago.',
             'filtros' => ['fecha', 'cliente', 'estado', 'usuario'], 'estados' => $estadosPago,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('cliente', 'Cliente'), rep_col('metodo', 'Método'),
-                rep_col('importe', 'Importe', 'moneda'), rep_col('moneda', 'Moneda'), rep_col('referencia', 'Referencia'), rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
+                rep_col('importe', 'Importe', 'moneda'), rep_col('moneda_codigo', 'Moneda'), rep_col('referencia', 'Referencia'), rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'COTIZACIONES' => [
             'codigo' => 'COTIZACIONES', 'nombre' => 'Cotizaciones',
-            'descripcion' => 'Propuestas comerciales y su estado sin afectar inventario.',
+            'descripcion' => 'Propuestas comerciales y su estado sin afectar inventario, respetando moneda y descuentos históricos.',
             'filtros' => ['fecha', 'cliente', 'producto', 'estado', 'usuario'], 'estados' => $estadosCotizacion,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('cliente', 'Cliente'), rep_col('vigencia', 'Vigencia', 'fecha'),
-                rep_col('estado', 'Estado', 'estado'), rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'), rep_col('usuario', 'Usuario'),
+                rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'), rep_col('subtotal', 'Subtotal', 'moneda'), rep_col('descuento', 'Descuento', 'moneda'),
+                rep_col('impuesto', 'Impuesto', 'moneda'), rep_col('total', 'Total', 'moneda'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'APARTADOS' => [
             'codigo' => 'APARTADOS', 'nombre' => 'Apartados',
-            'descripcion' => 'Reservas de productos con anticipos y saldo pendiente.',
+            'descripcion' => 'Reservas de productos con anticipos y saldo pendiente en la moneda del apartado.',
             'filtros' => ['fecha', 'cliente', 'producto', 'estado', 'usuario'], 'estados' => $estadosApartado,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('cliente', 'Cliente'), rep_col('reservado_hasta', 'Reservado hasta', 'fecha_hora'),
-                rep_col('estado', 'Estado', 'estado'), rep_col('total', 'Total', 'moneda'), rep_col('anticipado', 'Anticipado', 'moneda'), rep_col('saldo', 'Saldo', 'moneda'), rep_col('usuario', 'Usuario'),
+                rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'), rep_col('total', 'Total', 'moneda'), rep_col('anticipado', 'Anticipado', 'moneda'), rep_col('saldo', 'Saldo', 'moneda'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'MOVIMIENTOS_USUARIOS' => [
@@ -239,39 +307,85 @@ function rep_definiciones(): array
     ];
 }
 
+
+function rep_reporte_autorizado(string $codigo): bool
+{
+    $permisos = [
+        'COMPRAS' => 'compras.ver',
+        'COMPRAS_PROVEEDOR' => 'compras.ver',
+        'RECEPCIONES' => 'recepciones.ver',
+        'VENTAS' => 'ventas.ver',
+        'VENTAS_CLIENTE' => 'ventas.ver',
+        'INVENTARIO' => 'inventario.ver',
+        'MATERIA_PRIMA' => 'inventario.ver',
+        'PRODUCTO_TERMINADO' => 'inventario.ver',
+        'KARDEX' => 'inventario.kardex',
+        'MERMAS' => 'inventario.kardex',
+        'AJUSTES' => 'inventario.kardex',
+        'TRANSFERENCIAS' => 'inventario.kardex',
+        'PRODUCCION' => 'produccion.ver',
+        'DEVOLUCIONES_VENTA' => 'devoluciones.ver',
+        'DEVOLUCIONES_COMPRA' => 'devoluciones.ver',
+        'REGULARIZACIONES_DEVOLUCIONES' => 'devoluciones.ver',
+        'CUENTAS_PAGAR' => 'cuentas_pagar.ver',
+        'PAGOS' => 'cuentas_pagar.ver',
+        'CUENTAS_COBRAR' => 'cuentas_cobrar.ver',
+        'ABONOS' => 'cuentas_cobrar.ver',
+        'COTIZACIONES' => 'cotizaciones.ver',
+        'APARTADOS' => 'apartados.ver',
+        'MOVIMIENTOS_USUARIOS' => 'auditoria.ver',
+    ];
+
+    $permiso = $permisos[$codigo] ?? '';
+    return $permiso !== '' && si_tiene_permiso($permiso);
+}
+
 function rep_catalogos(PDO $conexion): void
 {
-    $definiciones = rep_definiciones();
+    $todas = rep_definiciones();
+    $definiciones = array_filter(
+        $todas,
+        static fn(array $def, string $codigo): bool => rep_reporte_autorizado($codigo),
+        ARRAY_FILTER_USE_BOTH
+    );
 
-    // Reportes es histórico: los filtros también permiten localizar registros
-    // relacionados con catálogos que actualmente están inactivos.
-    $almacenes = $conexion->query(
-        "SELECT id, codigo, nombre, activo FROM almacenes ORDER BY nombre ASC, id ASC"
-    )->fetchAll();
+    $filtrosNecesarios = [];
+    foreach ($definiciones as $def) {
+        foreach (($def['filtros'] ?? []) as $filtro) {
+            $filtrosNecesarios[(string) $filtro] = true;
+        }
+    }
 
-    $productos = $conexion->query(
-        "SELECT id, sku, nombre, tipo, activo FROM productos ORDER BY nombre ASC, id ASC"
-    )->fetchAll();
+    $almacenes = isset($filtrosNecesarios['almacen'])
+        ? $conexion->query("SELECT id, codigo, nombre, activo FROM almacenes ORDER BY nombre ASC, id ASC")->fetchAll()
+        : [];
+    $productos = isset($filtrosNecesarios['producto'])
+        ? $conexion->query("SELECT id, sku, nombre, tipo, activo FROM productos ORDER BY nombre ASC, id ASC")->fetchAll()
+        : [];
+    $proveedores = isset($filtrosNecesarios['proveedor'])
+        ? $conexion->query("SELECT id, codigo, razon_social AS nombre, activo FROM proveedores ORDER BY razon_social ASC, id ASC")->fetchAll()
+        : [];
+    $clientes = isset($filtrosNecesarios['cliente'])
+        ? $conexion->query("SELECT id, codigo, nombre_razon_social AS nombre, activo FROM clientes ORDER BY nombre_razon_social ASC, id ASC")->fetchAll()
+        : [];
+    $usuarios = isset($filtrosNecesarios['usuario'])
+        ? $conexion->query(
+            "SELECT id, usuario, TRIM(CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)) AS nombre, activo
+             FROM usuarios
+             ORDER BY usuario ASC, id ASC"
+        )->fetchAll()
+        : [];
+    $monedaBase = (string) ($conexion->query(
+        "SELECT codigo FROM monedas WHERE es_base = 1 ORDER BY activo DESC, id ASC LIMIT 1"
+    )->fetchColumn() ?: 'MXN');
 
-    $proveedores = $conexion->query(
-        "SELECT id, codigo, razon_social AS nombre, activo FROM proveedores ORDER BY razon_social ASC, id ASC"
-    )->fetchAll();
-
-    $clientes = $conexion->query(
-        "SELECT id, codigo, nombre_razon_social AS nombre, activo FROM clientes ORDER BY nombre_razon_social ASC, id ASC"
-    )->fetchAll();
-
-    $usuarios = $conexion->query(
-        "SELECT id, usuario, TRIM(CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)) AS nombre, activo
-         FROM usuarios
-         ORDER BY usuario ASC, id ASC"
-    )->fetchAll();
-
-    $accionesAuditoria = $conexion->query(
-        "SELECT DISTINCT accion FROM auditoria WHERE accion IS NOT NULL AND accion <> '' ORDER BY accion ASC"
-    )->fetchAll(PDO::FETCH_COLUMN);
-    if ($accionesAuditoria) {
-        $definiciones['MOVIMIENTOS_USUARIOS']['estados'] = array_values(array_map('strval', $accionesAuditoria));
+    if (isset($definiciones['MOVIMIENTOS_USUARIOS'])) {
+        $accionesAuditoria = $conexion->query(
+            "SELECT DISTINCT accion FROM auditoria WHERE accion IS NOT NULL AND accion <> '' ORDER BY accion ASC"
+        )->fetchAll(PDO::FETCH_COLUMN);
+        if ($accionesAuditoria) {
+            $definiciones['MOVIMIENTOS_USUARIOS']['estados'] = array_values(array_map('strval', $accionesAuditoria));
+        }
     }
 
     foreach ($almacenes as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
@@ -287,6 +401,7 @@ function rep_catalogos(PDO $conexion): void
         'proveedores' => $proveedores,
         'clientes' => $clientes,
         'usuarios' => $usuarios,
+        'moneda_base' => strtoupper($monedaBase),
         'puede_exportar' => si_tiene_permiso('contabilidad.exportar'),
     ]);
 }
@@ -301,11 +416,7 @@ function rep_listar(PDO $conexion): void
     $porPagina = rep_entero($_GET['por_pagina'] ?? 20, 10, 100, 20);
 
     [$sqlBase, $params, $orden] = rep_sql($codigo, $filtros);
-
-    $stmtConteo = $conexion->prepare("SELECT COUNT(*) FROM ({$sqlBase}) rep_count");
-    rep_bind($stmtConteo, $params);
-    $stmtConteo->execute();
-    $total = (int) $stmtConteo->fetchColumn();
+    $total = rep_total_filas($conexion, $sqlBase, $params);
 
     $paginas = max(1, (int) ceil($total / $porPagina));
     if ($pagina > $paginas) {
@@ -338,12 +449,14 @@ function rep_listar(PDO $conexion): void
 function rep_exportar_csv(PDO $conexion): void
 {
     $codigo = rep_codigo_reporte($_GET['reporte'] ?? '');
-    $definiciones = rep_definiciones();
-    $def = $definiciones[$codigo];
+    $def = rep_definiciones()[$codigo];
     $filtros = rep_filtros($def);
     [$sqlBase, $params, $orden] = rep_sql($codigo, $filtros);
 
-    $stmt = $conexion->prepare($sqlBase . ' ' . $orden . ' LIMIT 50000');
+    $total = rep_total_filas($conexion, $sqlBase, $params);
+    rep_validar_limite_exportacion($total);
+
+    $stmt = $conexion->prepare($sqlBase . ' ' . $orden);
     rep_bind($stmt, $params);
     $stmt->execute();
 
@@ -373,11 +486,311 @@ function rep_exportar_csv(PDO $conexion): void
     exit;
 }
 
+function rep_exportar_xlsx(PDO $conexion): void
+{
+    $codigo = rep_codigo_reporte($_GET['reporte'] ?? '');
+    $def = rep_definiciones()[$codigo];
+    $filtros = rep_filtros($def);
+    [$sqlBase, $params, $orden] = rep_sql($codigo, $filtros);
+
+    $total = rep_total_filas($conexion, $sqlBase, $params);
+    rep_validar_limite_exportacion($total);
+
+    $stmt = $conexion->prepare($sqlBase . ' ' . $orden);
+    rep_bind($stmt, $params);
+    $stmt->execute();
+    $filas = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $monedaBase = (string) ($conexion->query(
+        "SELECT codigo FROM monedas WHERE es_base = 1 ORDER BY activo DESC, id ASC LIMIT 1"
+    )->fetchColumn() ?: 'MXN');
+
+    $hojas = [[
+        'nombre' => 'Reporte',
+        'columnas' => rep_xlsx_columnas($def['columnas']),
+        'filas' => $filas,
+    ]];
+
+    foreach (rep_xlsx_detalles_especiales($conexion, $codigo, $filtros) as $hoja) {
+        $hojas[] = $hoja;
+    }
+
+    $hojas[] = [
+        'nombre' => 'Resumen',
+        'columnas' => [
+            ['campo' => 'concepto', 'titulo' => 'Concepto', 'tipo' => 'texto', 'ancho' => 28],
+            ['campo' => 'valor', 'titulo' => 'Valor', 'tipo' => 'texto', 'ancho' => 45],
+        ],
+        'filas' => rep_xlsx_resumen($def, $filtros, $total, strtoupper($monedaBase)),
+    ];
+
+    si_xlsx_descargar('reporte_' . strtolower($codigo) . '_' . date('Ymd_His') . '.xlsx', $hojas);
+}
+
+function rep_total_filas(PDO $conexion, string $sqlBase, array $params): int
+{
+    $stmt = $conexion->prepare("SELECT COUNT(*) FROM ({$sqlBase}) rep_count");
+    rep_bind($stmt, $params);
+    $stmt->execute();
+    return (int) $stmt->fetchColumn();
+}
+
+function rep_validar_limite_exportacion(int $total, int $limite = 50000): void
+{
+    if ($total <= $limite) {
+        return;
+    }
+    http_response_code(422);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo 'La exportación contiene ' . number_format($total, 0, '.', ',')
+        . ' registros. Aplica un periodo o filtros más específicos; el máximo por exportación es '
+        . number_format($limite, 0, '.', ',') . '.';
+    exit;
+}
+
+function rep_xlsx_columnas(array $columnas): array
+{
+    $salida = [];
+    foreach ($columnas as $columna) {
+        $tipo = (string) ($columna['tipo'] ?? 'texto');
+        $salida[] = [
+            'campo' => (string) $columna['campo'],
+            'titulo' => (string) $columna['titulo'],
+            'tipo' => in_array($tipo, ['moneda', 'moneda_base', 'cantidad', 'entero'], true) ? 'numero' : 'texto',
+            'ancho' => rep_xlsx_ancho_columna((string) $columna['titulo'], $tipo),
+        ];
+    }
+    return $salida;
+}
+
+function rep_xlsx_ancho_columna(string $titulo, string $tipo): int
+{
+    if (in_array($tipo, ['moneda', 'moneda_base', 'cantidad', 'entero'], true)) {
+        return 16;
+    }
+    if (in_array($tipo, ['fecha', 'fecha_hora'], true)) {
+        return 20;
+    }
+    return max(12, min(34, mb_strlen($titulo) + 10));
+}
+
+function rep_xlsx_resumen(array $def, array $f, int $total, string $monedaBase): array
+{
+    $filas = [
+        ['concepto' => 'Reporte', 'valor' => (string) $def['nombre']],
+        ['concepto' => 'Generado', 'valor' => date('Y-m-d H:i:s')],
+        ['concepto' => 'Registros', 'valor' => (string) $total],
+        ['concepto' => 'Moneda base del sistema', 'valor' => $monedaBase],
+    ];
+
+    $mapa = [
+        'buscar' => 'Búsqueda', 'fecha_desde' => 'Fecha desde', 'fecha_hasta' => 'Fecha hasta',
+        'producto_id' => 'Producto ID', 'proveedor_id' => 'Proveedor ID', 'cliente_id' => 'Cliente ID',
+        'usuario_id' => 'Usuario ID', 'almacen_id' => 'Almacén ID', 'estado' => 'Estado / acción',
+    ];
+    foreach ($mapa as $clave => $titulo) {
+        $valor = $f[$clave] ?? '';
+        if ($valor === '' || $valor === 0 || $valor === '0') {
+            continue;
+        }
+        $filas[] = ['concepto' => $titulo, 'valor' => (string) $valor];
+    }
+    if (count($filas) === 4) {
+        $filas[] = ['concepto' => 'Filtros', 'valor' => 'Sin filtros adicionales'];
+    }
+    return $filas;
+}
+
+function rep_xlsx_detalles_especiales(PDO $conexion, string $codigo, array $f): array
+{
+    [$sql, $params, $columnas, $nombre, $orden] = rep_xlsx_detalle_sql($codigo, $f);
+    if ($sql === '') {
+        return [];
+    }
+
+    $total = rep_total_filas($conexion, $sql, $params);
+    rep_validar_limite_exportacion($total);
+    $stmt = $conexion->prepare($sql . ' ' . $orden);
+    rep_bind($stmt, $params);
+    $stmt->execute();
+
+    return [[
+        'nombre' => $nombre,
+        'columnas' => rep_xlsx_columnas($columnas),
+        'filas' => $stmt->fetchAll(PDO::FETCH_ASSOC),
+    ]];
+}
+
+function rep_xlsx_detalle_sql(string $codigo, array $f): array
+{
+    $where = ['1=1'];
+    $params = [];
+
+    if ($codigo === 'RECEPCIONES') {
+        rep_fecha($where, $params, 'rc.fecha_recepcion', $f);
+        rep_id($where, $params, 'c.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+        rep_id($where, $params, 'rc.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'rc.estado', $f['estado']);
+        rep_id($where, $params, 'rcd.producto_id', 'producto_id', $f['producto_id']);
+        rep_id($where, $params, 'rcd.almacen_id', 'almacen_id', $f['almacen_id']);
+        rep_buscar($where, $params, $f['buscar'], ['rc.folio', 'c.folio', 'c.proveedor_nombre_snapshot', 'pr.razon_social', 'rc.documento_recepcion']);
+        $sql = "SELECT rc.fecha_recepcion AS fecha, rc.folio, c.folio AS compra,
+                       COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                       rc.estado, a.nombre AS almacen, p.sku, p.nombre AS producto,
+                       rcd.cantidad_recibida, COALESCE(cd.unidad_nombre_snapshot,'') AS unidad_compra,
+                       rcd.cantidad_base, um.codigo AS unidad_base, COALESCE(rcd.observaciones,'') AS observaciones
+                FROM recepciones_compra rc
+                INNER JOIN compras c ON c.id = rc.compra_id
+                LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+                INNER JOIN recepciones_compra_detalle rcd ON rcd.recepcion_id = rc.id
+                INNER JOIN compras_detalle cd ON cd.id = rcd.compra_detalle_id
+                INNER JOIN almacenes a ON a.id = rcd.almacen_id
+                INNER JOIN productos p ON p.id = rcd.producto_id
+                INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Recepción'), rep_col('compra','Compra'), rep_col('proveedor','Proveedor'), rep_col('estado','Estado'),
+            rep_col('almacen','Almacén'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('cantidad_recibida','Cantidad recibida','cantidad'),
+            rep_col('unidad_compra','Unidad compra'), rep_col('cantidad_base','Cantidad base','cantidad'), rep_col('unidad_base','Unidad base'), rep_col('observaciones','Observaciones'),
+        ];
+        return [$sql, $params, $cols, 'Detalle recepciones', 'ORDER BY rc.fecha_recepcion ASC, rc.id ASC, rcd.id ASC'];
+    }
+
+    if ($codigo === 'AJUSTES') {
+        rep_fecha($where, $params, 'ai.fecha_ajuste', $f);
+        rep_id($where, $params, 'ai.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'ai.estado', $f['estado']);
+        $where[] = "ai.tipo IN ('AJUSTE_POSITIVO','AJUSTE_NEGATIVO')";
+        rep_id($where, $params, 'aid.producto_id', 'producto_id', $f['producto_id']);
+        rep_id($where, $params, 'aid.almacen_id', 'almacen_id', $f['almacen_id']);
+        rep_buscar($where, $params, $f['buscar'], ['ai.folio', 'ai.motivo', 'ai.observaciones']);
+        $sql = "SELECT ai.fecha_ajuste AS fecha, ai.folio, ai.tipo, ai.estado, ai.motivo,
+                       a.nombre AS almacen, p.sku, p.nombre AS producto, aid.cantidad_base AS cantidad,
+                       um.codigo AS unidad, COALESCE(aid.observaciones,'') AS observaciones
+                FROM ajustes_inventario ai
+                INNER JOIN ajustes_inventario_detalle aid ON aid.ajuste_id = ai.id
+                INNER JOIN almacenes a ON a.id = aid.almacen_id
+                INNER JOIN productos p ON p.id = aid.producto_id
+                INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Folio'), rep_col('tipo','Tipo'), rep_col('estado','Estado'), rep_col('motivo','Motivo'),
+            rep_col('almacen','Almacén'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('cantidad','Cantidad','cantidad'), rep_col('unidad','Unidad'), rep_col('observaciones','Observaciones'),
+        ];
+        return [$sql, $params, $cols, 'Detalle ajustes', 'ORDER BY ai.fecha_ajuste ASC, ai.id ASC, aid.renglon ASC'];
+    }
+
+    if ($codigo === 'DEVOLUCIONES_VENTA') {
+        rep_fecha($where, $params, 'dv.fecha_devolucion', $f);
+        rep_id($where, $params, 'dv.cliente_id', 'cliente_id', $f['cliente_id']);
+        rep_id($where, $params, 'dv.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'dv.estado', $f['estado']);
+        rep_id($where, $params, 'dvd.producto_id', 'producto_id', $f['producto_id']);
+        rep_id($where, $params, 'dvd.almacen_id', 'almacen_id', $f['almacen_id']);
+        rep_buscar($where, $params, $f['buscar'], ['dv.folio', 'v.folio', 'v.cliente_nombre_snapshot', 'cl.nombre_razon_social', 'dv.motivo']);
+        $sql = "SELECT dv.fecha_devolucion AS fecha, dv.folio, v.folio AS venta,
+                       COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
+                       dv.estado, a.nombre AS almacen, p.sku, p.nombre AS producto,
+                       dvd.cantidad_base AS cantidad, um.codigo AS unidad, dvd.importe, mon.codigo AS moneda_codigo,
+                       dv.motivo
+                FROM devoluciones_venta dv
+                INNER JOIN ventas v ON v.id = dv.venta_id
+                LEFT JOIN clientes cl ON cl.id = dv.cliente_id
+                INNER JOIN devoluciones_venta_detalle dvd ON dvd.devolucion_id = dv.id
+                INNER JOIN almacenes a ON a.id = dvd.almacen_id
+                INNER JOIN productos p ON p.id = dvd.producto_id
+                INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+                INNER JOIN monedas mon ON mon.id = v.moneda_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Devolución'), rep_col('venta','Venta'), rep_col('cliente','Cliente'), rep_col('estado','Estado'),
+            rep_col('almacen','Almacén'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('cantidad','Cantidad base','cantidad'), rep_col('unidad','Unidad base'),
+            rep_col('importe','Importe','moneda'), rep_col('moneda_codigo','Moneda'), rep_col('motivo','Motivo'),
+        ];
+        return [$sql, $params, $cols, 'Detalle devolución', 'ORDER BY dv.fecha_devolucion ASC, dv.id ASC, dvd.id ASC'];
+    }
+
+    if ($codigo === 'DEVOLUCIONES_COMPRA') {
+        rep_fecha($where, $params, 'dc.fecha_devolucion', $f);
+        rep_id($where, $params, 'dc.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+        rep_id($where, $params, 'dc.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'dc.estado', $f['estado']);
+        rep_id($where, $params, 'dcd.producto_id', 'producto_id', $f['producto_id']);
+        rep_id($where, $params, 'dcd.almacen_id', 'almacen_id', $f['almacen_id']);
+        rep_buscar($where, $params, $f['buscar'], ['dc.folio', 'c.folio', 'c.proveedor_nombre_snapshot', 'pr.razon_social', 'dc.motivo']);
+        $sql = "SELECT dc.fecha_devolucion AS fecha, dc.folio, c.folio AS compra,
+                       COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                       dc.estado, a.nombre AS almacen, p.sku, p.nombre AS producto,
+                       dcd.cantidad_base AS cantidad, um.codigo AS unidad, dcd.importe, mon.codigo AS moneda_codigo,
+                       COALESCE(rc.folio,'') AS recepcion, dc.motivo
+                FROM devoluciones_compra dc
+                INNER JOIN compras c ON c.id = dc.compra_id
+                LEFT JOIN proveedores pr ON pr.id = dc.proveedor_id
+                INNER JOIN devoluciones_compra_detalle dcd ON dcd.devolucion_id = dc.id
+                LEFT JOIN recepciones_compra_detalle rcd ON rcd.id = dcd.recepcion_detalle_id
+                LEFT JOIN recepciones_compra rc ON rc.id = rcd.recepcion_id
+                INNER JOIN almacenes a ON a.id = dcd.almacen_id
+                INNER JOIN productos p ON p.id = dcd.producto_id
+                INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+                INNER JOIN monedas mon ON mon.id = c.moneda_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Devolución'), rep_col('compra','Compra'), rep_col('recepcion','Recepción origen'), rep_col('proveedor','Proveedor'), rep_col('estado','Estado'),
+            rep_col('almacen','Almacén'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('cantidad','Cantidad base','cantidad'), rep_col('unidad','Unidad base'),
+            rep_col('importe','Importe','moneda'), rep_col('moneda_codigo','Moneda'), rep_col('motivo','Motivo'),
+        ];
+        return [$sql, $params, $cols, 'Detalle devolución', 'ORDER BY dc.fecha_devolucion ASC, dc.id ASC, dcd.id ASC'];
+    }
+
+    if ($codigo === 'TRANSFERENCIAS') {
+        rep_fecha($where, $params, 'mi.fecha_movimiento', $f);
+        rep_id($where, $params, 'COALESCE(mi.aplicado_by, mi.created_by)', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'mi.estado', $f['estado']);
+        $where[] = "tmi.codigo = 'TRANSFERENCIA'";
+        if ($f['producto_id'] > 0) {
+            $where[] = 'mo.producto_id = :producto_id';
+            $params['producto_id'] = $f['producto_id'];
+        }
+        if ($f['almacen_id'] > 0) {
+            $where[] = '(mo.almacen_id = :almacen_id OR md.almacen_id = :almacen_id)';
+            $params['almacen_id'] = $f['almacen_id'];
+        }
+        rep_buscar($where, $params, $f['buscar'], ['mi.folio', 'mi.motivo', 'mi.observaciones', 'ao.nombre', 'ad.nombre', 'p.sku', 'p.nombre']);
+        $sql = "SELECT mi.fecha_movimiento AS fecha, mi.folio, mi.estado,
+                       ao.nombre AS origen, ad.nombre AS destino, p.sku, p.nombre AS producto,
+                       ABS(mo.cantidad_delta) AS cantidad, um.codigo AS unidad,
+                       mo.existencia_antes AS origen_antes, mo.existencia_despues AS origen_despues,
+                       md.existencia_antes AS destino_antes, md.existencia_despues AS destino_despues,
+                       mo.costo_unitario_base AS costo_unitario_base,
+                       COALESCE((SELECT r.folio FROM movimientos_inventario r WHERE r.movimiento_revertido_id = mi.id ORDER BY r.id DESC LIMIT 1), '') AS reverso,
+                       COALESCE(mi.motivo,'') AS motivo
+                FROM movimientos_inventario mi
+                INNER JOIN tipos_movimiento_inventario tmi ON tmi.id = mi.tipo_movimiento_id
+                INNER JOIN movimientos_inventario_detalle mo ON mo.movimiento_id = mi.id AND mo.cantidad_delta < 0
+                INNER JOIN movimientos_inventario_detalle md ON md.movimiento_id = mi.id AND md.producto_id = mo.producto_id AND md.cantidad_delta > 0
+                INNER JOIN almacenes ao ON ao.id = mo.almacen_id
+                INNER JOIN almacenes ad ON ad.id = md.almacen_id
+                INNER JOIN productos p ON p.id = mo.producto_id
+                INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Transferencia'), rep_col('estado','Estado'), rep_col('origen','Origen'), rep_col('destino','Destino'),
+            rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('cantidad','Cantidad','cantidad'), rep_col('unidad','Unidad'),
+            rep_col('origen_antes','Origen antes','cantidad'), rep_col('origen_despues','Origen después','cantidad'), rep_col('destino_antes','Destino antes','cantidad'), rep_col('destino_despues','Destino después','cantidad'),
+            rep_col('costo_unitario_base','Costo unitario base','moneda_base'), rep_col('reverso','Reverso'), rep_col('motivo','Motivo'),
+        ];
+        return [$sql, $params, $cols, 'Detalle transferencias', 'ORDER BY mi.fecha_movimiento ASC, mi.id ASC, p.nombre ASC'];
+    }
+
+    return ['', [], [], '', ''];
+}
+
+
 function rep_sql(string $codigo, array $f): array
 {
-    $where = [];
+    $where = ['1=1'];
     $params = [];
-    $where[] = '1=1';
+    $monedaBaseSql = "COALESCE((SELECT mbase.codigo FROM monedas mbase WHERE mbase.es_base = 1 ORDER BY mbase.activo DESC, mbase.id ASC LIMIT 1), 'MXN')";
 
     switch ($codigo) {
         case 'COMPRAS':
@@ -392,11 +805,12 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['c.folio', 'c.proveedor_nombre_snapshot', 'c.proveedor_rfc_snapshot', 'c.numero_factura']);
             $sql = "SELECT c.fecha_compra AS fecha, c.folio,
                            COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
-                           COALESCE(c.numero_factura, '') AS factura, c.condicion_pago, c.estado,
-                           (c.total - c.impuesto_total) AS subtotal, c.impuesto_total AS impuesto, c.total,
+                           COALESCE(c.numero_factura, '') AS factura, c.condicion_pago, c.estado, mon.codigo AS moneda_codigo,
+                           c.subtotal, c.descuento_total AS descuento, c.impuesto_total AS impuesto, c.total,
                            COALESCE(u.usuario, '—') AS usuario
                     FROM compras c
                     LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+                    INNER JOIN monedas mon ON mon.id = c.moneda_id
                     LEFT JOIN usuarios u ON u.id = c.created_by
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY c.fecha_compra DESC, c.id DESC'];
@@ -413,10 +827,12 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['v.folio', 'v.cliente_nombre_snapshot', 'v.cliente_rfc_snapshot']);
             $sql = "SELECT v.fecha_venta AS fecha, v.folio,
                            COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
-                           v.condicion_pago, v.estado, (v.total - v.impuesto_total) AS subtotal, v.impuesto_total AS impuesto, v.total,
+                           v.condicion_pago, v.estado, mon.codigo AS moneda_codigo,
+                           v.subtotal, v.descuento_total AS descuento, v.impuesto_total AS impuesto, v.total,
                            COALESCE(u.usuario, '—') AS usuario
                     FROM ventas v
                     LEFT JOIN clientes cl ON cl.id = v.cliente_id
+                    INNER JOIN monedas mon ON mon.id = v.moneda_id
                     LEFT JOIN usuarios u ON u.id = v.created_by
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY v.fecha_venta DESC, v.id DESC'];
@@ -424,7 +840,11 @@ function rep_sql(string $codigo, array $f): array
         case 'COMPRAS_PROVEEDOR':
             rep_fecha($where, $params, 'c.fecha_compra', $f);
             rep_id($where, $params, 'c.proveedor_id', 'proveedor_id', $f['proveedor_id']);
-            rep_estado($where, $params, 'c.estado', $f['estado']);
+            if ($f['estado'] !== '') {
+                rep_estado($where, $params, 'c.estado', $f['estado']);
+            } else {
+                $where[] = "c.estado IN ('PENDIENTE_RECEPCION','RECIBIDA_PARCIAL','RECIBIDA')";
+            }
             if ($f['producto_id'] > 0) {
                 $where[] = 'EXISTS (SELECT 1 FROM compras_detalle cd_f WHERE cd_f.compra_id = c.id AND cd_f.producto_id = :producto_id)';
                 $params['producto_id'] = $f['producto_id'];
@@ -432,10 +852,11 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['c.proveedor_nombre_snapshot', 'c.proveedor_rfc_snapshot', 'pr.razon_social', 'pr.rfc']);
             $sql = "SELECT COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
                            COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
-                           COUNT(*) AS operaciones,
-                           COALESCE(SUM(c.total - c.impuesto_total),0) AS subtotal,
-                           COALESCE(SUM(c.impuesto_total),0) AS impuesto,
-                           COALESCE(SUM(c.total),0) AS total
+                           COUNT(*) AS operaciones, {$monedaBaseSql} AS moneda_codigo,
+                           COALESCE(SUM(c.subtotal * c.tipo_cambio_a_base),0) AS subtotal,
+                           COALESCE(SUM(c.descuento_total * c.tipo_cambio_a_base),0) AS descuento,
+                           COALESCE(SUM(c.impuesto_total * c.tipo_cambio_a_base),0) AS impuesto,
+                           COALESCE(SUM(c.total * c.tipo_cambio_a_base),0) AS total
                     FROM compras c
                     LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
                     WHERE " . implode(' AND ', $where) . "
@@ -447,7 +868,11 @@ function rep_sql(string $codigo, array $f): array
         case 'VENTAS_CLIENTE':
             rep_fecha($where, $params, 'v.fecha_venta', $f);
             rep_id($where, $params, 'v.cliente_id', 'cliente_id', $f['cliente_id']);
-            rep_estado($where, $params, 'v.estado', $f['estado']);
+            if ($f['estado'] !== '') {
+                rep_estado($where, $params, 'v.estado', $f['estado']);
+            } else {
+                $where[] = "v.estado = 'CONFIRMADA'";
+            }
             if ($f['producto_id'] > 0) {
                 $where[] = 'EXISTS (SELECT 1 FROM ventas_detalle vd_f WHERE vd_f.venta_id = v.id AND vd_f.producto_id = :producto_id)';
                 $params['producto_id'] = $f['producto_id'];
@@ -455,10 +880,11 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['v.cliente_nombre_snapshot', 'v.cliente_rfc_snapshot', 'cl.nombre_razon_social', 'cl.rfc']);
             $sql = "SELECT COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
                            COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '') AS rfc,
-                           COUNT(*) AS operaciones,
-                           COALESCE(SUM(v.total - v.impuesto_total),0) AS subtotal,
-                           COALESCE(SUM(v.impuesto_total),0) AS impuesto,
-                           COALESCE(SUM(v.total),0) AS total
+                           COUNT(*) AS operaciones, {$monedaBaseSql} AS moneda_codigo,
+                           COALESCE(SUM(v.subtotal * v.tipo_cambio_a_base),0) AS subtotal,
+                           COALESCE(SUM(v.descuento_total * v.tipo_cambio_a_base),0) AS descuento,
+                           COALESCE(SUM(v.impuesto_total * v.tipo_cambio_a_base),0) AS impuesto,
+                           COALESCE(SUM(v.total * v.tipo_cambio_a_base),0) AS total
                     FROM ventas v
                     LEFT JOIN clientes cl ON cl.id = v.cliente_id
                     WHERE " . implode(' AND ', $where) . "
@@ -466,6 +892,35 @@ function rep_sql(string $codigo, array $f): array
                              COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general'),
                              COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '')";
             return [$sql, $params, 'ORDER BY total DESC, cliente ASC'];
+
+        case 'RECEPCIONES':
+            rep_fecha($where, $params, 'rc.fecha_recepcion', $f);
+            rep_id($where, $params, 'c.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+            rep_id($where, $params, 'rc.created_by', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'rc.estado', $f['estado']);
+            if ($f['producto_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM recepciones_compra_detalle rcd_f WHERE rcd_f.recepcion_id = rc.id AND rcd_f.producto_id = :producto_id)';
+                $params['producto_id'] = $f['producto_id'];
+            }
+            if ($f['almacen_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM recepciones_compra_detalle rca_f WHERE rca_f.recepcion_id = rc.id AND rca_f.almacen_id = :almacen_id)';
+                $params['almacen_id'] = $f['almacen_id'];
+            }
+            rep_buscar($where, $params, $f['buscar'], ['rc.folio', 'c.folio', 'c.proveedor_nombre_snapshot', 'pr.razon_social', 'rc.documento_recepcion']);
+            $sql = "SELECT rc.fecha_recepcion AS fecha, rc.folio, c.folio AS compra,
+                           COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                           rc.estado, COALESCE(rc.documento_recepcion,'') AS documento,
+                           COUNT(DISTINCT rcd.producto_id) AS productos, COUNT(DISTINCT rcd.almacen_id) AS almacenes,
+                           COALESCE(u.usuario,'—') AS usuario
+                    FROM recepciones_compra rc
+                    INNER JOIN compras c ON c.id = rc.compra_id
+                    LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+                    LEFT JOIN recepciones_compra_detalle rcd ON rcd.recepcion_id = rc.id
+                    LEFT JOIN usuarios u ON u.id = rc.created_by
+                    WHERE " . implode(' AND ', $where) . "
+                    GROUP BY rc.id, rc.fecha_recepcion, rc.folio, c.folio, c.proveedor_nombre_snapshot, pr.razon_social,
+                             rc.estado, rc.documento_recepcion, u.usuario";
+            return [$sql, $params, 'ORDER BY fecha DESC, rc.id DESC'];
 
         case 'INVENTARIO':
         case 'MATERIA_PRIMA':
@@ -490,8 +945,8 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['p.sku', 'p.nombre', 'a.nombre']);
             $sql = "SELECT a.nombre AS almacen, p.sku, p.nombre AS producto, p.tipo AS tipo_producto,
                            ea.existencia_fisica, ea.cantidad_reservada AS reservada, ea.cantidad_disponible AS disponible,
-                           ea.stock_minimo, ea.punto_reorden,
-                           um.codigo AS unidad, ea.costo_promedio_base AS costo_promedio,
+                           ea.stock_minimo, ea.punto_reorden, um.codigo AS unidad, {$monedaBaseSql} AS moneda_codigo,
+                           ea.costo_promedio_base AS costo_promedio,
                            (ea.existencia_fisica * COALESCE(ea.costo_promedio_base,0)) AS valor_inventario,
                            CASE
                                WHEN ea.existencia_fisica <= 0 THEN 'SIN_STOCK'
@@ -545,6 +1000,30 @@ function rep_sql(string $codigo, array $f): array
             }
             return [$sql, $params, 'ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon ASC'];
 
+        case 'AJUSTES':
+            rep_fecha($where, $params, 'ai.fecha_ajuste', $f);
+            rep_id($where, $params, 'ai.created_by', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'ai.estado', $f['estado']);
+            $where[] = "ai.tipo IN ('AJUSTE_POSITIVO','AJUSTE_NEGATIVO')";
+            if ($f['producto_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM ajustes_inventario_detalle aid_f WHERE aid_f.ajuste_id = ai.id AND aid_f.producto_id = :producto_id)';
+                $params['producto_id'] = $f['producto_id'];
+            }
+            if ($f['almacen_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM ajustes_inventario_detalle aia_f WHERE aia_f.ajuste_id = ai.id AND aia_f.almacen_id = :almacen_id)';
+                $params['almacen_id'] = $f['almacen_id'];
+            }
+            rep_buscar($where, $params, $f['buscar'], ['ai.folio', 'ai.motivo', 'ai.observaciones']);
+            $sql = "SELECT ai.fecha_ajuste AS fecha, ai.folio, ai.tipo, ai.estado,
+                           COUNT(DISTINCT aid.producto_id) AS productos, COUNT(DISTINCT aid.almacen_id) AS almacenes,
+                           ai.motivo, COALESCE(u.usuario,'—') AS usuario
+                    FROM ajustes_inventario ai
+                    LEFT JOIN ajustes_inventario_detalle aid ON aid.ajuste_id = ai.id
+                    LEFT JOIN usuarios u ON u.id = ai.created_by
+                    WHERE " . implode(' AND ', $where) . "
+                    GROUP BY ai.id, ai.fecha_ajuste, ai.folio, ai.tipo, ai.estado, ai.motivo, u.usuario";
+            return [$sql, $params, 'ORDER BY fecha DESC, ai.id DESC'];
+
         case 'PRODUCCION':
             rep_fecha($where, $params, 'pd.fecha_produccion', $f);
             rep_id($where, $params, 'pd.created_by', 'usuario_id', $f['usuario_id']);
@@ -581,17 +1060,133 @@ function rep_sql(string $codigo, array $f): array
                     GROUP BY pd.id, pd.fecha_produccion, pd.folio, pd.estado, rp.nombre, pd.receta_version, u.usuario";
             return [$sql, $params, 'ORDER BY fecha DESC, folio DESC'];
 
+        case 'DEVOLUCIONES_VENTA':
+            rep_fecha($where, $params, 'dv.fecha_devolucion', $f);
+            rep_id($where, $params, 'dv.cliente_id', 'cliente_id', $f['cliente_id']);
+            rep_id($where, $params, 'dv.created_by', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'dv.estado', $f['estado']);
+            if ($f['producto_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM devoluciones_venta_detalle dvd_f WHERE dvd_f.devolucion_id = dv.id AND dvd_f.producto_id = :producto_id)';
+                $params['producto_id'] = $f['producto_id'];
+            }
+            if ($f['almacen_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM devoluciones_venta_detalle dva_f WHERE dva_f.devolucion_id = dv.id AND dva_f.almacen_id = :almacen_id)';
+                $params['almacen_id'] = $f['almacen_id'];
+            }
+            rep_buscar($where, $params, $f['buscar'], ['dv.folio', 'v.folio', 'v.cliente_nombre_snapshot', 'cl.nombre_razon_social', 'dv.motivo']);
+            $sql = "SELECT dv.fecha_devolucion AS fecha, dv.folio, v.folio AS venta,
+                           COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
+                           dv.estado, mon.codigo AS moneda_codigo, dv.total,
+                           dv.importe_compensado_cxc AS compensado, dv.importe_reembolso AS reembolso,
+                           dv.regularizacion_estado, dv.motivo, COALESCE(u.usuario,'—') AS usuario
+                    FROM devoluciones_venta dv
+                    INNER JOIN ventas v ON v.id = dv.venta_id
+                    LEFT JOIN clientes cl ON cl.id = dv.cliente_id
+                    INNER JOIN monedas mon ON mon.id = v.moneda_id
+                    LEFT JOIN usuarios u ON u.id = dv.created_by
+                    WHERE " . implode(' AND ', $where);
+            return [$sql, $params, 'ORDER BY dv.fecha_devolucion DESC, dv.id DESC'];
+
+        case 'DEVOLUCIONES_COMPRA':
+            rep_fecha($where, $params, 'dc.fecha_devolucion', $f);
+            rep_id($where, $params, 'dc.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+            rep_id($where, $params, 'dc.created_by', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'dc.estado', $f['estado']);
+            if ($f['producto_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM devoluciones_compra_detalle dcd_f WHERE dcd_f.devolucion_id = dc.id AND dcd_f.producto_id = :producto_id)';
+                $params['producto_id'] = $f['producto_id'];
+            }
+            if ($f['almacen_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM devoluciones_compra_detalle dca_f WHERE dca_f.devolucion_id = dc.id AND dca_f.almacen_id = :almacen_id)';
+                $params['almacen_id'] = $f['almacen_id'];
+            }
+            rep_buscar($where, $params, $f['buscar'], ['dc.folio', 'c.folio', 'c.proveedor_nombre_snapshot', 'pr.razon_social', 'dc.motivo']);
+            $sql = "SELECT dc.fecha_devolucion AS fecha, dc.folio, c.folio AS compra,
+                           COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                           dc.estado, mon.codigo AS moneda_codigo, dc.total,
+                           dc.importe_compensado_cxp AS compensado, dc.importe_reintegro AS reintegro,
+                           dc.regularizacion_estado, dc.motivo, COALESCE(u.usuario,'—') AS usuario
+                    FROM devoluciones_compra dc
+                    INNER JOIN compras c ON c.id = dc.compra_id
+                    LEFT JOIN proveedores pr ON pr.id = dc.proveedor_id
+                    INNER JOIN monedas mon ON mon.id = c.moneda_id
+                    LEFT JOIN usuarios u ON u.id = dc.created_by
+                    WHERE " . implode(' AND ', $where);
+            return [$sql, $params, 'ORDER BY dc.fecha_devolucion DESC, dc.id DESC'];
+
+        case 'REGULARIZACIONES_DEVOLUCIONES':
+            rep_fecha($where, $params, 'rf.created_at', $f);
+            rep_id($where, $params, 'rf.cliente_id', 'cliente_id', $f['cliente_id']);
+            rep_id($where, $params, 'rf.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+            rep_id($where, $params, 'rf.created_by', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'rf.estado', $f['estado']);
+            rep_buscar($where, $params, $f['buscar'], ['rf.folio', 'dv.folio', 'dc.folio', 'cl.nombre_razon_social', 'pr.razon_social', 'rf.referencia']);
+            $sql = "SELECT rf.created_at AS fecha, rf.folio, rf.tipo,
+                           COALESCE(dv.folio, dc.folio, '—') AS devolucion,
+                           COALESCE(cl.nombre_razon_social, pr.razon_social, '—') AS tercero,
+                           mon.codigo AS moneda_codigo, rf.importe, rf.estado,
+                           COALESCE(mp.nombre,'—') AS metodo, COALESCE(rf.referencia,'') AS referencia,
+                           COALESCE(u.usuario,'—') AS usuario
+                    FROM regularizaciones_financieras rf
+                    LEFT JOIN devoluciones_venta dv ON dv.id = rf.devolucion_venta_id
+                    LEFT JOIN devoluciones_compra dc ON dc.id = rf.devolucion_compra_id
+                    LEFT JOIN clientes cl ON cl.id = rf.cliente_id
+                    LEFT JOIN proveedores pr ON pr.id = rf.proveedor_id
+                    INNER JOIN monedas mon ON mon.id = rf.moneda_id
+                    LEFT JOIN metodos_pago mp ON mp.id = rf.metodo_pago_id
+                    LEFT JOIN usuarios u ON u.id = rf.created_by
+                    WHERE " . implode(' AND ', $where);
+            return [$sql, $params, 'ORDER BY rf.created_at DESC, rf.id DESC'];
+
+        case 'TRANSFERENCIAS':
+            rep_fecha($where, $params, 'mi.fecha_movimiento', $f);
+            rep_id($where, $params, 'COALESCE(mi.aplicado_by, mi.created_by)', 'usuario_id', $f['usuario_id']);
+            rep_estado($where, $params, 'mi.estado', $f['estado']);
+            $where[] = "tmi.codigo = 'TRANSFERENCIA'";
+            if ($f['producto_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM movimientos_inventario_detalle mit_p WHERE mit_p.movimiento_id = mi.id AND mit_p.producto_id = :producto_id)';
+                $params['producto_id'] = $f['producto_id'];
+            }
+            if ($f['almacen_id'] > 0) {
+                $where[] = 'EXISTS (SELECT 1 FROM movimientos_inventario_detalle mit_a WHERE mit_a.movimiento_id = mi.id AND mit_a.almacen_id = :almacen_id)';
+                $params['almacen_id'] = $f['almacen_id'];
+            }
+            rep_buscar($where, $params, $f['buscar'], ['mi.folio', 'mi.motivo', 'mi.observaciones', 'ao.nombre', 'ad.nombre']);
+            $sql = "SELECT mi.fecha_movimiento AS fecha, mi.folio, mi.estado,
+                           COALESCE(ao.nombre,'—') AS origen, COALESCE(ad.nombre,'—') AS destino,
+                           x.productos,
+                           COALESCE((SELECT r.folio FROM movimientos_inventario r WHERE r.movimiento_revertido_id = mi.id ORDER BY r.id DESC LIMIT 1), '') AS reverso,
+                           COALESCE(mi.motivo,'') AS motivo,
+                           COALESCE(ua.usuario, uc.usuario, '—') AS usuario
+                    FROM movimientos_inventario mi
+                    INNER JOIN tipos_movimiento_inventario tmi ON tmi.id = mi.tipo_movimiento_id
+                    INNER JOIN (
+                        SELECT mid.movimiento_id,
+                               MIN(CASE WHEN mid.cantidad_delta < 0 THEN mid.almacen_id END) AS origen_id,
+                               MIN(CASE WHEN mid.cantidad_delta > 0 THEN mid.almacen_id END) AS destino_id,
+                               COUNT(DISTINCT mid.producto_id) AS productos
+                        FROM movimientos_inventario_detalle mid
+                        GROUP BY mid.movimiento_id
+                    ) x ON x.movimiento_id = mi.id
+                    LEFT JOIN almacenes ao ON ao.id = x.origen_id
+                    LEFT JOIN almacenes ad ON ad.id = x.destino_id
+                    LEFT JOIN usuarios ua ON ua.id = mi.aplicado_by
+                    LEFT JOIN usuarios uc ON uc.id = mi.created_by
+                    WHERE " . implode(' AND ', $where);
+            return [$sql, $params, 'ORDER BY mi.fecha_movimiento DESC, mi.id DESC'];
+
         case 'CUENTAS_PAGAR':
             rep_fecha($where, $params, 'cxp.fecha_documento', $f);
             rep_id($where, $params, 'cxp.proveedor_id', 'proveedor_id', $f['proveedor_id']);
             rep_estado($where, $params, 'cxp.estado', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['cxp.folio', 'c.folio', 'pr.razon_social']);
             $sql = "SELECT cxp.fecha_documento AS fecha, cxp.folio, c.folio AS compra, pr.razon_social AS proveedor,
-                           cxp.importe_original, cxp.importe_pagado AS pagado, cxp.saldo_pendiente AS saldo,
+                           mon.codigo AS moneda_codigo, cxp.importe_original, cxp.importe_pagado AS pagado, cxp.saldo_pendiente AS saldo,
                            cxp.fecha_vencimiento AS vencimiento, cxp.estado
                     FROM cuentas_por_pagar cxp
                     INNER JOIN compras c ON c.id = cxp.compra_id
                     INNER JOIN proveedores pr ON pr.id = cxp.proveedor_id
+                    INNER JOIN monedas mon ON mon.id = cxp.moneda_id
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY cxp.fecha_documento DESC, cxp.id DESC'];
 
@@ -601,11 +1196,12 @@ function rep_sql(string $codigo, array $f): array
             rep_estado($where, $params, 'cxc.estado', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['cxc.folio', 'v.folio', 'cl.nombre_razon_social']);
             $sql = "SELECT cxc.fecha_documento AS fecha, cxc.folio, v.folio AS venta, cl.nombre_razon_social AS cliente,
-                           cxc.importe_original, cxc.importe_pagado AS pagado, cxc.saldo_pendiente AS saldo,
+                           mon.codigo AS moneda_codigo, cxc.importe_original, cxc.importe_pagado AS pagado, cxc.saldo_pendiente AS saldo,
                            cxc.fecha_vencimiento AS vencimiento, cxc.estado
                     FROM cuentas_por_cobrar cxc
                     INNER JOIN ventas v ON v.id = cxc.venta_id
                     INNER JOIN clientes cl ON cl.id = cxc.cliente_id
+                    INNER JOIN monedas mon ON mon.id = cxc.moneda_id
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY cxc.fecha_documento DESC, cxc.id DESC'];
 
@@ -616,7 +1212,7 @@ function rep_sql(string $codigo, array $f): array
             rep_estado($where, $params, 'pp.estado', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['pp.folio', 'pr.razon_social', 'pp.referencia']);
             $sql = "SELECT pp.fecha_pago AS fecha, pp.folio, pr.razon_social AS proveedor, mp.nombre AS metodo,
-                           pp.importe, mon.codigo AS moneda, COALESCE(pp.referencia,'') AS referencia, pp.estado,
+                           pp.importe, mon.codigo AS moneda_codigo, COALESCE(pp.referencia,'') AS referencia, pp.estado,
                            COALESCE(u.usuario,'—') AS usuario
                     FROM pagos_proveedor pp
                     INNER JOIN proveedores pr ON pr.id = pp.proveedor_id
@@ -633,7 +1229,7 @@ function rep_sql(string $codigo, array $f): array
             rep_estado($where, $params, 'pc.estado', $f['estado']);
             rep_buscar($where, $params, $f['buscar'], ['pc.folio', 'cl.nombre_razon_social', 'pc.referencia']);
             $sql = "SELECT pc.fecha_pago AS fecha, pc.folio, cl.nombre_razon_social AS cliente, mp.nombre AS metodo,
-                           pc.importe, mon.codigo AS moneda, COALESCE(pc.referencia,'') AS referencia, pc.estado,
+                           pc.importe, mon.codigo AS moneda_codigo, COALESCE(pc.referencia,'') AS referencia, pc.estado,
                            COALESCE(u.usuario,'—') AS usuario
                     FROM pagos_cliente pc
                     INNER JOIN clientes cl ON cl.id = pc.cliente_id
@@ -655,10 +1251,12 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['ct.folio', 'ct.cliente_nombre_snapshot', 'cl.nombre_razon_social']);
             $sql = "SELECT ct.fecha_cotizacion AS fecha, ct.folio,
                            COALESCE(NULLIF(ct.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
-                           ct.vigencia_hasta AS vigencia, ct.estado, (ct.total - ct.impuesto_total) AS subtotal, ct.impuesto_total AS impuesto, ct.total,
+                           ct.vigencia_hasta AS vigencia, ct.estado, mon.codigo AS moneda_codigo,
+                           ct.subtotal, ct.descuento_total AS descuento, ct.impuesto_total AS impuesto, ct.total,
                            COALESCE(u.usuario,'—') AS usuario
                     FROM cotizaciones ct
                     LEFT JOIN clientes cl ON cl.id = ct.cliente_id
+                    INNER JOIN monedas mon ON mon.id = ct.moneda_id
                     LEFT JOIN usuarios u ON u.id = ct.created_by
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY ct.fecha_cotizacion DESC, ct.id DESC'];
@@ -674,10 +1272,11 @@ function rep_sql(string $codigo, array $f): array
             }
             rep_buscar($where, $params, $f['buscar'], ['ap.folio', 'cl.nombre_razon_social']);
             $sql = "SELECT ap.fecha_apartado AS fecha, ap.folio, cl.nombre_razon_social AS cliente,
-                           ap.reservado_hasta, ap.estado, ap.total, ap.importe_anticipado AS anticipado,
-                           ap.saldo_pendiente AS saldo, COALESCE(u.usuario,'—') AS usuario
+                           ap.reservado_hasta, ap.estado, mon.codigo AS moneda_codigo, ap.total,
+                           ap.importe_anticipado AS anticipado, ap.saldo_pendiente AS saldo, COALESCE(u.usuario,'—') AS usuario
                     FROM apartados ap
                     INNER JOIN clientes cl ON cl.id = ap.cliente_id
+                    INNER JOIN monedas mon ON mon.id = ap.moneda_id
                     LEFT JOIN usuarios u ON u.id = ap.created_by
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY ap.fecha_apartado DESC, ap.id DESC'];
@@ -701,6 +1300,7 @@ function rep_sql(string $codigo, array $f): array
 
     throw new InvalidArgumentException('Reporte no soportado.');
 }
+
 
 function rep_filtros(array $def): array
 {
@@ -731,6 +1331,9 @@ function rep_codigo_reporte($valor): string
     $def = rep_definiciones();
     if (!isset($def[$codigo])) {
         si_responder_json(false, 'Selecciona un reporte válido.', [], 400);
+    }
+    if (!rep_reporte_autorizado($codigo)) {
+        si_responder_json(false, 'No tienes permiso para consultar este reporte.', [], 403);
     }
     return $codigo;
 }
@@ -819,7 +1422,7 @@ function rep_csv_seguro($valor, string $tipo = 'texto'): string
         return '';
     }
     $texto = (string) $valor;
-    if (in_array($tipo, ['moneda', 'cantidad', 'entero'], true)) {
+    if (in_array($tipo, ['moneda', 'moneda_base', 'cantidad', 'entero'], true)) {
         return $texto;
     }
     if ($texto !== '' && in_array($texto[0], ['=', '+', '-', '@'], true)) {
