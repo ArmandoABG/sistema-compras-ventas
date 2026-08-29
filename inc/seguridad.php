@@ -193,6 +193,7 @@ function si_requerir_sesion(?bool $json = null): void
     |--------------------------------------------------------------------------
     */
     si_validar_sesion_en_bd($json);
+    si_forzar_cambio_password_si_aplica($json);
 
     $_SESSION['ultima_actividad'] = time();
 
@@ -261,6 +262,7 @@ function si_validar_sesion_en_bd(bool $json): void
         $stmt = $conexion->prepare(
             "SELECT
                 u.activo,
+                u.debe_cambiar_password,
                 s.activa
              FROM sesiones_usuario s
              INNER JOIN usuarios u
@@ -290,12 +292,51 @@ function si_validar_sesion_en_bd(bool $json): void
             );
         }
 
+        $_SESSION['debe_cambiar_password'] = (int) ($estado['debe_cambiar_password'] ?? 0);
+
     } catch (Throwable $e) {
         error_log(
             '[SISTEMA INTEGRAL][VALIDAR SESION] '
             . $e->getMessage()
         );
     }
+}
+
+function si_forzar_cambio_password_si_aplica(bool $json): void
+{
+    if ((int) ($_SESSION['debe_cambiar_password'] ?? 0) !== 1) {
+        return;
+    }
+
+    $script = str_replace('\\', '/', (string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    $permitidas = [
+        '/JS/cambiar_password.php',
+        '/funciones/perfil_funciones.php',
+        '/funciones/logout.php',
+    ];
+
+    foreach ($permitidas as $permitida) {
+        if ($script !== '' && str_ends_with($script, $permitida)) {
+            return;
+        }
+    }
+
+    $redirect = si_url('JS/cambiar_password.php');
+
+    if ($json) {
+        si_responder_json(
+            false,
+            'Debes cambiar tu contraseña temporal antes de continuar.',
+            [
+                'cambio_password_requerido' => true,
+                'redirect' => $redirect,
+            ],
+            403
+        );
+    }
+
+    header('Location: ' . $redirect);
+    exit;
 }
 
 function si_actualizar_token_sesion_bd(): void

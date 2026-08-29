@@ -350,8 +350,11 @@ try {
         'Inicio de sesión correcto.',
         [
             'redirect' => si_url(
-                'JS/dashboard.php'
+                (int) ($_SESSION['debe_cambiar_password'] ?? 0) === 1
+                    ? 'JS/cambiar_password.php'
+                    : 'JS/dashboard.php'
             ),
+            'cambio_password_requerido' => (int) ($_SESSION['debe_cambiar_password'] ?? 0) === 1,
         ]
     );
 

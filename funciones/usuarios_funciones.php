@@ -302,7 +302,7 @@ function usr_guardar(PDO $conexion): void
     if ($esNuevo) {
         $hash = password_hash($password, PASSWORD_DEFAULT);
         if ($hash === false) throw new RuntimeException('No fue posible proteger la contraseña.');
-        $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, password_hash, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, debe_cambiar_password) VALUES (:usuario, :password_hash, :nombres, :apellido_paterno, :apellido_materno, :correo, :telefono, 1, 0)");
+        $stmt = $conexion->prepare("INSERT INTO usuarios (usuario, password_hash, nombres, apellido_paterno, apellido_materno, correo, telefono, activo, debe_cambiar_password) VALUES (:usuario, :password_hash, :nombres, :apellido_paterno, :apellido_materno, :correo, :telefono, 1, 1)");
         $stmt->execute([
             ':usuario' => $usuario,
             ':password_hash' => $hash,
@@ -403,37 +403,110 @@ function usr_cambiar_estado(PDO $conexion): void
 
 function usr_cambiar_password(PDO $conexion): void
 {
-    if (!si_tiene_permiso('usuarios.editar')) si_responder_json(false, 'No tienes permiso para restablecer contraseñas.', [], 403);
+    $roles = $_SESSION['roles'] ?? [];
+    if (!is_array($roles) || !in_array('ADMINISTRADOR', $roles, true)) {
+        si_responder_json(false, 'Solo un Administrador puede restablecer contraseñas de otras cuentas.', [], 403);
+    }
 
     $id = usr_id($_POST['usuario_id'] ?? null);
+    $actorId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+    if ($id === $actorId) {
+        si_responder_json(
+            false,
+            'Para cambiar tu propia contraseña usa Mi perfil en la barra superior.',
+            ['usar_perfil' => true],
+            409
+        );
+    }
+
     $passwordActor = (string) ($_POST['password_actor'] ?? '');
     $nueva = (string) ($_POST['nueva_password'] ?? '');
     $confirmar = (string) ($_POST['confirmar_password'] ?? '');
-    usr_validar_password($nueva, $confirmar);
-    if ($passwordActor === '') si_responder_json(false, 'Ingresa tu contraseña actual para autorizar el cambio.', ['campo' => 'password_actor'], 422);
 
-    $actorId = (int) $_SESSION['usuario_id'];
-    $stmtActor = $conexion->prepare("SELECT password_hash FROM usuarios WHERE id = :id AND activo = 1 LIMIT 1");
+    usr_validar_password($nueva, $confirmar);
+
+    if ($passwordActor === '') {
+        si_responder_json(
+            false,
+            'Ingresa tu contraseña de Administrador para autorizar el restablecimiento.',
+            ['campo' => 'password_actor'],
+            422
+        );
+    }
+
+    $stmtActor = $conexion->prepare(
+        "SELECT password_hash
+         FROM usuarios
+         WHERE id = :id
+           AND activo = 1
+         LIMIT 1"
+    );
     $stmtActor->execute([':id' => $actorId]);
     $hashActor = $stmtActor->fetchColumn();
-    if (!$hashActor || !password_verify($passwordActor, (string) $hashActor)) si_responder_json(false, 'Tu contraseña de autorización es incorrecta.', ['campo' => 'password_actor'], 403);
+
+    if (!$hashActor || !password_verify($passwordActor, (string) $hashActor)) {
+        si_responder_json(
+            false,
+            'Tu contraseña de Administrador es incorrecta.',
+            ['campo' => 'password_actor'],
+            403
+        );
+    }
 
     $conexion->beginTransaction();
     $usuario = usr_bloquear_usuario($conexion, $id);
-    if (!$usuario) usr_cancelar($conexion, 'El usuario ya no existe.', 404);
 
-    $hash = password_hash($nueva, PASSWORD_DEFAULT);
-    if ($hash === false) throw new RuntimeException('No fue posible proteger la nueva contraseña.');
-
-    $conexion->prepare("UPDATE usuarios SET password_hash = :password_hash, intentos_fallidos = 0, bloqueado_hasta = NULL, debe_cambiar_password = 0 WHERE id = :id")->execute([':password_hash' => $hash, ':id' => $id]);
-
-    if ($id !== $actorId) {
-        $conexion->prepare("UPDATE sesiones_usuario SET activa = 0, fin_sesion = COALESCE(fin_sesion, NOW()), motivo_cierre = 'PASSWORD_RESTABLECIDA' WHERE usuario_id = :usuario_id AND activa = 1")->execute([':usuario_id' => $id]);
+    if (!$usuario) {
+        usr_cancelar($conexion, 'El usuario ya no existe.', 404);
     }
 
-    usr_auditar($conexion, $actorId, 'PASSWORD_RESTABLECIDA', $id, 'Se restableció la contraseña de una cuenta.', null, null);
+    $hash = password_hash($nueva, PASSWORD_DEFAULT);
+    if ($hash === false) {
+        throw new RuntimeException('No fue posible proteger la contraseña temporal.');
+    }
+
+    $conexion->prepare(
+        "UPDATE usuarios
+         SET password_hash = :password_hash,
+             intentos_fallidos = 0,
+             bloqueado_hasta = NULL,
+             debe_cambiar_password = 1
+         WHERE id = :id"
+    )->execute([
+        ':password_hash' => $hash,
+        ':id' => $id,
+    ]);
+
+    $stmtCerrar = $conexion->prepare(
+        "UPDATE sesiones_usuario
+         SET activa = 0,
+             fin_sesion = COALESCE(fin_sesion, NOW()),
+             motivo_cierre = 'PASSWORD_RESTABLECIDA_ADMIN'
+         WHERE usuario_id = :usuario_id
+           AND activa = 1"
+    );
+    $stmtCerrar->execute([':usuario_id' => $id]);
+
+    usr_auditar(
+        $conexion,
+        $actorId,
+        'PASSWORD_RESTABLECIDA_ADMIN',
+        $id,
+        'Un Administrador estableció una contraseña temporal. El usuario deberá cambiarla en su próximo inicio de sesión.',
+        null,
+        [
+            'debe_cambiar_password' => 1,
+            'sesiones_cerradas' => $stmtCerrar->rowCount(),
+        ]
+    );
+
     $conexion->commit();
-    si_responder_json(true, 'Contraseña actualizada correctamente.');
+
+    si_responder_json(
+        true,
+        'Contraseña temporal establecida. El usuario deberá cambiarla al iniciar sesión.'
+    );
 }
 
 function usr_resumen_general(PDO $conexion): array

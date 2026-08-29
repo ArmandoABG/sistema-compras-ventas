@@ -25,6 +25,8 @@ $puedeDesactivar = si_tiene_permiso('usuarios.desactivar');
 $puedeRoles = si_tiene_permiso('roles.administrar');
 $rolesSesion = $_SESSION['roles'] ?? [];
 $puedeConfigurarAlertasEmail = is_array($rolesSesion) && in_array('ADMINISTRADOR', $rolesSesion, true);
+$puedeRestablecerPassword = $puedeConfigurarAlertasEmail;
+$usuarioSesionId = (int) ($_SESSION['usuario_id'] ?? 0);
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_usuarios.css';
@@ -126,7 +128,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             </section>
 
             <section class="form-section" id="seccionPasswordNuevo">
-                <h3>Contraseña inicial</h3>
+                <h3>Contraseña temporal inicial</h3><p>El usuario deberá sustituirla por una contraseña personal en su primer inicio de sesión.</p>
                 <div class="form-grid">
                     <label class="field"><span>Contraseña *</span><input type="password" name="password" id="password" minlength="10" maxlength="72" autocomplete="new-password"></label>
                     <label class="field"><span>Confirmar contraseña *</span><input type="password" name="confirmar_password" id="confirmarPassword" minlength="10" maxlength="72" autocomplete="new-password"></label>
@@ -140,16 +142,23 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
 <div class="modal-backdrop" id="modalPassword" hidden>
     <section class="modal-card" role="dialog" aria-modal="true">
-        <header class="modal-header"><div><small>SEGURIDAD</small><h2>Restablecer contraseña</h2></div><button type="button" class="modal-close" data-cerrar-modal="modalPassword">×</button></header>
+        <header class="modal-header"><div><small>SEGURIDAD</small><h2 id="tituloPasswordReset">Restablecer contraseña</h2></div><button type="button" class="modal-close" data-cerrar-modal="modalPassword">×</button></header>
         <form id="formPassword">
             <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfToken) ?>">
             <input type="hidden" name="accion" value="CAMBIAR_PASSWORD">
             <input type="hidden" name="usuario_id" id="passwordUsuarioId">
             <div id="mensajePassword" class="usuarios-message usuarios-message--error" hidden></div>
-            <label class="field"><span>Nueva contraseña *</span><input type="password" name="nueva_password" minlength="10" maxlength="72" required></label>
-            <label class="field"><span>Confirmar nueva contraseña *</span><input type="password" name="confirmar_password" minlength="10" maxlength="72" required></label>
-            <label class="field"><span>Tu contraseña actual *</span><input type="password" name="password_actor" autocomplete="current-password" required><small>Se solicita para autorizar el cambio de credenciales.</small></label>
-            <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalPassword">Cancelar</button><button type="submit" class="btn-primary">Actualizar contraseña</button></footer>
+            <div class="password-reset-note">
+                <strong>No necesitas conocer la contraseña anterior del trabajador.</strong>
+                <span>Define una contraseña temporal. Se cerrarán sus sesiones activas y deberá sustituirla al iniciar sesión.</span>
+            </div>
+            <div class="password-reset-grid">
+                <label class="field"><span>Contraseña temporal *</span><input type="password" name="nueva_password" id="passwordTemporal" minlength="10" maxlength="72" autocomplete="new-password" required></label>
+                <label class="field"><span>Confirmar contraseña temporal *</span><input type="password" name="confirmar_password" id="passwordTemporalConfirmar" minlength="10" maxlength="72" autocomplete="new-password" required></label>
+            </div>
+            <button type="button" class="btn-secondary password-generate" id="btnGenerarPasswordTemporal">Generar contraseña temporal</button>
+            <label class="field"><span>Tu contraseña de Administrador *</span><input type="password" name="password_actor" autocomplete="current-password" required><small>Confirma que realmente eres tú quien autoriza el restablecimiento.</small></label>
+            <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalPassword">Cancelar</button><button type="submit" class="btn-primary">Restablecer contraseña</button></footer>
         </form>
     </section>
 </div>
@@ -248,8 +257,11 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         crear: <?= $puedeCrear ? 'true' : 'false' ?>,
         editar: <?= $puedeEditar ? 'true' : 'false' ?>,
         desactivar: <?= $puedeDesactivar ? 'true' : 'false' ?>,
-        alertasEmail: <?= $puedeConfigurarAlertasEmail ? 'true' : 'false' ?>
+        alertasEmail: <?= $puedeConfigurarAlertasEmail ? 'true' : 'false' ?>,
+        restablecerPassword: <?= $puedeRestablecerPassword ? 'true' : 'false' ?>
     };
+
+    const usuarioSesionId = <?= $usuarioSesionId ?>;
 
     const estado = {
         pagina: 1,
@@ -339,7 +351,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             let acciones = '';
             if (permisos.editar) {
                 acciones += '<button class="table-action" data-action="editar" data-id="' + u.id + '">Editar</button>';
-                acciones += '<button class="table-action" data-action="password" data-id="' + u.id + '">Contraseña</button>';
+            }
+            if (permisos.restablecerPassword && Number(u.id) !== usuarioSesionId) {
+                acciones += '<button class="table-action" data-action="password" data-id="' + u.id + '">Restablecer clave</button>';
             }
             acciones += '<button class="table-action" data-action="sesiones" data-id="' + u.id + '">Sesiones</button>';
             if (permisos.desactivar && !u.es_usuario_actual) {
@@ -350,7 +364,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 + '<td>' + escapeHtml(u.nombre_completo) + '</td>'
                 + '<td>' + escapeHtml(u.roles_nombres || 'Sin rol') + '</td>'
                 + '<td>' + (contacto || '<span class="cell-muted">Sin contacto</span>') + '</td>'
-                + '<td><span class="' + estadoClase + '">' + estadoTexto + '</span></td>'
+                + '<td><span class="' + estadoClase + '">' + estadoTexto + '</span>' + (Number(u.debe_cambiar_password) === 1 ? '<small class="cell-secondary">Cambio de contraseña pendiente</small>' : '') + '</td>'
                 + '<td>' + escapeHtml(u.ultimo_acceso_texto) + '</td>'
                 + '<td class="text-right actions-cell">' + acciones + '</td>'
                 + '</tr>';
@@ -405,7 +419,55 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         catch (error) { mostrarMensaje(mensajePagina, error.message, 'error'); }
     }
 
-    function abrirPassword(id) { $('formPassword').reset(); $('passwordUsuarioId').value = id; ocultarMensaje($('mensajePassword')); abrirModal('modalPassword'); }
+    function abrirPassword(id) {
+        if (!permisos.restablecerPassword || Number(id) === usuarioSesionId) return;
+        const usuarioObjetivo = estado.usuarios.find(function (u) { return Number(u.id) === Number(id); });
+        $('formPassword').reset();
+        $('passwordUsuarioId').value = id;
+        $('tituloPasswordReset').textContent = 'Restablecer contraseña' + (usuarioObjetivo ? ' · ' + usuarioObjetivo.usuario : '');
+        $('passwordTemporal').type = 'password';
+        $('passwordTemporalConfirmar').type = 'password';
+        ocultarMensaje($('mensajePassword'));
+        abrirModal('modalPassword');
+    }
+
+    function generarPasswordTemporal() {
+        const mayus = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const minus = 'abcdefghijkmnopqrstuvwxyz';
+        const numeros = '23456789';
+        const simbolos = '!@#$%*-_';
+        const todos = mayus + minus + numeros + simbolos;
+
+        function indiceSeguro(maximo) {
+            const limite = Math.floor(0x100000000 / maximo) * maximo;
+            const values = new Uint32Array(1);
+            do {
+                window.crypto.getRandomValues(values);
+            } while (values[0] >= limite);
+            return values[0] % maximo;
+        }
+
+        function tomar(chars) {
+            return chars[indiceSeguro(chars.length)];
+        }
+
+        const chars = [tomar(mayus), tomar(minus), tomar(numeros), tomar(simbolos)];
+        while (chars.length < 14) chars.push(tomar(todos));
+
+        for (let i = chars.length - 1; i > 0; i--) {
+            const j = indiceSeguro(i + 1);
+            const temp = chars[i];
+            chars[i] = chars[j];
+            chars[j] = temp;
+        }
+
+        const password = chars.join('');
+        $('passwordTemporal').value = password;
+        $('passwordTemporalConfirmar').value = password;
+        $('passwordTemporal').type = 'text';
+        $('passwordTemporalConfirmar').type = 'text';
+        mostrarMensaje($('mensajePassword'), 'Contraseña temporal generada. Cópiala y entrégala al usuario de forma segura.', 'success');
+    }
 
     async function cambiarPassword(event) {
         event.preventDefault(); const form = event.currentTarget; const msg = $('mensajePassword'); ocultarMensaje(msg); const boton = form.querySelector('button[type="submit"]'); boton.disabled = true;
@@ -770,6 +832,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     $('btnActualizar').addEventListener('click', cargarUsuarios);
     $('formUsuario').addEventListener('submit', guardarUsuario);
     $('formPassword').addEventListener('submit', cambiarPassword);
+    $('btnGenerarPasswordTemporal')?.addEventListener('click', generarPasswordTemporal);
     tabla.addEventListener('click', e => {
         const b = e.target.closest('[data-action]'); if (!b) return; const id = Number(b.dataset.id);
         if (b.dataset.action === 'editar') editarUsuario(id);

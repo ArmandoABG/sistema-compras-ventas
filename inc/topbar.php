@@ -12,6 +12,16 @@ $rolUsuario = trim((string) (
     $_SESSION['rol_nombre']
     ?? 'Usuario'
 ));
+
+$partesNombre = preg_split('/\s+/', $nombreUsuario, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+$inicialesUsuario = '';
+foreach (array_slice($partesNombre, 0, 2) as $parteNombre) {
+    $inicialesUsuario .= mb_strtoupper(mb_substr((string) $parteNombre, 0, 1));
+}
+if ($inicialesUsuario === '') {
+    $inicialesUsuario = 'U';
+}
+$csrfTopbar = si_token_csrf();
 ?>
 <header class="topbar">
     <div class="topbar-title">
@@ -67,27 +77,100 @@ $rolUsuario = trim((string) (
             </section>
         </div>
 
-        <div class="topbar-user__text">
-            <strong><?= si_escapar($nombreUsuario) ?></strong>
-            <small><?= si_escapar($rolUsuario) ?></small>
-        </div>
-
-        <form
-            action="<?= si_escapar(si_url('funciones/logout.php')) ?>"
-            method="post"
-        >
-            <input
-                type="hidden"
-                name="csrf_token"
-                value="<?= si_escapar(si_token_csrf()) ?>"
+        <div class="topbar-account" id="topbarAccount">
+            <button
+                type="button"
+                class="topbar-account__button"
+                id="topbarAccountButton"
+                aria-haspopup="true"
+                aria-expanded="false"
+                aria-controls="topbarAccountMenu"
             >
-
-            <button type="submit" class="topbar-logout">
-                Cerrar sesión
+                <span class="topbar-account__avatar" aria-hidden="true"><?= si_escapar($inicialesUsuario) ?></span>
+                <span class="topbar-user__text">
+                    <strong id="topbarAccountName"><?= si_escapar($nombreUsuario) ?></strong>
+                    <small><?= si_escapar($rolUsuario) ?></small>
+                </span>
+                <span class="topbar-account__chevron" aria-hidden="true">⌄</span>
             </button>
-        </form>
+
+            <section class="topbar-account__menu" id="topbarAccountMenu" hidden>
+                <button type="button" id="topbarOpenProfile">
+                    <strong>Mi perfil</strong>
+                    <small>Editar mis datos y contraseña</small>
+                </button>
+                <form action="<?= si_escapar(si_url('funciones/logout.php')) ?>" method="post">
+                    <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfTopbar) ?>">
+                    <button type="submit" class="topbar-account__logout">Cerrar sesión</button>
+                </form>
+            </section>
+        </div>
     </div>
 </header>
+
+<div class="topbar-profile-modal" id="topbarProfileModal" hidden>
+    <section class="topbar-profile-card" role="dialog" aria-modal="true" aria-labelledby="topbarProfileTitle">
+        <header class="topbar-profile-card__head">
+            <div>
+                <small>CUENTA PERSONAL</small>
+                <h2 id="topbarProfileTitle">Mi perfil</h2>
+            </div>
+            <button type="button" class="topbar-profile-card__close" id="topbarProfileClose" aria-label="Cerrar">×</button>
+        </header>
+
+        <div class="topbar-profile-card__body">
+            <div id="topbarProfileMessage" class="topbar-profile-message" hidden></div>
+
+            <form id="topbarProfileForm">
+                <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfTopbar) ?>">
+                <input type="hidden" name="accion" value="GUARDAR_PERFIL">
+
+                <div class="topbar-profile-account-summary">
+                    <div>
+                        <span>Usuario</span>
+                        <strong id="topbarProfileUsuario"><?= si_escapar((string) ($_SESSION['usuario'] ?? '')) ?></strong>
+                    </div>
+                    <div>
+                        <span>Rol principal</span>
+                        <strong><?= si_escapar($rolUsuario) ?></strong>
+                    </div>
+                </div>
+
+                <div class="topbar-profile-grid">
+                    <label><span>Nombres *</span><input type="text" name="nombres" id="topbarProfileNombres" maxlength="120" required></label>
+                    <label><span>Apellido paterno</span><input type="text" name="apellido_paterno" id="topbarProfileApellidoP" maxlength="100"></label>
+                    <label><span>Apellido materno</span><input type="text" name="apellido_materno" id="topbarProfileApellidoM" maxlength="100"></label>
+                    <label><span>Correo</span><input type="email" name="correo" id="topbarProfileCorreo" maxlength="180"></label>
+                    <label><span>Teléfono</span><input type="text" name="telefono" id="topbarProfileTelefono" maxlength="30"></label>
+                </div>
+
+                <footer class="topbar-profile-actions">
+                    <button type="submit" class="topbar-profile-primary" id="topbarProfileSave">Guardar mis datos</button>
+                </footer>
+            </form>
+
+            <section class="topbar-profile-password">
+                <div>
+                    <h3>Cambiar mi contraseña</h3>
+                    <p>Para proteger tu cuenta, debes confirmar tu contraseña actual.</p>
+                </div>
+
+                <form id="topbarPasswordForm">
+                    <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfTopbar) ?>">
+                    <input type="hidden" name="accion" value="CAMBIAR_PASSWORD">
+                    <div class="topbar-profile-grid">
+                        <label><span>Contraseña actual *</span><input type="password" name="password_actual" autocomplete="current-password" required></label>
+                        <label><span>Nueva contraseña *</span><input type="password" name="nueva_password" minlength="10" maxlength="72" autocomplete="new-password" required></label>
+                        <label><span>Confirmar nueva contraseña *</span><input type="password" name="confirmar_password" minlength="10" maxlength="72" autocomplete="new-password" required></label>
+                    </div>
+                    <footer class="topbar-profile-actions">
+                        <button type="submit" class="topbar-profile-secondary" id="topbarPasswordSave">Cambiar contraseña</button>
+                    </footer>
+                </form>
+            </section>
+        </div>
+    </section>
+</div>
 
 <script>
 (function () {
@@ -297,6 +380,167 @@ $rolUsuario = trim((string) (
     window.setInterval(processStockEmail, 60000);
     document.addEventListener('visibilitychange', function () {
         if (document.visibilityState === 'visible') processStockEmail();
+    });
+})();
+</script>
+
+<script>
+(function () {
+    'use strict';
+
+    const root = document.getElementById('topbarAccount');
+    const button = document.getElementById('topbarAccountButton');
+    const menu = document.getElementById('topbarAccountMenu');
+    const openProfile = document.getElementById('topbarOpenProfile');
+    const modal = document.getElementById('topbarProfileModal');
+    const close = document.getElementById('topbarProfileClose');
+    const profileForm = document.getElementById('topbarProfileForm');
+    const passwordForm = document.getElementById('topbarPasswordForm');
+    const message = document.getElementById('topbarProfileMessage');
+    const endpoint = <?= json_encode(si_url('funciones/perfil_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+
+    if (!root || !button || !menu || !openProfile || !modal || !close || !profileForm || !passwordForm || !message) {
+        return;
+    }
+
+    function showMessage(text, type) {
+        message.textContent = text || '';
+        message.className = 'topbar-profile-message is-' + (type || 'error');
+        message.hidden = false;
+    }
+
+    function hideMessage() {
+        message.hidden = true;
+        message.textContent = '';
+    }
+
+    async function api(url, options) {
+        const response = await fetch(url, Object.assign({
+            credentials: 'same-origin',
+            headers: {'X-Requested-With': 'XMLHttpRequest'}
+        }, options || {}));
+
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch (e) { throw new Error('El servidor devolvió una respuesta no válida.'); }
+
+        if (data.cambio_password_requerido && data.redirect) {
+            window.location.href = data.redirect;
+            return null;
+        }
+        if (data.sesion_expirada && data.redirect) {
+            window.location.href = data.redirect;
+            return null;
+        }
+        if (!response.ok || data.success !== true) {
+            throw new Error(data.mensaje || 'No fue posible completar la operación.');
+        }
+        return data;
+    }
+
+    function openMenu() {
+        menu.hidden = false;
+        button.setAttribute('aria-expanded', 'true');
+    }
+
+    function closeMenu() {
+        menu.hidden = true;
+        button.setAttribute('aria-expanded', 'false');
+    }
+
+    function closeModal() {
+        modal.hidden = true;
+        document.body.classList.remove('topbar-profile-open');
+        hideMessage();
+        passwordForm.reset();
+    }
+
+    async function loadProfile() {
+        const data = await api(endpoint + '?accion=OBTENER');
+        if (!data) return;
+        const p = data.perfil || {};
+        document.getElementById('topbarProfileUsuario').textContent = p.usuario || '';
+        document.getElementById('topbarProfileNombres').value = p.nombres || '';
+        document.getElementById('topbarProfileApellidoP').value = p.apellido_paterno || '';
+        document.getElementById('topbarProfileApellidoM').value = p.apellido_materno || '';
+        document.getElementById('topbarProfileCorreo').value = p.correo || '';
+        document.getElementById('topbarProfileTelefono').value = p.telefono || '';
+    }
+
+    button.addEventListener('click', function () {
+        if (menu.hidden) openMenu();
+        else closeMenu();
+    });
+
+    openProfile.addEventListener('click', async function () {
+        closeMenu();
+        hideMessage();
+        modal.hidden = false;
+        document.body.classList.add('topbar-profile-open');
+        try {
+            await loadProfile();
+        } catch (error) {
+            showMessage(error.message, 'error');
+        }
+    });
+
+    close.addEventListener('click', closeModal);
+    modal.addEventListener('click', function (event) {
+        if (event.target === modal) closeModal();
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!menu.hidden && !root.contains(event.target)) closeMenu();
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            closeMenu();
+            if (!modal.hidden) closeModal();
+        }
+    });
+
+    profileForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        hideMessage();
+        const save = document.getElementById('topbarProfileSave');
+        save.disabled = true;
+        const original = save.textContent;
+        save.textContent = 'Guardando...';
+        try {
+            const data = await api(endpoint, {method: 'POST', body: new FormData(profileForm)});
+            if (!data) return;
+            const name = data.nombre_completo || '';
+            if (name) {
+                document.getElementById('topbarAccountName').textContent = name;
+            }
+            showMessage(data.mensaje, 'success');
+        } catch (error) {
+            showMessage(error.message, 'error');
+        } finally {
+            save.disabled = false;
+            save.textContent = original;
+        }
+    });
+
+    passwordForm.addEventListener('submit', async function (event) {
+        event.preventDefault();
+        hideMessage();
+        const save = document.getElementById('topbarPasswordSave');
+        save.disabled = true;
+        const original = save.textContent;
+        save.textContent = 'Actualizando...';
+        try {
+            const data = await api(endpoint, {method: 'POST', body: new FormData(passwordForm)});
+            if (!data) return;
+            passwordForm.reset();
+            showMessage(data.mensaje, 'success');
+        } catch (error) {
+            showMessage(error.message, 'error');
+        } finally {
+            save.disabled = false;
+            save.textContent = original;
+        }
     });
 })();
 </script>

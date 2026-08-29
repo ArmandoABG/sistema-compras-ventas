@@ -5,7 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 
-si_requerir_sesion(false);
+si_requerir_permiso('roles.administrar', false);
 
 if (!($conexion instanceof PDO)) {
     http_response_code(503);
