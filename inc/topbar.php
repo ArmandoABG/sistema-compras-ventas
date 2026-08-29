@@ -266,5 +266,37 @@ $rolUsuario = trim((string) (
 
     window.addEventListener('si:alertas-actualizadas', loadAlerts);
     loadAlerts();
+
+    // Revisión silenciosa de alertas de inventario por correo.
+    // La BD aplica un bloqueo temporal global para que muchos usuarios
+    // conectados no provoquen revisiones o envíos duplicados.
+    const stockEmailEndpoint = <?= json_encode(si_url('funciones/notificaciones_stock_email_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+    const stockEmailCsrf = <?= json_encode(si_token_csrf(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+    let stockEmailBusy = false;
+
+    async function processStockEmail() {
+        if (stockEmailBusy || document.visibilityState !== 'visible') return;
+        stockEmailBusy = true;
+        try {
+            const form = new FormData();
+            form.append('csrf_token', stockEmailCsrf);
+            await fetch(stockEmailEndpoint, {
+                method: 'POST',
+                body: form,
+                credentials: 'same-origin',
+                headers: {'X-Requested-With': 'XMLHttpRequest'}
+            });
+        } catch (error) {
+            // El correo es complementario: un fallo SMTP nunca interrumpe la interfaz.
+        } finally {
+            stockEmailBusy = false;
+        }
+    }
+
+    window.setTimeout(processStockEmail, 4000);
+    window.setInterval(processStockEmail, 60000);
+    document.addEventListener('visibilitychange', function () {
+        if (document.visibilityState === 'visible') processStockEmail();
+    });
 })();
 </script>

@@ -23,6 +23,8 @@ $puedeCrear = si_tiene_permiso('usuarios.crear');
 $puedeEditar = si_tiene_permiso('usuarios.editar');
 $puedeDesactivar = si_tiene_permiso('usuarios.desactivar');
 $puedeRoles = si_tiene_permiso('roles.administrar');
+$rolesSesion = $_SESSION['roles'] ?? [];
+$puedeConfigurarAlertasEmail = is_array($rolesSesion) && in_array('ADMINISTRADOR', $rolesSesion, true);
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_usuarios.css';
@@ -55,6 +57,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <button type="button" class="btn-secondary" id="btnActualizar">Actualizar</button>
                     <?php if ($puedeRoles): ?>
                         <a class="btn-secondary link-button" href="roles_permisos.php">Roles y permisos</a>
+                    <?php endif; ?>
+                    <?php if ($puedeConfigurarAlertasEmail): ?>
+                        <button type="button" class="btn-secondary" id="btnAlertasEmail">Alertas por correo</button>
                     <?php endif; ?>
                     <?php if ($puedeCrear): ?>
                         <button type="button" class="btn-primary" id="btnNuevo">Nuevo usuario</button>
@@ -174,6 +179,67 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     </section>
 </div>
 
+
+<?php if ($puedeConfigurarAlertasEmail): ?>
+<div class="modal-backdrop" id="modalAlertasEmail" hidden>
+    <section class="modal-card modal-card--large" role="dialog" aria-modal="true" aria-labelledby="tituloAlertasEmail">
+        <header class="modal-header">
+            <div><small>INVENTARIO · CORREO</small><h2 id="tituloAlertasEmail">Destinatarios de alertas</h2></div>
+            <button type="button" class="modal-close" data-cerrar-modal="modalAlertasEmail" aria-label="Cerrar">×</button>
+        </header>
+        <form id="formAlertasEmail">
+            <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfToken) ?>">
+            <input type="hidden" name="accion" value="GUARDAR_DESTINATARIOS_ALERTAS">
+            <div id="mensajeAlertasEmail" class="usuarios-message usuarios-message--error" hidden></div>
+
+            <section class="email-alert-info">
+                <div><span>Remitente</span><strong id="emailAlertRemitente">Configurado</strong></div>
+                <div><span>Alerta individual</span><strong>Solo stock crítico</strong></div>
+                <div><span>Resumen diario</span><strong>Reorden · desde 08:00</strong></div>
+            </section>
+
+            <div class="email-alert-toolbar">
+                <label class="field field--search"><span>Buscar usuario</span><input type="search" id="buscarDestinatarioEmail" maxlength="120" placeholder="Nombre, usuario, rol o correo" autocomplete="off"></label>
+                <div class="email-alert-counter"><span>Seleccionados</span><strong id="contadorDestinatariosEmail">0</strong></div>
+            </div>
+
+            <div class="email-alert-list" id="listaDestinatariosEmail">
+                <div class="email-alert-empty">Cargando usuarios...</div>
+            </div>
+
+            <div class="email-alert-pagination">
+                <span id="textoPaginacionDestinatariosEmail">0 usuarios</span>
+                <div class="email-alert-pagination__controls">
+                    <label>Por página
+                        <select id="porPaginaDestinatariosEmail">
+                            <option value="10">10</option>
+                            <option value="20" selected>20</option>
+                            <option value="50">50</option>
+                        </select>
+                    </label>
+                    <button type="button" class="btn-secondary" id="btnDestinatariosAnterior">Anterior</button>
+                    <span id="paginaDestinatariosEmail">Página 1 de 1</span>
+                    <button type="button" class="btn-secondary" id="btnDestinatariosSiguiente">Siguiente</button>
+                </div>
+            </div>
+
+            <p class="email-alert-note">Solo los usuarios activos y con un correo válido pueden recibir alertas. La selección se conserva al cambiar de página o usar el buscador. Los envíos manuales usan la selección que ya fue guardada.</p>
+
+            <footer class="modal-footer email-alert-footer">
+                <div class="email-alert-footer__manual">
+                    <button type="button" class="btn-secondary" id="btnProbarAlertasEmail">Enviar prueba</button>
+                    <button type="button" class="btn-secondary" id="btnEnviarAlertasAhora">Enviar alertas ahora</button>
+                </div>
+                <div class="email-alert-footer__save">
+                    <button type="button" class="btn-secondary" data-cerrar-modal="modalAlertasEmail">Cerrar</button>
+                    <button type="submit" class="btn-primary" id="btnGuardarAlertasEmail">Guardar destinatarios</button>
+                </div>
+            </footer>
+        </form>
+    </section>
+</div>
+<?php endif; ?>
+
 <script>
 (function () {
     'use strict';
@@ -181,7 +247,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     const permisos = {
         crear: <?= $puedeCrear ? 'true' : 'false' ?>,
         editar: <?= $puedeEditar ? 'true' : 'false' ?>,
-        desactivar: <?= $puedeDesactivar ? 'true' : 'false' ?>
+        desactivar: <?= $puedeDesactivar ? 'true' : 'false' ?>,
+        alertasEmail: <?= $puedeConfigurarAlertasEmail ? 'true' : 'false' ?>
     };
 
     const estado = {
@@ -198,7 +265,18 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         sesionUsuarioId: 0,
         paginaSesion: 1,
         porPaginaSesion: 20,
-        totalPaginasSesion: 1
+        totalPaginasSesion: 1,
+
+        destinatariosEmail: [],
+        destinatariosEmailSeleccionados: new Set(),
+        destinatariosEmailGuardados: new Set(),
+        paginaDestinatariosEmail: 1,
+        porPaginaDestinatariosEmail: 20,
+        totalPaginasDestinatariosEmail: 1,
+        totalDestinatariosEmail: 0,
+        filtroDestinatariosEmail: '',
+        timerDestinatariosEmail: null,
+        cargandoDestinatariosEmail: false
     };
     const $ = id => document.getElementById(id);
     const tabla = $('tablaUsuarios');
@@ -420,6 +498,188 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         }
     }
 
+
+    function renderDestinatariosEmail() {
+        const lista = $('listaDestinatariosEmail');
+        if (!lista) return;
+
+        $('contadorDestinatariosEmail').textContent = String(estado.destinatariosEmailSeleccionados.size);
+
+        if (!estado.destinatariosEmail.length) {
+            lista.innerHTML = '<div class="email-alert-empty">No hay usuarios que coincidan con la búsqueda.</div>';
+            return;
+        }
+
+        lista.innerHTML = estado.destinatariosEmail.map(function (u) {
+            const deshabilitado = !u.correo_valido;
+            const checked = estado.destinatariosEmailSeleccionados.has(Number(u.id)) && !deshabilitado ? ' checked' : '';
+            const disabled = deshabilitado ? ' disabled' : '';
+            const roleClass = u.es_administrador ? ' is-admin' : '';
+            return '<label class="email-alert-user' + (deshabilitado ? ' is-disabled' : '') + '">'
+                + '<input type="checkbox" class="destinatario-email-check" value="' + Number(u.id) + '"' + checked + disabled + '>'
+                + '<span class="email-alert-user__main">'
+                + '<strong>' + escapeHtml(u.nombre_completo || u.usuario || 'Usuario') + '</strong>'
+                + '<small>@' + escapeHtml(u.usuario || '') + ' · ' + escapeHtml(u.correo || 'Sin correo') + '</small>'
+                + '</span>'
+                + '<span class="email-alert-user__role' + roleClass + '">' + escapeHtml(u.roles_nombres || 'Sin rol') + '</span>'
+                + (deshabilitado ? '<span class="email-alert-user__warning">Correo no válido</span>' : '')
+                + '</label>';
+        }).join('');
+    }
+
+    function renderPaginacionDestinatariosEmail(paginacion) {
+        const p = paginacion || {};
+        estado.paginaDestinatariosEmail = Number(p.pagina || 1);
+        estado.totalPaginasDestinatariosEmail = Number(p.total_paginas || 1);
+        estado.totalDestinatariosEmail = Number(p.total_registros || 0);
+        $('textoPaginacionDestinatariosEmail').textContent = String(estado.totalDestinatariosEmail) + ' usuario(s) activo(s)';
+        $('paginaDestinatariosEmail').textContent = 'Página ' + estado.paginaDestinatariosEmail + ' de ' + estado.totalPaginasDestinatariosEmail;
+        $('btnDestinatariosAnterior').disabled = estado.paginaDestinatariosEmail <= 1 || estado.cargandoDestinatariosEmail;
+        $('btnDestinatariosSiguiente').disabled = estado.paginaDestinatariosEmail >= estado.totalPaginasDestinatariosEmail || estado.cargandoDestinatariosEmail;
+    }
+
+    async function cargarDestinatariosEmail(inicializarSeleccion) {
+        if (!permisos.alertasEmail || estado.cargandoDestinatariosEmail) return;
+        estado.cargandoDestinatariosEmail = true;
+        const lista = $('listaDestinatariosEmail');
+        lista.innerHTML = '<div class="email-alert-empty">Cargando usuarios...</div>';
+        renderPaginacionDestinatariosEmail({
+            pagina: estado.paginaDestinatariosEmail,
+            total_paginas: estado.totalPaginasDestinatariosEmail,
+            total_registros: estado.totalDestinatariosEmail
+        });
+
+        const params = new URLSearchParams({
+            usuarios_api: '1',
+            accion: 'DESTINATARIOS_ALERTAS',
+            pagina: String(estado.paginaDestinatariosEmail),
+            por_pagina: String(estado.porPaginaDestinatariosEmail),
+            busqueda: estado.filtroDestinatariosEmail
+        });
+
+        try {
+            const datos = await api('?' + params.toString());
+            if (!datos) return;
+            estado.destinatariosEmail = Array.isArray(datos.usuarios) ? datos.usuarios : [];
+            if (inicializarSeleccion) {
+                const ids = Array.isArray(datos.seleccionados_ids) ? datos.seleccionados_ids.map(Number).filter(id => id > 0) : [];
+                estado.destinatariosEmailSeleccionados = new Set(ids);
+                estado.destinatariosEmailGuardados = new Set(ids);
+            }
+            $('emailAlertRemitente').textContent = datos.remitente || 'Configurado';
+            renderDestinatariosEmail();
+            renderPaginacionDestinatariosEmail(datos.paginacion || {});
+        } catch (error) {
+            lista.innerHTML = '<div class="email-alert-empty is-error">No fue posible cargar los destinatarios.</div>';
+            mostrarMensaje($('mensajeAlertasEmail'), error.message, 'error');
+        } finally {
+            estado.cargandoDestinatariosEmail = false;
+            renderPaginacionDestinatariosEmail({
+                pagina: estado.paginaDestinatariosEmail,
+                total_paginas: estado.totalPaginasDestinatariosEmail,
+                total_registros: estado.totalDestinatariosEmail
+            });
+        }
+    }
+
+    async function abrirAlertasEmail() {
+        if (!permisos.alertasEmail) return;
+        const mensaje = $('mensajeAlertasEmail');
+        ocultarMensaje(mensaje);
+        estado.filtroDestinatariosEmail = '';
+        estado.paginaDestinatariosEmail = 1;
+        estado.porPaginaDestinatariosEmail = Number($('porPaginaDestinatariosEmail')?.value || 20);
+        estado.totalPaginasDestinatariosEmail = 1;
+        estado.totalDestinatariosEmail = 0;
+        estado.destinatariosEmail = [];
+        estado.destinatariosEmailSeleccionados = new Set();
+        estado.destinatariosEmailGuardados = new Set();
+        $('buscarDestinatarioEmail').value = '';
+        abrirModal('modalAlertasEmail');
+        await cargarDestinatariosEmail(true);
+    }
+
+    function conjuntosIguales(a, b) {
+        if (a.size !== b.size) return false;
+        for (const id of a) if (!b.has(id)) return false;
+        return true;
+    }
+
+    function destinatariosEmailSinGuardar() {
+        return !conjuntosIguales(estado.destinatariosEmailSeleccionados, estado.destinatariosEmailGuardados);
+    }
+
+    async function guardarAlertasEmail(event) {
+        event.preventDefault();
+        if (!permisos.alertasEmail) return;
+        const mensaje = $('mensajeAlertasEmail');
+        ocultarMensaje(mensaje);
+
+        const formData = new FormData();
+        formData.append('csrf_token', <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>);
+        formData.append('accion', 'GUARDAR_DESTINATARIOS_ALERTAS');
+        Array.from(estado.destinatariosEmailSeleccionados).sort((a, b) => a - b)
+            .forEach(id => formData.append('usuario_ids[]', String(id)));
+
+        const boton = $('btnGuardarAlertasEmail');
+        boton.disabled = true;
+        try {
+            const datos = await api('?usuarios_api=1', {method: 'POST', body: formData});
+            estado.destinatariosEmailGuardados = new Set(estado.destinatariosEmailSeleccionados);
+            mostrarMensaje(mensaje, datos.mensaje, 'success');
+            await cargarDestinatariosEmail(false);
+        } catch (error) {
+            mostrarMensaje(mensaje, error.message, 'error');
+        } finally {
+            boton.disabled = false;
+        }
+    }
+
+    function bloquearBotonesEmail(bloquear) {
+        ['btnProbarAlertasEmail', 'btnEnviarAlertasAhora', 'btnGuardarAlertasEmail'].forEach(function (id) {
+            const boton = $(id);
+            if (boton) boton.disabled = bloquear;
+        });
+    }
+
+    async function ejecutarAccionEmail(accion) {
+        if (!permisos.alertasEmail) return;
+        const mensaje = $('mensajeAlertasEmail');
+        ocultarMensaje(mensaje);
+
+        if (destinatariosEmailSinGuardar()) {
+            mostrarMensaje(mensaje, 'Guarda primero los cambios de destinatarios antes de realizar un envío manual.', 'error');
+            return;
+        }
+        if (estado.destinatariosEmailGuardados.size === 0) {
+            mostrarMensaje(mensaje, 'Configura y guarda al menos un destinatario antes de enviar correos.', 'error');
+            return;
+        }
+
+        const esPrueba = accion === 'ENVIAR_PRUEBA_ALERTAS';
+        const textoConfirmacion = esPrueba
+            ? 'Se enviará un correo de prueba a ' + estado.destinatariosEmailGuardados.size + ' destinatario(s) guardado(s). ¿Continuar?'
+            : 'Se revisará el inventario ahora y se enviarán únicamente las alertas pendientes. Los episodios ya notificados no se duplicarán. ¿Continuar?';
+        if (!window.confirm(textoConfirmacion)) return;
+
+        const formData = new FormData();
+        formData.append('csrf_token', <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>);
+        formData.append('accion', accion);
+
+        bloquearBotonesEmail(true);
+        mostrarMensaje(mensaje, esPrueba ? 'Enviando correo de prueba...' : 'Revisando inventario y enviando alertas pendientes...', 'success');
+        try {
+            const datos = await api('?usuarios_api=1', {method: 'POST', body: formData});
+            let errores = Number(datos.errores || 0);
+            if (!esPrueba && datos.resultado) errores = Number(datos.resultado.errores || 0);
+            mostrarMensaje(mensaje, datos.mensaje, errores > 0 ? 'warning' : 'success');
+        } catch (error) {
+            mostrarMensaje(mensaje, error.message, 'error');
+        } finally {
+            bloquearBotonesEmail(false);
+        }
+    }
+
     $('porPaginaSesion').addEventListener(
         'change',
         function (event) {
@@ -468,6 +728,43 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     document.querySelectorAll('[data-cerrar-modal]').forEach(b => b.addEventListener('click', () => cerrarModal(b.dataset.cerrarModal)));
     document.querySelectorAll('.modal-backdrop').forEach(m => m.addEventListener('click', e => { if (e.target === m) cerrarModal(m.id); }));
     document.addEventListener('keydown', e => { if (e.key === 'Escape') document.querySelectorAll('.modal-backdrop:not([hidden])').forEach(m => cerrarModal(m.id)); });
+
+
+    $('btnAlertasEmail')?.addEventListener('click', abrirAlertasEmail);
+    $('formAlertasEmail')?.addEventListener('submit', guardarAlertasEmail);
+    $('buscarDestinatarioEmail')?.addEventListener('input', function (event) {
+        clearTimeout(estado.timerDestinatariosEmail);
+        estado.timerDestinatariosEmail = window.setTimeout(function () {
+            estado.filtroDestinatariosEmail = event.target.value.trim();
+            estado.paginaDestinatariosEmail = 1;
+            cargarDestinatariosEmail(false);
+        }, 350);
+    });
+    $('listaDestinatariosEmail')?.addEventListener('change', function (event) {
+        const check = event.target.closest('.destinatario-email-check');
+        if (!check) return;
+        const id = Number(check.value);
+        if (check.checked) estado.destinatariosEmailSeleccionados.add(id);
+        else estado.destinatariosEmailSeleccionados.delete(id);
+        renderDestinatariosEmail();
+    });
+    $('btnDestinatariosAnterior')?.addEventListener('click', function () {
+        if (estado.paginaDestinatariosEmail <= 1 || estado.cargandoDestinatariosEmail) return;
+        estado.paginaDestinatariosEmail--;
+        cargarDestinatariosEmail(false);
+    });
+    $('btnDestinatariosSiguiente')?.addEventListener('click', function () {
+        if (estado.paginaDestinatariosEmail >= estado.totalPaginasDestinatariosEmail || estado.cargandoDestinatariosEmail) return;
+        estado.paginaDestinatariosEmail++;
+        cargarDestinatariosEmail(false);
+    });
+    $('porPaginaDestinatariosEmail')?.addEventListener('change', function (event) {
+        estado.porPaginaDestinatariosEmail = Number(event.target.value || 20);
+        estado.paginaDestinatariosEmail = 1;
+        cargarDestinatariosEmail(false);
+    });
+    $('btnProbarAlertasEmail')?.addEventListener('click', function () { ejecutarAccionEmail('ENVIAR_PRUEBA_ALERTAS'); });
+    $('btnEnviarAlertasAhora')?.addEventListener('click', function () { ejecutarAccionEmail('ENVIAR_ALERTAS_AHORA'); });
 
     $('btnNuevo')?.addEventListener('click', prepararNuevo);
     $('btnActualizar').addEventListener('click', cargarUsuarios);

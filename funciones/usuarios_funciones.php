@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/notificaciones_stock_email.php';
 
 si_requerir_permiso('usuarios.ver', true);
 
@@ -21,6 +22,7 @@ try {
         if ($accion === 'DETALLE') usr_detalle($conexion);
         if ($accion === 'CATALOGOS') usr_catalogos($conexion);
         if ($accion === 'SESIONES') usr_sesiones($conexion);
+        if ($accion === 'DESTINATARIOS_ALERTAS') usr_destinatarios_alertas($conexion);
         si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
     }
 
@@ -30,6 +32,9 @@ try {
     if ($accion === 'GUARDAR') usr_guardar($conexion);
     if ($accion === 'CAMBIAR_ESTADO') usr_cambiar_estado($conexion);
     if ($accion === 'CAMBIAR_PASSWORD') usr_cambiar_password($conexion);
+    if ($accion === 'GUARDAR_DESTINATARIOS_ALERTAS') usr_guardar_destinatarios_alertas($conexion);
+    if ($accion === 'ENVIAR_PRUEBA_ALERTAS') usr_enviar_prueba_alertas($conexion);
+    if ($accion === 'ENVIAR_ALERTAS_AHORA') usr_enviar_alertas_ahora($conexion);
 
     si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
 } catch (PDOException $e) {
@@ -650,3 +655,379 @@ function usr_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra 
     if ($conexion->inTransaction()) $conexion->rollBack();
     si_responder_json(false, $mensaje, $extra, $codigo);
 }
+
+function usr_destinatarios_alertas(PDO $conexion): void
+{
+    usr_requerir_administrador_alertas();
+
+    $pagina = usr_entero_rango($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
+    $porPagina = usr_entero_rango($_GET['por_pagina'] ?? 20, 10, 50, 20);
+    $busqueda = usr_texto($_GET['busqueda'] ?? '', 120);
+
+    $where = ['u.activo = 1'];
+    $params = [];
+    if ($busqueda !== '') {
+        $patron = '%' . $busqueda . '%';
+        $where[] = "(u.usuario LIKE :b_usuario
+            OR u.nombres LIKE :b_nombres
+            OR u.apellido_paterno LIKE :b_apellido_p
+            OR u.apellido_materno LIKE :b_apellido_m
+            OR u.correo LIKE :b_correo
+            OR EXISTS (
+                SELECT 1
+                FROM usuarios_roles ur_bus
+                INNER JOIN roles r_bus ON r_bus.id = ur_bus.rol_id AND r_bus.activo = 1
+                WHERE ur_bus.usuario_id = u.id AND r_bus.nombre LIKE :b_rol
+            ))";
+        $params = [
+            ':b_usuario' => $patron,
+            ':b_nombres' => $patron,
+            ':b_apellido_p' => $patron,
+            ':b_apellido_m' => $patron,
+            ':b_correo' => $patron,
+            ':b_rol' => $patron,
+        ];
+    }
+    $whereSql = implode(' AND ', $where);
+
+    $stmtTotal = $conexion->prepare("SELECT COUNT(*) FROM usuarios u WHERE {$whereSql}");
+    foreach ($params as $clave => $valor) $stmtTotal->bindValue($clave, $valor, PDO::PARAM_STR);
+    $stmtTotal->execute();
+    $total = (int) $stmtTotal->fetchColumn();
+    $totalPaginas = max(1, (int) ceil($total / $porPagina));
+    if ($pagina > $totalPaginas) $pagina = $totalPaginas;
+    $offset = ($pagina - 1) * $porPagina;
+
+    $sql = "SELECT
+                u.id,
+                u.usuario,
+                u.nombres,
+                u.apellido_paterno,
+                u.apellido_materno,
+                u.correo,
+                CASE WHEN d.usuario_id IS NULL OR d.activo <> 1 THEN 0 ELSE 1 END AS seleccionado,
+                CASE WHEN EXISTS (
+                    SELECT 1 FROM usuarios_roles ur_adm
+                    INNER JOIN roles r_adm ON r_adm.id = ur_adm.rol_id AND r_adm.activo = 1
+                    WHERE ur_adm.usuario_id = u.id AND r_adm.codigo = 'ADMINISTRADOR'
+                ) THEN 1 ELSE 0 END AS es_administrador
+            FROM usuarios u
+            LEFT JOIN alertas_stock_email_destinatarios d ON d.usuario_id = u.id
+            WHERE {$whereSql}
+            ORDER BY seleccionado DESC, es_administrador DESC, u.nombres, u.apellido_paterno, u.usuario, u.id
+            LIMIT :limite OFFSET :offset";
+    $stmt = $conexion->prepare($sql);
+    foreach ($params as $clave => $valor) $stmt->bindValue($clave, $valor, PDO::PARAM_STR);
+    $stmt->bindValue(':limite', $porPagina, PDO::PARAM_INT);
+    $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+    $stmt->execute();
+    $filas = $stmt->fetchAll();
+
+    $rolesPorUsuario = [];
+    $idsPagina = array_map(static fn(array $fila): int => (int) $fila['id'], $filas);
+    if ($idsPagina) {
+        $marcas = implode(',', array_fill(0, count($idsPagina), '?'));
+        $stmtRoles = $conexion->prepare(
+            "SELECT ur.usuario_id,
+                    GROUP_CONCAT(DISTINCT r.nombre ORDER BY
+                        CASE r.codigo WHEN 'ADMINISTRADOR' THEN 1 WHEN 'SUPERVISOR_ALMACEN' THEN 2 WHEN 'VENDEDOR' THEN 3 ELSE 99 END,
+                        r.nombre SEPARATOR ', ') AS roles_nombres
+             FROM usuarios_roles ur
+             INNER JOIN roles r ON r.id = ur.rol_id AND r.activo = 1
+             WHERE ur.usuario_id IN ({$marcas})
+             GROUP BY ur.usuario_id"
+        );
+        $stmtRoles->execute($idsPagina);
+        foreach ($stmtRoles->fetchAll() as $rolFila) {
+            $rolesPorUsuario[(int) $rolFila['usuario_id']] = (string) ($rolFila['roles_nombres'] ?? '');
+        }
+    }
+
+    $usuarios = [];
+    foreach ($filas as $fila) {
+        $correo = trim((string) ($fila['correo'] ?? ''));
+        $correoValido = $correo !== '' && filter_var($correo, FILTER_VALIDATE_EMAIL) !== false;
+        $seleccionado = (int) ($fila['seleccionado'] ?? 0) === 1 && $correoValido;
+        $id = (int) $fila['id'];
+        $usuarios[] = [
+            'id' => $id,
+            'usuario' => (string) $fila['usuario'],
+            'nombre_completo' => usr_nombre_completo($fila),
+            'correo' => $correo,
+            'correo_valido' => $correoValido,
+            'seleccionado' => $seleccionado,
+            'roles_nombres' => $rolesPorUsuario[$id] ?? 'Sin rol',
+            'es_administrador' => (int) ($fila['es_administrador'] ?? 0) === 1,
+        ];
+    }
+
+    // Solo se recuperan los IDs ya guardados (máximo 500 por la propia regla de configuración),
+    // no la ficha completa de todos los usuarios. Esto permite conservar selecciones entre páginas.
+    $seleccionadosIds = [];
+    $stmtSeleccionados = $conexion->query(
+        "SELECT u.id, u.correo
+         FROM alertas_stock_email_destinatarios d
+         INNER JOIN usuarios u ON u.id = d.usuario_id
+         WHERE d.activo = 1 AND u.activo = 1
+         ORDER BY u.id"
+    );
+    foreach ($stmtSeleccionados->fetchAll() as $filaSel) {
+        $correoSel = trim((string) ($filaSel['correo'] ?? ''));
+        if (filter_var($correoSel, FILTER_VALIDATE_EMAIL)) {
+            $seleccionadosIds[] = (int) $filaSel['id'];
+        }
+    }
+
+    si_responder_json(true, 'Destinatarios cargados correctamente.', [
+        'usuarios' => $usuarios,
+        'seleccionados_ids' => $seleccionadosIds,
+        'seleccionados' => count($seleccionadosIds),
+        'paginacion' => [
+            'pagina' => $pagina,
+            'por_pagina' => $porPagina,
+            'total_registros' => $total,
+            'total_paginas' => $totalPaginas,
+        ],
+        'remitente' => (string) (si_correo_stock_config()['remitente_correo'] ?? 'Configurado'),
+        'reglas' => [
+            'critico' => 'Correo individual solo en stock crítico.',
+            'reorden' => 'El punto de reorden se incluye únicamente en el resumen diario.',
+            'resumen_hora' => '08:00',
+        ],
+    ]);
+}
+
+function usr_guardar_destinatarios_alertas(PDO $conexion): void
+{
+    usr_requerir_administrador_alertas();
+    $actorId = (int) ($_SESSION['usuario_id'] ?? 0);
+
+    $entrada = $_POST['usuario_ids'] ?? [];
+    if (!is_array($entrada)) $entrada = [$entrada];
+
+    $ids = [];
+    foreach ($entrada as $valor) {
+        if (filter_var($valor, FILTER_VALIDATE_INT) === false) continue;
+        $id = (int) $valor;
+        if ($id > 0) $ids[$id] = $id;
+    }
+    $ids = array_values($ids);
+    if (count($ids) > 500) {
+        si_responder_json(false, 'La selección de destinatarios excede el límite permitido.', [], 422);
+    }
+
+    if ($ids) {
+        $placeholders = [];
+        $params = [];
+        foreach ($ids as $i => $id) {
+            $ph = ':u' . $i;
+            $placeholders[] = $ph;
+            $params[$ph] = $id;
+        }
+        $stmt = $conexion->prepare(
+            "SELECT id, correo, activo
+             FROM usuarios
+             WHERE id IN (" . implode(',', $placeholders) . ")"
+        );
+        foreach ($params as $ph => $id) $stmt->bindValue($ph, $id, PDO::PARAM_INT);
+        $stmt->execute();
+        $validos = [];
+        foreach ($stmt->fetchAll() as $fila) {
+            $correo = trim((string) ($fila['correo'] ?? ''));
+            if ((int) $fila['activo'] === 1 && filter_var($correo, FILTER_VALIDATE_EMAIL)) {
+                $validos[(int) $fila['id']] = true;
+            }
+        }
+        foreach ($ids as $id) {
+            if (!isset($validos[$id])) {
+                si_responder_json(false, 'Uno de los usuarios seleccionados está inactivo o no tiene un correo válido.', [], 422);
+            }
+        }
+    }
+
+    $anteriores = array_map('intval', $conexion->query(
+        "SELECT usuario_id FROM alertas_stock_email_destinatarios WHERE activo = 1 ORDER BY usuario_id"
+    )->fetchAll(PDO::FETCH_COLUMN));
+
+    $conexion->beginTransaction();
+    try {
+        $conexion->exec("DELETE FROM alertas_stock_email_destinatarios");
+        if ($ids) {
+            $stmtInsert = $conexion->prepare(
+                "INSERT INTO alertas_stock_email_destinatarios
+                    (usuario_id, activo, created_by, updated_by)
+                 VALUES (:usuario_id, 1, :created_by, :updated_by)"
+            );
+            foreach ($ids as $id) {
+                $stmtInsert->execute([
+                    ':usuario_id' => $id,
+                    ':created_by' => $actorId > 0 ? $actorId : null,
+                    ':updated_by' => $actorId > 0 ? $actorId : null,
+                ]);
+            }
+        }
+
+        $nuevos = $ids;
+        sort($anteriores);
+        sort($nuevos);
+
+        $stmtAudit = $conexion->prepare(
+            "INSERT INTO auditoria
+                (usuario_id, accion, modulo, entidad_tabla, entidad_id, descripcion,
+                 datos_anteriores, datos_nuevos, ip, user_agent)
+             VALUES
+                (:usuario_id, 'DESTINATARIOS_EMAIL_STOCK_ACTUALIZADOS', 'seguridad',
+                 'alertas_stock_email_destinatarios', NULL,
+                 'El Administrador actualizó los destinatarios de alertas de inventario por correo.',
+                 :anteriores, :nuevos, :ip, :ua)"
+        );
+        $stmtAudit->execute([
+            ':usuario_id' => $actorId > 0 ? $actorId : null,
+            ':anteriores' => json_encode(['usuario_ids' => $anteriores], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ':nuevos' => json_encode(['usuario_ids' => $nuevos], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ':ip' => si_ip_cliente(),
+            ':ua' => si_user_agent(),
+        ]);
+
+        $conexion->commit();
+    } catch (Throwable $e) {
+        if ($conexion->inTransaction()) $conexion->rollBack();
+        throw $e;
+    }
+
+    si_responder_json(true, count($ids) === 1
+        ? 'Se configuró 1 destinatario para las alertas por correo.'
+        : 'Se configuraron ' . count($ids) . ' destinatarios para las alertas por correo.', [
+        'seleccionados' => count($ids),
+    ]);
+}
+
+function usr_enviar_prueba_alertas(PDO $conexion): void
+{
+    usr_requerir_administrador_alertas();
+    $destinatarios = si_stock_email_destinatarios($conexion);
+    if (!$destinatarios) {
+        si_responder_json(false, 'Primero configura y guarda al menos un destinatario con correo válido.', [], 409);
+    }
+
+    $config = si_correo_stock_config();
+    if (empty($config['activo'])) {
+        si_responder_json(false, 'El envío de correos está desactivado en la configuración.', [], 409);
+    }
+
+    $enviados = 0;
+    $errores = 0;
+    $primerError = null;
+    $fecha = date('d/m/Y H:i:s');
+
+    foreach ($destinatarios as $destinatario) {
+        $nombre = htmlspecialchars((string) $destinatario['nombre'], ENT_QUOTES, 'UTF-8');
+        $html = '<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;color:#26352c">'
+            . '<h2 style="color:#14532d;margin-bottom:8px">Prueba de alertas por correo</h2>'
+            . '<p>Hola <strong>' . $nombre . '</strong>.</p>'
+            . '<p>Este mensaje confirma que tu correo está configurado correctamente como destinatario de las alertas de inventario del Sistema Integral.</p>'
+            . '<div style="background:#f3f7f4;border-left:5px solid #15803d;padding:16px;border-radius:8px;margin:18px 0">'
+            . '<strong>Configuración correcta</strong><br><span style="color:#647067">Prueba realizada el ' . htmlspecialchars($fecha, ENT_QUOTES, 'UTF-8') . '.</span>'
+            . '</div>'
+            . '<p>Los avisos individuales reales solo se enviarán cuando un producto alcance stock crítico. El punto de reorden se informa mediante el resumen diario.</p>'
+            . '<hr style="border:0;border-top:1px solid #e5e7eb;margin:24px 0">'
+            . '<small style="color:#6b7280">Mensaje de prueba del Sistema Integral.</small></div>';
+
+        $resultado = si_smtp_enviar(
+            $config,
+            (string) $destinatario['correo'],
+            (string) $destinatario['nombre'],
+            'Prueba de alertas de inventario · Sistema Integral',
+            $html
+        );
+        if (!empty($resultado['ok'])) {
+            $enviados++;
+        } else {
+            $errores++;
+            if ($primerError === null) $primerError = (string) ($resultado['error'] ?? 'Error SMTP no especificado.');
+        }
+    }
+
+    usr_auditar_accion_alertas_email($conexion, 'PRUEBA_EMAIL_STOCK', [
+        'destinatarios' => count($destinatarios),
+        'enviados' => $enviados,
+        'errores' => $errores,
+    ]);
+
+    $mensaje = $errores === 0
+        ? 'Correo de prueba enviado correctamente a ' . $enviados . ' destinatario(s).'
+        : 'La prueba terminó con ' . $enviados . ' envío(s) correcto(s) y ' . $errores . ' error(es).';
+
+    si_responder_json(true, $mensaje, [
+        'enviados' => $enviados,
+        'errores' => $errores,
+        'error_muestra' => $primerError === null ? null : mb_substr($primerError, 0, 300),
+    ]);
+}
+
+function usr_enviar_alertas_ahora(PDO $conexion): void
+{
+    usr_requerir_administrador_alertas();
+    $destinatarios = si_stock_email_destinatarios($conexion);
+    if (!$destinatarios) {
+        si_responder_json(false, 'Primero configura y guarda al menos un destinatario con correo válido.', [], 409);
+    }
+
+    $resultado = si_stock_email_procesar($conexion, true, true);
+    usr_auditar_accion_alertas_email($conexion, 'ALERTAS_EMAIL_STOCK_MANUAL', $resultado);
+
+    $enviados = (int) ($resultado['enviados'] ?? 0);
+    $errores = (int) ($resultado['errores'] ?? 0);
+    $criticos = (int) ($resultado['criticos'] ?? 0);
+    $reorden = (int) ($resultado['reorden'] ?? 0);
+
+    if ($enviados > 0 && $errores === 0) {
+        $mensaje = 'Revisión manual completada. Se enviaron ' . $enviados . ' correo(s).';
+    } elseif ($enviados > 0) {
+        $mensaje = 'Revisión manual completada con ' . $enviados . ' envío(s) y ' . $errores . ' error(es).';
+    } elseif ($errores > 0) {
+        $mensaje = 'La revisión encontró correos pendientes, pero se produjeron ' . $errores . ' error(es) de envío.';
+    } elseif ($criticos === 0 && $reorden === 0) {
+        $mensaje = 'Revisión completada: actualmente no hay productos críticos ni en punto de reorden.';
+    } else {
+        $mensaje = 'Revisión completada. No había correos nuevos por enviar; los avisos ya enviados no se duplicaron.';
+    }
+
+    si_responder_json(true, $mensaje, ['resultado' => $resultado]);
+}
+
+function usr_auditar_accion_alertas_email(PDO $conexion, string $accion, array $datos): void
+{
+    try {
+        $actorId = (int) ($_SESSION['usuario_id'] ?? 0);
+        $stmt = $conexion->prepare(
+            "INSERT INTO auditoria
+                (usuario_id, accion, modulo, entidad_tabla, entidad_id, descripcion, datos_nuevos, ip, user_agent)
+             VALUES
+                (:usuario_id, :accion, 'seguridad', 'alertas_stock_email_destinatarios', NULL,
+                 :descripcion, :datos, :ip, :ua)"
+        );
+        $descripcion = $accion === 'PRUEBA_EMAIL_STOCK'
+            ? 'El Administrador ejecutó una prueba manual de las alertas por correo.'
+            : 'El Administrador ejecutó manualmente la revisión y envío de alertas de inventario.';
+        $stmt->execute([
+            ':usuario_id' => $actorId > 0 ? $actorId : null,
+            ':accion' => $accion,
+            ':descripcion' => $descripcion,
+            ':datos' => json_encode($datos, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ':ip' => si_ip_cliente(),
+            ':ua' => si_user_agent(),
+        ]);
+    } catch (Throwable $e) {
+        error_log('[SISTEMA INTEGRAL][AUDITORIA EMAIL STOCK] ' . $e->getMessage());
+    }
+}
+
+function usr_requerir_administrador_alertas(): void
+{
+    $roles = $_SESSION['roles'] ?? [];
+    if (!is_array($roles) || !in_array('ADMINISTRADOR', $roles, true)) {
+        si_responder_json(false, 'Solo un Administrador puede configurar los destinatarios de las alertas por correo.', [], 403);
+    }
+}
+
