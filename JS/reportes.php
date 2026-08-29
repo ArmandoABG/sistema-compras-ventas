@@ -59,6 +59,30 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
             <div id="mensajePagina" class="module-message" hidden></div>
 
+            <?php if ($puedeExportar): ?>
+            <section class="module-card" id="panelContabilidad">
+                <div class="section-actions">
+                    <div>
+                        <h2>Entrega para el área contable</h2>
+                        <p>Genera un Excel con ventas, compras y desglose de impuestos del periodo. Es una entrega de datos; no genera ni timbra CFDI ante el SAT.</p>
+                    </div>
+                </div>
+                <div class="reportes-filtros">
+                    <label class="field">
+                        <span>Desde</span>
+                        <input type="date" id="contableDesde">
+                    </label>
+                    <label class="field">
+                        <span>Hasta</span>
+                        <input type="date" id="contableHasta">
+                    </label>
+                    <div class="filter-actions">
+                        <button type="button" class="btn-primary" id="btnExportarContable">Exportar paquete contable Excel</button>
+                    </div>
+                </div>
+            </section>
+            <?php endif; ?>
+
             <section class="module-card" id="panelSelector">
                 <div class="section-actions">
                     <div>
@@ -183,6 +207,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         grid: $('reportesGrid'),
         btnExportarCsv: $('btnExportarCsv'),
         btnExportarXlsx: $('btnExportarXlsx'),
+        contableDesde: $('contableDesde'),
+        contableHasta: $('contableHasta'),
+        btnExportarContable: $('btnExportarContable'),
         btnCambiar: $('btnCambiarReporte'),
         titulo: $('reporteTitulo'),
         descripcion: $('reporteDescripcion'),
@@ -532,6 +559,42 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         window.location.href = url.toString();
     }
 
+    function fechaLocalISO(fecha) {
+        const y = fecha.getFullYear();
+        const m = String(fecha.getMonth() + 1).padStart(2, '0');
+        const d = String(fecha.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
+    }
+
+    function inicializarPeriodoContable() {
+        if (!dom.contableDesde || !dom.contableHasta) return;
+        const hoy = new Date();
+        const inicio = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+        dom.contableDesde.value = fechaLocalISO(inicio);
+        dom.contableHasta.value = fechaLocalISO(hoy);
+    }
+
+    function exportarContable() {
+        if (!CONFIG.puedeExportar || !dom.contableDesde || !dom.contableHasta) return;
+        const desde = dom.contableDesde.value;
+        const hasta = dom.contableHasta.value;
+        if (!desde || !hasta) {
+            mostrarMensaje('Selecciona el periodo que entregarás al área contable.');
+            return;
+        }
+        if (desde > hasta) {
+            mostrarMensaje('La fecha Desde no puede ser posterior a Hasta.');
+            return;
+        }
+
+        mostrarMensaje('');
+        const url = new URL(CONFIG.endpoint, window.location.href);
+        url.searchParams.set('accion', 'EXPORTAR_CONTABLE_XLSX');
+        url.searchParams.set('fecha_desde', desde);
+        url.searchParams.set('fecha_hasta', hasta);
+        window.location.href = url.toString();
+    }
+
     function debounce(fn, espera = 350) {
         let timer;
         return (...args) => {
@@ -547,12 +610,15 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     dom.siguiente.addEventListener('click', () => { if (estado.pagina < estado.paginas) { estado.pagina += 1; cargarReporte(); } });
     if (dom.btnExportarCsv) dom.btnExportarCsv.addEventListener('click', () => exportar('csv'));
     if (dom.btnExportarXlsx) dom.btnExportarXlsx.addEventListener('click', () => exportar('xlsx'));
+    if (dom.btnExportarContable) dom.btnExportarContable.addEventListener('click', exportarContable);
 
     dom.porPagina.addEventListener('change', () => { estado.pagina = 1; cargarReporte(); });
     [dom.desde, dom.hasta, dom.almacen, dom.producto, dom.proveedor, dom.cliente, dom.usuario, dom.estado].forEach((control) => {
         control.addEventListener('change', () => { if (estado.reporte) { estado.pagina = 1; cargarReporte(); } });
     });
     dom.buscar.addEventListener('input', debounce(() => { if (estado.reporte) { estado.pagina = 1; cargarReporte(); } }, 450));
+
+    inicializarPeriodoContable();
 
     cargarCatalogos().catch((error) => {
         dom.grid.innerHTML = '<p class="reportes-loading">No fue posible cargar los reportes.</p>';

@@ -28,13 +28,16 @@ try {
 
         case 'EXPORTAR_CSV':
         case 'EXPORTAR_XLSX':
+        case 'EXPORTAR_CONTABLE_XLSX':
             if (!si_tiene_permiso('contabilidad.exportar')) {
                 http_response_code(403);
                 header('Content-Type: text/plain; charset=utf-8');
                 echo 'No tienes permiso para exportar información.';
                 exit;
             }
-            if ($accion === 'EXPORTAR_XLSX') {
+            if ($accion === 'EXPORTAR_CONTABLE_XLSX') {
+                rep_exportar_contable_xlsx($conexion);
+            } elseif ($accion === 'EXPORTAR_XLSX') {
                 rep_exportar_xlsx($conexion);
             } else {
                 rep_exportar_csv($conexion);
@@ -527,6 +530,548 @@ function rep_exportar_xlsx(PDO $conexion): void
     si_xlsx_descargar('reporte_' . strtolower($codigo) . '_' . date('Ymd_His') . '.xlsx', $hojas);
 }
 
+function rep_exportar_contable_xlsx(PDO $conexion): void
+{
+    $hoy = new DateTimeImmutable('today');
+    $desdeDefecto = $hoy->modify('first day of this month')->format('Y-m-d');
+    $hastaDefecto = $hoy->format('Y-m-d');
+
+    $desde = rep_fecha_valida($_GET['fecha_desde'] ?? '') ?: $desdeDefecto;
+    $hasta = rep_fecha_valida($_GET['fecha_hasta'] ?? '') ?: $hastaDefecto;
+
+    $dDesde = DateTimeImmutable::createFromFormat('!Y-m-d', $desde);
+    $dHasta = DateTimeImmutable::createFromFormat('!Y-m-d', $hasta);
+    if (!$dDesde || !$dHasta || $dDesde > $dHasta) {
+        rep_error_descarga('El periodo contable no es válido.', 422);
+    }
+    if ($dDesde->diff($dHasta)->days > 366) {
+        rep_error_descarga('El paquete contable admite periodos de hasta 367 días. Divide la exportación en periodos más pequeños.', 422);
+    }
+
+    $monedaBase = strtoupper((string) ($conexion->query(
+        "SELECT codigo FROM monedas WHERE es_base = 1 ORDER BY activo DESC, id ASC LIMIT 1"
+    )->fetchColumn() ?: 'MXN'));
+
+    $params = ['desde' => $desde, 'hasta' => $hasta];
+
+    $ventas = rep_consultar_todo($conexion, rep_contable_sql_ventas(false), $params);
+    $ventasDetalle = rep_consultar_todo($conexion, rep_contable_sql_ventas(true), $params);
+    $compras = rep_consultar_todo($conexion, rep_contable_sql_compras(false), $params);
+    $comprasDetalle = rep_consultar_todo($conexion, rep_contable_sql_compras(true), $params);
+    $devVentas = rep_consultar_todo($conexion, rep_contable_sql_devoluciones_venta(), $params);
+    $devCompras = rep_consultar_todo($conexion, rep_contable_sql_devoluciones_compra(), $params);
+    $impuestos = rep_contable_resumen_impuestos($conexion, $params);
+
+    $totalFilas = count($ventasDetalle) + count($comprasDetalle) + count($devVentas) + count($devCompras);
+    rep_validar_limite_exportacion($totalFilas, 100000);
+
+    $totales = rep_contable_totales($ventas, $compras, $devVentas, $devCompras);
+    $devVentasOps = rep_contar_distintos($devVentas, 'devolucion');
+    $devComprasOps = rep_contar_distintos($devCompras, 'devolucion');
+    $resumen = rep_contable_resumen(
+        $desde,
+        $hasta,
+        $monedaBase,
+        $totales,
+        count($ventas),
+        count($compras),
+        $devVentasOps,
+        count($devVentas),
+        $devComprasOps,
+        count($devCompras)
+    );
+
+    $archivo = 'entrega_contable_' . str_replace('-', '', $desde) . '_a_' . str_replace('-', '', $hasta) . '_' . date('His') . '.xlsx';
+
+    rep_registrar_exportacion_contable($conexion, $desde, $hasta, $archivo, [
+        'ventas' => count($ventas),
+        'compras' => count($compras),
+        'devoluciones_venta' => count($devVentas),
+        'devoluciones_compra' => count($devCompras),
+        'moneda_base' => $monedaBase,
+    ]);
+
+    $hojas = [
+        [
+            'nombre' => 'Resumen',
+            'columnas' => [
+                ['campo' => 'seccion', 'titulo' => 'Sección', 'tipo' => 'texto', 'ancho' => 24],
+                ['campo' => 'concepto', 'titulo' => 'Concepto', 'tipo' => 'texto', 'ancho' => 38],
+                ['campo' => 'valor', 'titulo' => 'Valor', 'tipo' => 'texto', 'ancho' => 34],
+            ],
+            'filas' => $resumen,
+        ],
+        [
+            'nombre' => 'Ventas',
+            'columnas' => rep_contable_columnas_ventas(false),
+            'filas' => $ventas,
+        ],
+        [
+            'nombre' => 'Detalle ventas',
+            'columnas' => rep_contable_columnas_ventas(true),
+            'filas' => $ventasDetalle,
+        ],
+        [
+            'nombre' => 'Compras',
+            'columnas' => rep_contable_columnas_compras(false),
+            'filas' => $compras,
+        ],
+        [
+            'nombre' => 'Detalle compras',
+            'columnas' => rep_contable_columnas_compras(true),
+            'filas' => $comprasDetalle,
+        ],
+        [
+            'nombre' => 'Impuestos por tasa',
+            'columnas' => [
+                ['campo' => 'origen', 'titulo' => 'Origen', 'tipo' => 'texto', 'ancho' => 24],
+                ['campo' => 'tasa_codigo', 'titulo' => 'Impuesto', 'tipo' => 'texto', 'ancho' => 18],
+                ['campo' => 'tasa_pct', 'titulo' => 'Tasa %', 'tipo' => 'numero', 'ancho' => 12],
+                ['campo' => 'base_base', 'titulo' => 'Base en moneda base', 'tipo' => 'numero', 'ancho' => 22],
+                ['campo' => 'impuesto_base', 'titulo' => 'Impuesto en moneda base', 'tipo' => 'numero', 'ancho' => 24],
+                ['campo' => 'total_base', 'titulo' => 'Total en moneda base', 'tipo' => 'numero', 'ancho' => 22],
+            ],
+            'filas' => $impuestos,
+        ],
+        [
+            'nombre' => 'Dev ventas',
+            'columnas' => rep_contable_columnas_devolucion('VENTA'),
+            'filas' => $devVentas,
+        ],
+        [
+            'nombre' => 'Dev compras',
+            'columnas' => rep_contable_columnas_devolucion('COMPRA'),
+            'filas' => $devCompras,
+        ],
+    ];
+
+    si_xlsx_descargar($archivo, $hojas);
+}
+
+function rep_error_descarga(string $mensaje, int $codigo = 400): never
+{
+    http_response_code($codigo);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo $mensaje;
+    exit;
+}
+
+function rep_consultar_todo(PDO $conexion, string $sql, array $params): array
+{
+    $stmt = $conexion->prepare($sql);
+    rep_bind($stmt, $params);
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
+}
+
+function rep_contable_sql_ventas(bool $detalle): string
+{
+    $where = "v.estado = 'CONFIRMADA' AND v.fecha_venta >= :desde AND v.fecha_venta < DATE_ADD(:hasta, INTERVAL 1 DAY)";
+    if (!$detalle) {
+        return "SELECT v.fecha_venta AS fecha, v.folio,
+                       COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
+                       COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '') AS rfc,
+                       v.condicion_pago, mon.codigo AS moneda, v.tipo_cambio_a_base,
+                       (v.subtotal + v.descuento_total) AS importe_bruto,
+                       v.descuento_total AS descuento, v.subtotal AS base_sin_impuesto,
+                       v.impuesto_total AS impuesto, v.total,
+                       (v.subtotal + v.descuento_total) * v.tipo_cambio_a_base AS importe_bruto_base,
+                       v.descuento_total * v.tipo_cambio_a_base AS descuento_base,
+                       v.subtotal * v.tipo_cambio_a_base AS base_sin_impuesto_base,
+                       v.impuesto_total * v.tipo_cambio_a_base AS impuesto_base,
+                       v.total * v.tipo_cambio_a_base AS total_base,
+                       COALESCE(u.usuario,'—') AS usuario
+                FROM ventas v
+                LEFT JOIN clientes cl ON cl.id = v.cliente_id
+                INNER JOIN monedas mon ON mon.id = v.moneda_id
+                LEFT JOIN usuarios u ON u.id = v.created_by
+                WHERE {$where}
+                ORDER BY v.fecha_venta ASC, v.id ASC";
+    }
+
+    return "SELECT v.fecha_venta AS fecha, v.folio,
+                   COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
+                   COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '') AS rfc,
+                   vd.renglon, COALESCE(a.nombre,'') AS almacen, vd.sku_snapshot AS sku, vd.producto_nombre_snapshot AS producto,
+                   COALESCE(pr.nombre, vd.unidad_nombre_snapshot) AS presentacion, vd.cantidad,
+                   vd.precio_unitario, vd.descuento_pct, vd.descuento_importe,
+                   COALESCE(ti.codigo, CASE WHEN vd.impuesto_pct_snapshot = 0 THEN 'TASA 0%' ELSE CONCAT('TASA ', vd.impuesto_pct_snapshot, '%') END) AS tasa_codigo,
+                   vd.impuesto_pct_snapshot AS tasa_pct,
+                   (vd.subtotal + vd.descuento_importe) AS importe_bruto, vd.subtotal AS base_sin_impuesto,
+                   vd.impuesto_importe AS impuesto, vd.total,
+                   mon.codigo AS moneda, v.tipo_cambio_a_base,
+                   vd.subtotal * v.tipo_cambio_a_base AS base_sin_impuesto_base,
+                   vd.impuesto_importe * v.tipo_cambio_a_base AS impuesto_base,
+                   vd.total * v.tipo_cambio_a_base AS total_base
+            FROM ventas v
+            INNER JOIN ventas_detalle vd ON vd.venta_id = v.id
+            LEFT JOIN clientes cl ON cl.id = v.cliente_id
+            LEFT JOIN almacenes a ON a.id = vd.almacen_id
+            LEFT JOIN presentaciones_producto pr ON pr.id = vd.presentacion_id
+            LEFT JOIN tasas_impuesto ti ON ti.id = vd.tasa_impuesto_id
+            INNER JOIN monedas mon ON mon.id = v.moneda_id
+            WHERE {$where}
+            ORDER BY v.fecha_venta ASC, v.id ASC, vd.renglon ASC";
+}
+
+function rep_contable_sql_compras(bool $detalle): string
+{
+    $where = "c.estado IN ('PENDIENTE_RECEPCION','RECIBIDA_PARCIAL','RECIBIDA') AND c.fecha_compra >= :desde AND c.fecha_compra < DATE_ADD(:hasta, INTERVAL 1 DAY)";
+    if (!$detalle) {
+        return "SELECT c.fecha_compra AS fecha, c.fecha_factura, c.folio,
+                       COALESCE(NULLIF(c.numero_factura,''),'') AS documento_proveedor,
+                       COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                       COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
+                       c.condicion_pago, c.estado, mon.codigo AS moneda, c.tipo_cambio_a_base,
+                       (c.subtotal + c.descuento_total) AS importe_bruto,
+                       c.descuento_total AS descuento, c.subtotal AS base_sin_impuesto,
+                       c.impuesto_total AS impuesto, c.total,
+                       (c.subtotal + c.descuento_total) * c.tipo_cambio_a_base AS importe_bruto_base,
+                       c.descuento_total * c.tipo_cambio_a_base AS descuento_base,
+                       c.subtotal * c.tipo_cambio_a_base AS base_sin_impuesto_base,
+                       c.impuesto_total * c.tipo_cambio_a_base AS impuesto_base,
+                       c.total * c.tipo_cambio_a_base AS total_base,
+                       COALESCE(u.usuario,'—') AS usuario
+                FROM compras c
+                LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+                INNER JOIN monedas mon ON mon.id = c.moneda_id
+                LEFT JOIN usuarios u ON u.id = c.created_by
+                WHERE {$where}
+                ORDER BY c.fecha_compra ASC, c.id ASC";
+    }
+
+    return "SELECT c.fecha_compra AS fecha, c.fecha_factura, c.folio,
+                   COALESCE(NULLIF(c.numero_factura,''),'') AS documento_proveedor,
+                   COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                   COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
+                   cd.renglon, cd.sku_snapshot AS sku, cd.producto_nombre_snapshot AS producto,
+                   COALESCE(pres.nombre, cd.unidad_nombre_snapshot) AS presentacion, cd.cantidad,
+                   cd.precio_unitario, cd.descuento_pct, cd.descuento_importe,
+                   COALESCE(ti.codigo, CASE WHEN cd.impuesto_pct_snapshot = 0 THEN 'TASA 0%' ELSE CONCAT('TASA ', cd.impuesto_pct_snapshot, '%') END) AS tasa_codigo,
+                   cd.impuesto_pct_snapshot AS tasa_pct,
+                   (cd.subtotal + cd.descuento_importe) AS importe_bruto, cd.subtotal AS base_sin_impuesto,
+                   cd.impuesto_importe AS impuesto, cd.total,
+                   mon.codigo AS moneda, c.tipo_cambio_a_base,
+                   cd.subtotal * c.tipo_cambio_a_base AS base_sin_impuesto_base,
+                   cd.impuesto_importe * c.tipo_cambio_a_base AS impuesto_base,
+                   cd.total * c.tipo_cambio_a_base AS total_base
+            FROM compras c
+            INNER JOIN compras_detalle cd ON cd.compra_id = c.id
+            LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+            LEFT JOIN presentaciones_producto pres ON pres.id = cd.presentacion_id
+            LEFT JOIN tasas_impuesto ti ON ti.id = cd.tasa_impuesto_id
+            INNER JOIN monedas mon ON mon.id = c.moneda_id
+            WHERE {$where}
+            ORDER BY c.fecha_compra ASC, c.id ASC, cd.renglon ASC";
+}
+
+function rep_contable_sql_devoluciones_venta(): string
+{
+    return "SELECT dv.fecha_devolucion AS fecha, dv.folio AS devolucion, v.folio AS operacion_origen,
+                   COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS tercero,
+                   COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '') AS rfc,
+                   vd.sku_snapshot AS sku, vd.producto_nombre_snapshot AS producto, dvd.cantidad_base,
+                   um.codigo AS unidad_base,
+                   CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END AS proporcion,
+                   vd.impuesto_pct_snapshot AS tasa_pct,
+                   (vd.subtotal * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) AS base_sin_impuesto,
+                   (vd.impuesto_importe * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) AS impuesto,
+                   dvd.importe AS total,
+                   mon.codigo AS moneda, v.tipo_cambio_a_base,
+                   (vd.subtotal * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) * v.tipo_cambio_a_base AS base_sin_impuesto_base,
+                   (vd.impuesto_importe * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) * v.tipo_cambio_a_base AS impuesto_base,
+                   dvd.importe * v.tipo_cambio_a_base AS total_base,
+                   dv.motivo
+            FROM devoluciones_venta dv
+            INNER JOIN ventas v ON v.id = dv.venta_id
+            INNER JOIN devoluciones_venta_detalle dvd ON dvd.devolucion_id = dv.id
+            INNER JOIN ventas_detalle vd ON vd.id = dvd.venta_detalle_id
+            INNER JOIN productos p ON p.id = dvd.producto_id
+            LEFT JOIN clientes cl ON cl.id = dv.cliente_id
+            INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+            INNER JOIN monedas mon ON mon.id = v.moneda_id
+            WHERE dv.estado = 'CONFIRMADA'
+              AND dv.fecha_devolucion >= :desde
+              AND dv.fecha_devolucion < DATE_ADD(:hasta, INTERVAL 1 DAY)
+            ORDER BY dv.fecha_devolucion ASC, dv.id ASC, dvd.id ASC";
+}
+
+function rep_contable_sql_devoluciones_compra(): string
+{
+    return "SELECT dc.fecha_devolucion AS fecha, dc.folio AS devolucion, c.folio AS operacion_origen,
+                   COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS tercero,
+                   COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
+                   cd.sku_snapshot AS sku, cd.producto_nombre_snapshot AS producto, dcd.cantidad_base,
+                   um.codigo AS unidad_base,
+                   CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END AS proporcion,
+                   cd.impuesto_pct_snapshot AS tasa_pct,
+                   (cd.subtotal * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) AS base_sin_impuesto,
+                   (cd.impuesto_importe * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) AS impuesto,
+                   dcd.importe AS total,
+                   mon.codigo AS moneda, c.tipo_cambio_a_base,
+                   (cd.subtotal * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) * c.tipo_cambio_a_base AS base_sin_impuesto_base,
+                   (cd.impuesto_importe * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) * c.tipo_cambio_a_base AS impuesto_base,
+                   dcd.importe * c.tipo_cambio_a_base AS total_base,
+                   dc.motivo
+            FROM devoluciones_compra dc
+            INNER JOIN compras c ON c.id = dc.compra_id
+            INNER JOIN devoluciones_compra_detalle dcd ON dcd.devolucion_id = dc.id
+            INNER JOIN compras_detalle cd ON cd.id = dcd.compra_detalle_id
+            INNER JOIN productos p ON p.id = dcd.producto_id
+            LEFT JOIN proveedores pr ON pr.id = dc.proveedor_id
+            INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+            INNER JOIN monedas mon ON mon.id = c.moneda_id
+            WHERE dc.estado = 'CONFIRMADA'
+              AND dc.fecha_devolucion >= :desde
+              AND dc.fecha_devolucion < DATE_ADD(:hasta, INTERVAL 1 DAY)
+            ORDER BY dc.fecha_devolucion ASC, dc.id ASC, dcd.id ASC";
+}
+
+function rep_contable_resumen_impuestos(PDO $conexion, array $params): array
+{
+    $sql = "SELECT origen, tasa_codigo, tasa_pct,
+                   ROUND(SUM(base_base), 4) AS base_base,
+                   ROUND(SUM(impuesto_base), 4) AS impuesto_base,
+                   ROUND(SUM(total_base), 4) AS total_base
+            FROM (
+                SELECT 'VENTAS' AS origen,
+                       COALESCE(ti.codigo, CONCAT('TASA ', vd.impuesto_pct_snapshot, '%')) AS tasa_codigo,
+                       vd.impuesto_pct_snapshot AS tasa_pct,
+                       vd.subtotal * v.tipo_cambio_a_base AS base_base,
+                       vd.impuesto_importe * v.tipo_cambio_a_base AS impuesto_base,
+                       vd.total * v.tipo_cambio_a_base AS total_base
+                FROM ventas v
+                INNER JOIN ventas_detalle vd ON vd.venta_id = v.id
+                LEFT JOIN tasas_impuesto ti ON ti.id = vd.tasa_impuesto_id
+                WHERE v.estado = 'CONFIRMADA' AND v.fecha_venta >= :desde_v AND v.fecha_venta < DATE_ADD(:hasta_v, INTERVAL 1 DAY)
+
+                UNION ALL
+
+                SELECT 'DEVOLUCIONES VENTA' AS origen,
+                       COALESCE(ti.codigo, CONCAT('TASA ', vd.impuesto_pct_snapshot, '%')) AS tasa_codigo,
+                       vd.impuesto_pct_snapshot AS tasa_pct,
+                       -(vd.subtotal * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) * v.tipo_cambio_a_base AS base_base,
+                       -(vd.impuesto_importe * CASE WHEN vd.cantidad_base > 0 THEN dvd.cantidad_base / vd.cantidad_base ELSE 0 END) * v.tipo_cambio_a_base AS impuesto_base,
+                       -(dvd.importe * v.tipo_cambio_a_base) AS total_base
+                FROM devoluciones_venta dv
+                INNER JOIN ventas v ON v.id = dv.venta_id
+                INNER JOIN devoluciones_venta_detalle dvd ON dvd.devolucion_id = dv.id
+                INNER JOIN ventas_detalle vd ON vd.id = dvd.venta_detalle_id
+                LEFT JOIN tasas_impuesto ti ON ti.id = vd.tasa_impuesto_id
+                WHERE dv.estado = 'CONFIRMADA' AND dv.fecha_devolucion >= :desde_dv AND dv.fecha_devolucion < DATE_ADD(:hasta_dv, INTERVAL 1 DAY)
+
+                UNION ALL
+
+                SELECT 'COMPRAS' AS origen,
+                       COALESCE(ti.codigo, CONCAT('TASA ', cd.impuesto_pct_snapshot, '%')) AS tasa_codigo,
+                       cd.impuesto_pct_snapshot AS tasa_pct,
+                       cd.subtotal * c.tipo_cambio_a_base AS base_base,
+                       cd.impuesto_importe * c.tipo_cambio_a_base AS impuesto_base,
+                       cd.total * c.tipo_cambio_a_base AS total_base
+                FROM compras c
+                INNER JOIN compras_detalle cd ON cd.compra_id = c.id
+                LEFT JOIN tasas_impuesto ti ON ti.id = cd.tasa_impuesto_id
+                WHERE c.estado IN ('PENDIENTE_RECEPCION','RECIBIDA_PARCIAL','RECIBIDA') AND c.fecha_compra >= :desde_c AND c.fecha_compra < DATE_ADD(:hasta_c, INTERVAL 1 DAY)
+
+                UNION ALL
+
+                SELECT 'DEVOLUCIONES COMPRA' AS origen,
+                       COALESCE(ti.codigo, CONCAT('TASA ', cd.impuesto_pct_snapshot, '%')) AS tasa_codigo,
+                       cd.impuesto_pct_snapshot AS tasa_pct,
+                       -(cd.subtotal * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) * c.tipo_cambio_a_base AS base_base,
+                       -(cd.impuesto_importe * CASE WHEN cd.cantidad_base > 0 THEN dcd.cantidad_base / cd.cantidad_base ELSE 0 END) * c.tipo_cambio_a_base AS impuesto_base,
+                       -(dcd.importe * c.tipo_cambio_a_base) AS total_base
+                FROM devoluciones_compra dc
+                INNER JOIN compras c ON c.id = dc.compra_id
+                INNER JOIN devoluciones_compra_detalle dcd ON dcd.devolucion_id = dc.id
+                INNER JOIN compras_detalle cd ON cd.id = dcd.compra_detalle_id
+                LEFT JOIN tasas_impuesto ti ON ti.id = cd.tasa_impuesto_id
+                WHERE dc.estado = 'CONFIRMADA' AND dc.fecha_devolucion >= :desde_dc AND dc.fecha_devolucion < DATE_ADD(:hasta_dc, INTERVAL 1 DAY)
+            ) t
+            GROUP BY origen, tasa_codigo, tasa_pct
+            ORDER BY CASE origen WHEN 'VENTAS' THEN 1 WHEN 'DEVOLUCIONES VENTA' THEN 2 WHEN 'COMPRAS' THEN 3 ELSE 4 END, tasa_pct DESC";
+
+    $p = [
+        'desde_v' => $params['desde'], 'hasta_v' => $params['hasta'],
+        'desde_dv' => $params['desde'], 'hasta_dv' => $params['hasta'],
+        'desde_c' => $params['desde'], 'hasta_c' => $params['hasta'],
+        'desde_dc' => $params['desde'], 'hasta_dc' => $params['hasta'],
+    ];
+    return rep_consultar_todo($conexion, $sql, $p);
+}
+
+function rep_contable_totales(array $ventas, array $compras, array $devVentas, array $devCompras): array
+{
+    $suma = static function (array $filas, string $campo): float {
+        $total = 0.0;
+        foreach ($filas as $fila) {
+            $total += (float) ($fila[$campo] ?? 0);
+        }
+        return round($total, 4);
+    };
+
+    $vBase = $suma($ventas, 'base_sin_impuesto_base');
+    $vImp = $suma($ventas, 'impuesto_base');
+    $vTotal = $suma($ventas, 'total_base');
+    $dvBase = $suma($devVentas, 'base_sin_impuesto_base');
+    $dvImp = $suma($devVentas, 'impuesto_base');
+    $dvTotal = $suma($devVentas, 'total_base');
+    $cBase = $suma($compras, 'base_sin_impuesto_base');
+    $cImp = $suma($compras, 'impuesto_base');
+    $cTotal = $suma($compras, 'total_base');
+    $dcBase = $suma($devCompras, 'base_sin_impuesto_base');
+    $dcImp = $suma($devCompras, 'impuesto_base');
+    $dcTotal = $suma($devCompras, 'total_base');
+
+    return [
+        'ventas_base' => $vBase, 'ventas_impuesto' => $vImp, 'ventas_total' => $vTotal,
+        'dev_ventas_base' => $dvBase, 'dev_ventas_impuesto' => $dvImp, 'dev_ventas_total' => $dvTotal,
+        'ventas_netas_base' => round($vBase - $dvBase, 4), 'ventas_netas_impuesto' => round($vImp - $dvImp, 4), 'ventas_netas_total' => round($vTotal - $dvTotal, 4),
+        'compras_base' => $cBase, 'compras_impuesto' => $cImp, 'compras_total' => $cTotal,
+        'dev_compras_base' => $dcBase, 'dev_compras_impuesto' => $dcImp, 'dev_compras_total' => $dcTotal,
+        'compras_netas_base' => round($cBase - $dcBase, 4), 'compras_netas_impuesto' => round($cImp - $dcImp, 4), 'compras_netas_total' => round($cTotal - $dcTotal, 4),
+    ];
+}
+
+function rep_contar_distintos(array $filas, string $campo): int
+{
+    $valores = [];
+    foreach ($filas as $fila) {
+        $valor = trim((string) ($fila[$campo] ?? ''));
+        if ($valor !== '') {
+            $valores[$valor] = true;
+        }
+    }
+    return count($valores);
+}
+
+function rep_contable_resumen(string $desde, string $hasta, string $monedaBase, array $t, int $nVentas, int $nCompras, int $nDevVentasOps, int $nDevVentasLineas, int $nDevComprasOps, int $nDevComprasLineas): array
+{
+    $dinero = static fn(float $v): string => number_format($v, 2, '.', ',');
+    return [
+        ['seccion' => 'Alcance', 'concepto' => 'Periodo', 'valor' => $desde . ' a ' . $hasta],
+        ['seccion' => 'Alcance', 'concepto' => 'Moneda base para totales comparables', 'valor' => $monedaBase],
+        ['seccion' => 'Alcance', 'concepto' => 'Uso', 'valor' => 'Entrega de datos al área contable. No genera, timbra ni sustituye CFDI/SAT.'],
+        ['seccion' => 'Ventas', 'concepto' => 'Operaciones confirmadas', 'valor' => (string) $nVentas],
+        ['seccion' => 'Ventas', 'concepto' => 'Base sin impuesto', 'valor' => $dinero($t['ventas_base']) . ' ' . $monedaBase],
+        ['seccion' => 'Ventas', 'concepto' => 'Impuestos', 'valor' => $dinero($t['ventas_impuesto']) . ' ' . $monedaBase],
+        ['seccion' => 'Ventas', 'concepto' => 'Total', 'valor' => $dinero($t['ventas_total']) . ' ' . $monedaBase],
+        ['seccion' => 'Devoluciones venta', 'concepto' => 'Devoluciones confirmadas', 'valor' => (string) $nDevVentasOps],
+        ['seccion' => 'Devoluciones venta', 'concepto' => 'Renglones devueltos', 'valor' => (string) $nDevVentasLineas],
+        ['seccion' => 'Devoluciones venta', 'concepto' => 'Total devuelto', 'valor' => $dinero($t['dev_ventas_total']) . ' ' . $monedaBase],
+        ['seccion' => 'Ventas netas informativas', 'concepto' => 'Base después de devoluciones', 'valor' => $dinero($t['ventas_netas_base']) . ' ' . $monedaBase],
+        ['seccion' => 'Ventas netas informativas', 'concepto' => 'Impuestos después de devoluciones', 'valor' => $dinero($t['ventas_netas_impuesto']) . ' ' . $monedaBase],
+        ['seccion' => 'Ventas netas informativas', 'concepto' => 'Total después de devoluciones', 'valor' => $dinero($t['ventas_netas_total']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras', 'concepto' => 'Operaciones válidas', 'valor' => (string) $nCompras],
+        ['seccion' => 'Compras', 'concepto' => 'Base sin impuesto', 'valor' => $dinero($t['compras_base']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras', 'concepto' => 'Impuestos', 'valor' => $dinero($t['compras_impuesto']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras', 'concepto' => 'Total', 'valor' => $dinero($t['compras_total']) . ' ' . $monedaBase],
+        ['seccion' => 'Devoluciones compra', 'concepto' => 'Devoluciones confirmadas', 'valor' => (string) $nDevComprasOps],
+        ['seccion' => 'Devoluciones compra', 'concepto' => 'Renglones devueltos', 'valor' => (string) $nDevComprasLineas],
+        ['seccion' => 'Devoluciones compra', 'concepto' => 'Total devuelto', 'valor' => $dinero($t['dev_compras_total']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras netas informativas', 'concepto' => 'Base después de devoluciones', 'valor' => $dinero($t['compras_netas_base']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras netas informativas', 'concepto' => 'Impuestos después de devoluciones', 'valor' => $dinero($t['compras_netas_impuesto']) . ' ' . $monedaBase],
+        ['seccion' => 'Compras netas informativas', 'concepto' => 'Total después de devoluciones', 'valor' => $dinero($t['compras_netas_total']) . ' ' . $monedaBase],
+    ];
+}
+
+function rep_contable_columnas_ventas(bool $detalle): array
+{
+    if (!$detalle) {
+        return [
+            ['campo'=>'fecha','titulo'=>'Fecha','tipo'=>'texto','ancho'=>20], ['campo'=>'folio','titulo'=>'Folio','tipo'=>'texto','ancho'=>18],
+            ['campo'=>'cliente','titulo'=>'Cliente','tipo'=>'texto','ancho'=>34], ['campo'=>'rfc','titulo'=>'RFC','tipo'=>'texto','ancho'=>18],
+            ['campo'=>'condicion_pago','titulo'=>'Condición pago','tipo'=>'texto','ancho'=>16], ['campo'=>'moneda','titulo'=>'Moneda','tipo'=>'texto','ancho'=>10],
+            ['campo'=>'tipo_cambio_a_base','titulo'=>'Tipo cambio a base','tipo'=>'numero','ancho'=>18], ['campo'=>'importe_bruto','titulo'=>'Importe bruto','tipo'=>'numero','ancho'=>16],
+            ['campo'=>'descuento','titulo'=>'Descuento','tipo'=>'numero','ancho'=>14], ['campo'=>'base_sin_impuesto','titulo'=>'Base sin impuesto','tipo'=>'numero','ancho'=>18],
+            ['campo'=>'impuesto','titulo'=>'Impuesto','tipo'=>'numero','ancho'=>14], ['campo'=>'total','titulo'=>'Total','tipo'=>'numero','ancho'=>14],
+            ['campo'=>'base_sin_impuesto_base','titulo'=>'Base moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto_base','titulo'=>'Impuesto moneda base','tipo'=>'numero','ancho'=>20],
+            ['campo'=>'total_base','titulo'=>'Total moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'usuario','titulo'=>'Usuario','tipo'=>'texto','ancho'=>16],
+        ];
+    }
+    return [
+        ['campo'=>'fecha','titulo'=>'Fecha','tipo'=>'texto','ancho'=>20], ['campo'=>'folio','titulo'=>'Venta','tipo'=>'texto','ancho'=>18], ['campo'=>'cliente','titulo'=>'Cliente','tipo'=>'texto','ancho'=>32], ['campo'=>'rfc','titulo'=>'RFC','tipo'=>'texto','ancho'=>18],
+        ['campo'=>'renglon','titulo'=>'Renglón','tipo'=>'numero','ancho'=>10], ['campo'=>'almacen','titulo'=>'Almacén','tipo'=>'texto','ancho'=>20], ['campo'=>'sku','titulo'=>'SKU','tipo'=>'texto','ancho'=>16], ['campo'=>'producto','titulo'=>'Producto','tipo'=>'texto','ancho'=>30],
+        ['campo'=>'presentacion','titulo'=>'Presentación','tipo'=>'texto','ancho'=>18], ['campo'=>'cantidad','titulo'=>'Cantidad','tipo'=>'numero','ancho'=>14], ['campo'=>'precio_unitario','titulo'=>'Precio unitario','tipo'=>'numero','ancho'=>16],
+        ['campo'=>'descuento_pct','titulo'=>'Descuento %','tipo'=>'numero','ancho'=>14], ['campo'=>'descuento_importe','titulo'=>'Descuento importe','tipo'=>'numero','ancho'=>18], ['campo'=>'tasa_codigo','titulo'=>'Impuesto','tipo'=>'texto','ancho'=>14], ['campo'=>'tasa_pct','titulo'=>'Tasa %','tipo'=>'numero','ancho'=>10],
+        ['campo'=>'importe_bruto','titulo'=>'Importe bruto','tipo'=>'numero','ancho'=>16], ['campo'=>'base_sin_impuesto','titulo'=>'Base sin impuesto','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto','titulo'=>'Impuesto','tipo'=>'numero','ancho'=>14], ['campo'=>'total','titulo'=>'Total','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'moneda','titulo'=>'Moneda','tipo'=>'texto','ancho'=>10], ['campo'=>'tipo_cambio_a_base','titulo'=>'Tipo cambio a base','tipo'=>'numero','ancho'=>18], ['campo'=>'base_sin_impuesto_base','titulo'=>'Base moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto_base','titulo'=>'Impuesto moneda base','tipo'=>'numero','ancho'=>20], ['campo'=>'total_base','titulo'=>'Total moneda base','tipo'=>'numero','ancho'=>18],
+    ];
+}
+
+function rep_contable_columnas_compras(bool $detalle): array
+{
+    if (!$detalle) {
+        return [
+            ['campo'=>'fecha','titulo'=>'Fecha compra','tipo'=>'texto','ancho'=>20], ['campo'=>'fecha_factura','titulo'=>'Fecha documento','tipo'=>'texto','ancho'=>15], ['campo'=>'folio','titulo'=>'Compra','tipo'=>'texto','ancho'=>18], ['campo'=>'documento_proveedor','titulo'=>'Factura / documento proveedor','tipo'=>'texto','ancho'=>26],
+            ['campo'=>'proveedor','titulo'=>'Proveedor','tipo'=>'texto','ancho'=>34], ['campo'=>'rfc','titulo'=>'RFC','tipo'=>'texto','ancho'=>18], ['campo'=>'condicion_pago','titulo'=>'Condición pago','tipo'=>'texto','ancho'=>16], ['campo'=>'estado','titulo'=>'Estado','tipo'=>'texto','ancho'=>20],
+            ['campo'=>'moneda','titulo'=>'Moneda','tipo'=>'texto','ancho'=>10], ['campo'=>'tipo_cambio_a_base','titulo'=>'Tipo cambio a base','tipo'=>'numero','ancho'=>18], ['campo'=>'importe_bruto','titulo'=>'Importe bruto','tipo'=>'numero','ancho'=>16],
+            ['campo'=>'descuento','titulo'=>'Descuento','tipo'=>'numero','ancho'=>14], ['campo'=>'base_sin_impuesto','titulo'=>'Base sin impuesto','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto','titulo'=>'Impuesto','tipo'=>'numero','ancho'=>14], ['campo'=>'total','titulo'=>'Total','tipo'=>'numero','ancho'=>14],
+            ['campo'=>'base_sin_impuesto_base','titulo'=>'Base moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto_base','titulo'=>'Impuesto moneda base','tipo'=>'numero','ancho'=>20], ['campo'=>'total_base','titulo'=>'Total moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'usuario','titulo'=>'Usuario','tipo'=>'texto','ancho'=>16],
+        ];
+    }
+    return [
+        ['campo'=>'fecha','titulo'=>'Fecha compra','tipo'=>'texto','ancho'=>20], ['campo'=>'fecha_factura','titulo'=>'Fecha documento','tipo'=>'texto','ancho'=>15], ['campo'=>'folio','titulo'=>'Compra','tipo'=>'texto','ancho'=>18], ['campo'=>'documento_proveedor','titulo'=>'Factura / documento proveedor','tipo'=>'texto','ancho'=>26], ['campo'=>'proveedor','titulo'=>'Proveedor','tipo'=>'texto','ancho'=>32], ['campo'=>'rfc','titulo'=>'RFC','tipo'=>'texto','ancho'=>18],
+        ['campo'=>'renglon','titulo'=>'Renglón','tipo'=>'numero','ancho'=>10], ['campo'=>'sku','titulo'=>'SKU','tipo'=>'texto','ancho'=>16], ['campo'=>'producto','titulo'=>'Producto','tipo'=>'texto','ancho'=>30], ['campo'=>'presentacion','titulo'=>'Presentación','tipo'=>'texto','ancho'=>18], ['campo'=>'cantidad','titulo'=>'Cantidad','tipo'=>'numero','ancho'=>14], ['campo'=>'precio_unitario','titulo'=>'Precio unitario','tipo'=>'numero','ancho'=>16],
+        ['campo'=>'descuento_pct','titulo'=>'Descuento %','tipo'=>'numero','ancho'=>14], ['campo'=>'descuento_importe','titulo'=>'Descuento importe','tipo'=>'numero','ancho'=>18], ['campo'=>'tasa_codigo','titulo'=>'Impuesto','tipo'=>'texto','ancho'=>14], ['campo'=>'tasa_pct','titulo'=>'Tasa %','tipo'=>'numero','ancho'=>10], ['campo'=>'importe_bruto','titulo'=>'Importe bruto','tipo'=>'numero','ancho'=>16], ['campo'=>'base_sin_impuesto','titulo'=>'Base sin impuesto','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto','titulo'=>'Impuesto','tipo'=>'numero','ancho'=>14], ['campo'=>'total','titulo'=>'Total','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'moneda','titulo'=>'Moneda','tipo'=>'texto','ancho'=>10], ['campo'=>'tipo_cambio_a_base','titulo'=>'Tipo cambio a base','tipo'=>'numero','ancho'=>18], ['campo'=>'base_sin_impuesto_base','titulo'=>'Base moneda base','tipo'=>'numero','ancho'=>18], ['campo'=>'impuesto_base','titulo'=>'Impuesto moneda base','tipo'=>'numero','ancho'=>20], ['campo'=>'total_base','titulo'=>'Total moneda base','tipo'=>'numero','ancho'=>18],
+    ];
+}
+
+function rep_contable_columnas_devolucion(string $tipo): array
+{
+    $tercero = $tipo === 'VENTA' ? 'Cliente' : 'Proveedor';
+    return [
+        ['campo'=>'fecha','titulo'=>'Fecha','tipo'=>'texto','ancho'=>20], ['campo'=>'devolucion','titulo'=>'Devolución','tipo'=>'texto','ancho'=>20], ['campo'=>'operacion_origen','titulo'=>'Operación origen','tipo'=>'texto','ancho'=>20],
+        ['campo'=>'tercero','titulo'=>$tercero,'tipo'=>'texto','ancho'=>32], ['campo'=>'rfc','titulo'=>'RFC','tipo'=>'texto','ancho'=>18], ['campo'=>'sku','titulo'=>'SKU','tipo'=>'texto','ancho'=>16], ['campo'=>'producto','titulo'=>'Producto','tipo'=>'texto','ancho'=>30],
+        ['campo'=>'cantidad_base','titulo'=>'Cantidad devuelta base','tipo'=>'numero','ancho'=>20], ['campo'=>'unidad_base','titulo'=>'Unidad base','tipo'=>'texto','ancho'=>14], ['campo'=>'proporcion','titulo'=>'Proporción original','tipo'=>'numero','ancho'=>18], ['campo'=>'tasa_pct','titulo'=>'Tasa % original','tipo'=>'numero','ancho'=>14],
+        ['campo'=>'base_sin_impuesto','titulo'=>'Base estimada devolución','tipo'=>'numero','ancho'=>22], ['campo'=>'impuesto','titulo'=>'Impuesto estimado devolución','tipo'=>'numero','ancho'=>24], ['campo'=>'total','titulo'=>'Total devolución','tipo'=>'numero','ancho'=>18], ['campo'=>'moneda','titulo'=>'Moneda','tipo'=>'texto','ancho'=>10], ['campo'=>'tipo_cambio_a_base','titulo'=>'Tipo cambio a base','tipo'=>'numero','ancho'=>18],
+        ['campo'=>'base_sin_impuesto_base','titulo'=>'Base devolución moneda base','tipo'=>'numero','ancho'=>24], ['campo'=>'impuesto_base','titulo'=>'Impuesto devolución moneda base','tipo'=>'numero','ancho'=>26], ['campo'=>'total_base','titulo'=>'Total devolución moneda base','tipo'=>'numero','ancho'=>22], ['campo'=>'motivo','titulo'=>'Motivo','tipo'=>'texto','ancho'=>34],
+    ];
+}
+
+function rep_registrar_exportacion_contable(PDO $conexion, string $desde, string $hasta, string $archivo, array $filtros): void
+{
+    $usuarioId = (int) ($_SESSION['usuario_id'] ?? 0);
+    if ($usuarioId <= 0) {
+        return;
+    }
+
+    try {
+        $json = json_encode($filtros, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $stmt = $conexion->prepare(
+            "INSERT INTO exportaciones_contables
+             (tipo, formato, fecha_desde, fecha_hasta, filtros_json, nombre_archivo, ruta_relativa, generado_by)
+             VALUES ('COMPRAS_Y_VENTAS', 'XLSX', :desde, :hasta, :filtros, :archivo, NULL, :usuario_id)"
+        );
+        $stmt->execute([
+            ':desde' => $desde,
+            ':hasta' => $hasta,
+            ':filtros' => $json !== false ? $json : null,
+            ':archivo' => $archivo,
+            ':usuario_id' => $usuarioId,
+        ]);
+        $exportacionId = (int) $conexion->lastInsertId();
+
+        $aud = $conexion->prepare(
+            "INSERT INTO auditoria
+             (usuario_id, accion, modulo, entidad_tabla, entidad_id, descripcion, datos_anteriores, datos_nuevos, ip, user_agent)
+             VALUES (:usuario_id, 'EXPORTAR_CONTABILIDAD', 'reportes', 'exportaciones_contables', :entidad_id,
+                     'Se generó una entrega contable de ventas y compras.', NULL, :datos, :ip, :ua)"
+        );
+        $aud->execute([
+            ':usuario_id' => $usuarioId,
+            ':entidad_id' => $exportacionId > 0 ? $exportacionId : null,
+            ':datos' => $json !== false ? $json : null,
+            ':ip' => substr((string) ($_SERVER['REMOTE_ADDR'] ?? ''), 0, 45),
+            ':ua' => substr((string) ($_SERVER['HTTP_USER_AGENT'] ?? ''), 0, 500),
+        ]);
+    } catch (Throwable $e) {
+        // La descarga no debe fallar solo porque no pudo registrarse la bitácora de exportación.
+        error_log('[REPORTES][EXPORTACION_CONTABLE][BITACORA] ' . $e->getMessage());
+    }
+}
+
 function rep_total_filas(PDO $conexion, string $sqlBase, array $params): int
 {
     $stmt = $conexion->prepare("SELECT COUNT(*) FROM ({$sqlBase}) rep_count");
@@ -625,6 +1170,70 @@ function rep_xlsx_detalle_sql(string $codigo, array $f): array
 {
     $where = ['1=1'];
     $params = [];
+
+    if ($codigo === 'COMPRAS') {
+        rep_fecha($where, $params, 'c.fecha_compra', $f);
+        rep_id($where, $params, 'c.proveedor_id', 'proveedor_id', $f['proveedor_id']);
+        rep_id($where, $params, 'c.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'c.estado', $f['estado']);
+        rep_id($where, $params, 'cd.producto_id', 'producto_id', $f['producto_id']);
+        rep_buscar($where, $params, $f['buscar'], ['c.folio', 'c.proveedor_nombre_snapshot', 'c.proveedor_rfc_snapshot', 'c.numero_factura', 'cd.sku_snapshot', 'cd.producto_nombre_snapshot']);
+        $sql = "SELECT c.fecha_compra AS fecha, c.folio,
+                       COALESCE(NULLIF(c.numero_factura,''),'') AS factura,
+                       COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
+                       COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
+                       c.estado, cd.renglon, cd.sku_snapshot AS sku, cd.producto_nombre_snapshot AS producto,
+                       COALESCE(pres.nombre, cd.unidad_nombre_snapshot) AS presentacion, cd.cantidad,
+                       cd.precio_unitario, cd.descuento_pct, cd.descuento_importe,
+                       cd.impuesto_pct_snapshot AS tasa_impuesto_pct, cd.subtotal,
+                       cd.impuesto_importe AS impuesto, cd.total,
+                       mon.codigo AS moneda_codigo, c.tipo_cambio_a_base
+                FROM compras c
+                INNER JOIN compras_detalle cd ON cd.compra_id = c.id
+                LEFT JOIN proveedores pr ON pr.id = c.proveedor_id
+                LEFT JOIN presentaciones_producto pres ON pres.id = cd.presentacion_id
+                INNER JOIN monedas mon ON mon.id = c.moneda_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Compra'), rep_col('factura','Factura / documento'), rep_col('proveedor','Proveedor'), rep_col('rfc','RFC'), rep_col('estado','Estado'),
+            rep_col('renglon','Renglón','entero'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('presentacion','Presentación'), rep_col('cantidad','Cantidad','cantidad'),
+            rep_col('precio_unitario','Precio unitario','moneda'), rep_col('descuento_pct','Descuento %','cantidad'), rep_col('descuento_importe','Descuento','moneda'), rep_col('tasa_impuesto_pct','Impuesto %','cantidad'),
+            rep_col('subtotal','Subtotal','moneda'), rep_col('impuesto','Impuesto','moneda'), rep_col('total','Total','moneda'), rep_col('moneda_codigo','Moneda'), rep_col('tipo_cambio_a_base','Tipo cambio a base','cantidad'),
+        ];
+        return [$sql, $params, $cols, 'Detalle compras', 'ORDER BY c.fecha_compra ASC, c.id ASC, cd.renglon ASC'];
+    }
+
+    if ($codigo === 'VENTAS') {
+        rep_fecha($where, $params, 'v.fecha_venta', $f);
+        rep_id($where, $params, 'v.cliente_id', 'cliente_id', $f['cliente_id']);
+        rep_id($where, $params, 'v.created_by', 'usuario_id', $f['usuario_id']);
+        rep_estado($where, $params, 'v.estado', $f['estado']);
+        rep_id($where, $params, 'vd.producto_id', 'producto_id', $f['producto_id']);
+        rep_buscar($where, $params, $f['buscar'], ['v.folio', 'v.cliente_nombre_snapshot', 'v.cliente_rfc_snapshot', 'vd.sku_snapshot', 'vd.producto_nombre_snapshot']);
+        $sql = "SELECT v.fecha_venta AS fecha, v.folio,
+                       COALESCE(NULLIF(v.cliente_nombre_snapshot,''), cl.nombre_razon_social, 'Público general') AS cliente,
+                       COALESCE(NULLIF(v.cliente_rfc_snapshot,''), cl.rfc, '') AS rfc,
+                       v.estado, vd.renglon, a.nombre AS almacen, vd.sku_snapshot AS sku, vd.producto_nombre_snapshot AS producto,
+                       COALESCE(pres.nombre, vd.unidad_nombre_snapshot) AS presentacion, vd.cantidad,
+                       vd.precio_unitario, vd.descuento_pct, vd.descuento_importe,
+                       vd.impuesto_pct_snapshot AS tasa_impuesto_pct, vd.subtotal,
+                       vd.impuesto_importe AS impuesto, vd.total,
+                       mon.codigo AS moneda_codigo, v.tipo_cambio_a_base
+                FROM ventas v
+                INNER JOIN ventas_detalle vd ON vd.venta_id = v.id
+                LEFT JOIN clientes cl ON cl.id = v.cliente_id
+                INNER JOIN almacenes a ON a.id = vd.almacen_id
+                LEFT JOIN presentaciones_producto pres ON pres.id = vd.presentacion_id
+                INNER JOIN monedas mon ON mon.id = v.moneda_id
+                WHERE " . implode(' AND ', $where);
+        $cols = [
+            rep_col('fecha','Fecha','fecha_hora'), rep_col('folio','Venta'), rep_col('cliente','Cliente'), rep_col('rfc','RFC'), rep_col('estado','Estado'),
+            rep_col('renglon','Renglón','entero'), rep_col('almacen','Almacén'), rep_col('sku','SKU'), rep_col('producto','Producto'), rep_col('presentacion','Presentación'), rep_col('cantidad','Cantidad','cantidad'),
+            rep_col('precio_unitario','Precio unitario','moneda'), rep_col('descuento_pct','Descuento %','cantidad'), rep_col('descuento_importe','Descuento','moneda'), rep_col('tasa_impuesto_pct','Impuesto %','cantidad'),
+            rep_col('subtotal','Subtotal','moneda'), rep_col('impuesto','Impuesto','moneda'), rep_col('total','Total','moneda'), rep_col('moneda_codigo','Moneda'), rep_col('tipo_cambio_a_base','Tipo cambio a base','cantidad'),
+        ];
+        return [$sql, $params, $cols, 'Detalle ventas', 'ORDER BY v.fecha_venta ASC, v.id ASC, vd.renglon ASC'];
+    }
 
     if ($codigo === 'RECEPCIONES') {
         rep_fecha($where, $params, 'rc.fecha_recepcion', $f);
