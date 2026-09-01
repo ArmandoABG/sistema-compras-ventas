@@ -1046,6 +1046,16 @@ function usr_enviar_alertas_ahora(PDO $conexion): void
         si_responder_json(false, 'Primero configura y guarda al menos un destinatario con correo válido.', [], 409);
     }
 
+    $config = si_correo_stock_config();
+    if (empty($config['activo'])) {
+        si_responder_json(
+            false,
+            'El envío de alertas por correo está desactivado en la configuración. Actívalo antes de ejecutar el envío manual.',
+            [],
+            409
+        );
+    }
+
     $resultado = si_stock_email_procesar($conexion, true, true);
     usr_auditar_accion_alertas_email($conexion, 'ALERTAS_EMAIL_STOCK_MANUAL', $resultado);
 

@@ -144,7 +144,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                             <div class="qr-admin-heading">
                                 <div>
                                     <strong>Corrección administrativa</strong>
-                                    <p>Solo un Administrador puede rehabilitar un QR marcado por error como salida. La acción queda registrada en Auditoría.</p>
+                                    <p>Solo un Administrador puede rehabilitar un QR marcado por error como salida. La confirmación anterior queda cancelada en el historial y la acción se registra en Auditoría.</p>
                                 </div>
                             </div>
                             <label class="field">
@@ -382,7 +382,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         if (!estado.codigoActual || !estado.puedeRehabilitar) return;
         const motivo = $('motivoRehabilitar').value.trim();
         if (motivo.length < 5) return mostrarMensaje('mensajePagina', 'Escribe un motivo de rehabilitación de al menos 5 caracteres.', 'error');
-        if (!window.confirm('¿Rehabilitar este QR? La venta podrá volver a confirmarse físicamente como salida. Esta corrección quedará registrada en Auditoría.')) return;
+        if (!window.confirm('¿Rehabilitar este QR? La confirmación de salida anterior quedará cancelada en el historial y la venta podrá volver a confirmarse físicamente. Esta corrección quedará registrada en Auditoría.')) return;
         $('btnRehabilitarQr').disabled = true;
         try {
             const r = await apiPost('REHABILITAR_QR', { codigo: estado.codigoActual, motivo });

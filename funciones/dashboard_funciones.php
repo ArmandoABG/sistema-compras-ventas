@@ -38,6 +38,19 @@ if ($accion !== 'RESUMEN') {
 try {
     $usuarioId = (int) $_SESSION['usuario_id'];
 
+    /*
+     * El permiso dashboard.ver permite entrar al resumen, pero no debe ampliar
+     * por sí solo el acceso a datos de otros módulos. Cada bloque conserva el
+     * permiso de su dominio y el resultado se depura antes de salir por JSON.
+     */
+    $puedeVentas = si_tiene_permiso('ventas.ver');
+    $puedeCompras = si_tiene_permiso('compras.ver');
+    $puedeInventario = si_tiene_permiso('inventario.ver');
+    $puedeMerma = $puedeInventario || si_tiene_permiso('inventario.mermas');
+    $puedeCobrar = si_tiene_permiso('cuentas_cobrar.ver');
+    $puedePagar = si_tiene_permiso('cuentas_pagar.ver');
+    $puedeAuditoria = si_tiene_permiso('auditoria.ver');
+    $puedeTopClientes = $puedeVentas && si_tiene_permiso('clientes.ver');
 
     $monedaBase = (string) ($conexion->query(
         "SELECT codigo
@@ -647,9 +660,87 @@ try {
 
     /*
     |--------------------------------------------------------------------------
+    | Separación de información por permisos
+    |--------------------------------------------------------------------------
+    | Las consultas se mantienen estables para no alterar el flujo del módulo,
+    | pero antes de responder se eliminan todos los datos de dominios que el
+    | usuario no tiene autorizados. Así dashboard.ver no se convierte en un
+    | permiso implícito para ventas, compras, inventario, CxC, CxP o auditoría.
+    |--------------------------------------------------------------------------
+    */
+    if (!$puedeVentas) {
+        $ventasHoy = 0;
+        $ventasHoyMonedas = [];
+        $topProductos = [];
+        $totalVentasSemana = 0.0;
+        $totalVentasSemanaAnterior = 0.0;
+        $ventasMesActual = 0.0;
+        $ventasMesAnterior = 0.0;
+        foreach ($serieSemanal as &$filaSerie) {
+            $filaSerie['ventas'] = 0.0;
+            $filaSerie['ventas_operaciones'] = 0;
+        }
+        unset($filaSerie);
+        foreach ($serieMensual as &$filaSerie) {
+            $filaSerie['ventas'] = 0.0;
+            $filaSerie['ventas_operaciones'] = 0;
+        }
+        unset($filaSerie);
+    }
+
+    if (!$puedeTopClientes) {
+        $topClientes = [];
+    }
+
+    if (!$puedeCompras) {
+        $comprasPorRecibir = 0;
+        $totalComprasSemana = 0.0;
+        $totalComprasSemanaAnterior = 0.0;
+        $comprasMesActual = 0.0;
+        $comprasMesAnterior = 0.0;
+        foreach ($serieSemanal as &$filaSerie) {
+            $filaSerie['compras'] = 0.0;
+            $filaSerie['compras_operaciones'] = 0;
+        }
+        unset($filaSerie);
+        foreach ($serieMensual as &$filaSerie) {
+            $filaSerie['compras'] = 0.0;
+            $filaSerie['compras_operaciones'] = 0;
+        }
+        unset($filaSerie);
+    }
+
+    if (!$puedeInventario) {
+        $stockCritico = 0;
+        $inventarioCritico = [];
+    }
+
+    if (!$puedeMerma) {
+        $costoMermaBase = 0.0;
+        $costoSalidasBase = 0.0;
+        $indiceMermaPct = 0.0;
+    }
+
+    if (!$puedeCobrar) {
+        $cobrosVencidos = 0;
+        $resumenCobrar = [];
+    }
+
+    if (!$puedePagar) {
+        $pagosVencidos = 0;
+        $resumenPagar = [];
+    }
+
+    if (!$puedeAuditoria) {
+        $movimientos = [];
+    }
+
+    /*
+    |--------------------------------------------------------------------------
     | Alertas operativas compartidas
     |--------------------------------------------------------------------------
-    | El mismo motor alimenta Dashboard y Topbar.
+    | El mismo motor alimenta Dashboard y Topbar y ya filtra internamente cada
+    | categoría según los permisos del usuario actual.
     |--------------------------------------------------------------------------
     */
     $alertasOperativas = si_alertas_operativas_resumen($conexion);
@@ -658,6 +749,16 @@ try {
         true,
         'Dashboard cargado correctamente.',
         [
+            'visibilidad' => [
+                'ventas' => $puedeVentas,
+                'compras' => $puedeCompras,
+                'inventario' => $puedeInventario,
+                'merma' => $puedeMerma,
+                'cuentas_cobrar' => $puedeCobrar,
+                'cuentas_pagar' => $puedePagar,
+                'auditoria' => $puedeAuditoria,
+                'top_clientes' => $puedeTopClientes,
+            ],
             'kpis' => [
                 'ventas_hoy' => $ventasHoy,
                 'compras_por_recibir' => $comprasPorRecibir,

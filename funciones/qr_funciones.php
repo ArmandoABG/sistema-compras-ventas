@@ -533,12 +533,66 @@ function qr_rehabilitar_qr(PDO $conexion): void
         si_responder_json(false, 'Este QR no está marcado como utilizado; no necesita rehabilitación.', [], 409);
     }
 
+    /*
+     * Rehabilitar significa corregir una confirmación de salida marcada por
+     * error, no borrar el historial. La verificación VALIDO que originó el
+     * consumo del token se conserva, pero pasa a CANCELADO con el motivo
+     * administrativo antes de volver a habilitar el mismo QR.
+     *
+     * Así nunca quedan dos salidas VALIDO simultáneas para el mismo token.
+     */
+    $stmtVerificacion = $conexion->prepare(
+        "SELECT id, fecha_verificacion, observaciones
+         FROM verificaciones_qr_venta
+         WHERE token_qr_id = :token_id
+           AND resultado = 'VALIDO'
+         ORDER BY fecha_verificacion DESC, id DESC
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmtVerificacion->execute([':token_id' => (int) $token['id']]);
+    $verificacionValida = $stmtVerificacion->fetch();
+
+    if (!$verificacionValida) {
+        $conexion->rollBack();
+        si_responder_json(
+            false,
+            'El QR figura como utilizado, pero no existe una confirmación de salida válida asociada. No se modificó nada; revisa el historial antes de rehabilitar.',
+            [],
+            409
+        );
+    }
+
     $antes = [
         'activo' => (int) $token['activo'],
         'usado_at' => $token['usado_at'],
         'usado_by' => $token['usado_by'],
         'token_corto' => si_qr_token_corto((string) $token['token']),
+        'verificacion_valida_id' => (int) $verificacionValida['id'],
     ];
+
+    $observacionAnulada = mb_substr(
+        'Confirmación de salida anulada por rehabilitación administrativa. Motivo: ' . $motivo,
+        0,
+        255
+    );
+
+    $stmtAnular = $conexion->prepare(
+        "UPDATE verificaciones_qr_venta
+         SET resultado = 'CANCELADO',
+             observaciones = :observaciones
+         WHERE id = :id
+           AND resultado = 'VALIDO'"
+    );
+    $stmtAnular->execute([
+        ':observaciones' => $observacionAnulada,
+        ':id' => (int) $verificacionValida['id'],
+    ]);
+
+    if ($stmtAnular->rowCount() !== 1) {
+        $conexion->rollBack();
+        si_responder_json(false, 'La confirmación de salida cambió mientras se rehabilitaba el QR. Vuelve a consultarlo.', [], 409);
+    }
 
     $stmt = $conexion->prepare(
         "UPDATE tokens_qr_venta
@@ -561,6 +615,7 @@ function qr_rehabilitar_qr(PDO $conexion): void
         'usado_by' => null,
         'motivo_rehabilitacion' => $motivo,
         'token_corto' => $antes['token_corto'],
+        'verificacion_anulada_id' => (int) $verificacionValida['id'],
     ];
 
     $stmtAudit = $conexion->prepare(
@@ -588,7 +643,7 @@ function qr_rehabilitar_qr(PDO $conexion): void
         throw new RuntimeException('El QR fue rehabilitado, pero no pudo recargarse su estado.');
     }
     $respuesta = qr_preparar_consulta($conexion, $actual);
-    $respuesta['mensaje'] = 'QR rehabilitado correctamente. La venta vuelve a quedar disponible para una nueva confirmación de salida.';
+    $respuesta['mensaje'] = 'QR rehabilitado correctamente. La confirmación anterior quedó cancelada en el historial y la venta vuelve a estar disponible para una nueva confirmación de salida.';
     $respuesta['rehabilitado'] = true;
     $respuesta['motivo_rehabilitacion'] = $motivo;
 

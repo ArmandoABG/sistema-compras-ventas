@@ -47,6 +47,20 @@ si_requerir_permiso(
 
 $tituloPagina = 'Dashboard';
 
+/*
+ * El Dashboard conserva su misma estructura, pero cada bloque se muestra solo
+ * si el usuario tiene permiso para consultar el módulo que origina esos datos.
+ */
+$puedeDashboardVentas = si_tiene_permiso('ventas.ver');
+$puedeDashboardCompras = si_tiene_permiso('compras.ver');
+$puedeDashboardInventario = si_tiene_permiso('inventario.ver');
+$puedeDashboardMerma = $puedeDashboardInventario || si_tiene_permiso('inventario.mermas');
+$puedeDashboardCobrar = si_tiene_permiso('cuentas_cobrar.ver');
+$puedeDashboardPagar = si_tiene_permiso('cuentas_pagar.ver');
+$puedeDashboardAuditoria = si_tiene_permiso('auditoria.ver');
+$puedeDashboardTopClientes = $puedeDashboardVentas && si_tiene_permiso('clientes.ver');
+$puedeDashboardTendencias = $puedeDashboardVentas || $puedeDashboardCompras;
+
 $nombreUsuario = trim((string) (
     $_SESSION['nombre_completo']
     ?? $_SESSION['usuario']
@@ -162,7 +176,7 @@ $versionModulo = is_file($cssModulo)
 
             <section class="kpi-grid">
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                     <span>Ventas de hoy</span>
                     <strong id="kpiVentasHoy">0</strong>
                     <small id="detalleVentasHoy">
@@ -170,25 +184,25 @@ $versionModulo = is_file($cssModulo)
                     </small>
                 </article>
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                     <span>Compras por recibir</span>
                     <strong id="kpiCompras">0</strong>
                     <small>Pendientes o parciales</small>
                 </article>
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
                     <span>Inventario crítico</span>
                     <strong id="kpiInventario">0</strong>
                     <small>En mínimo o por debajo</small>
                 </article>
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
                     <span>Cobros vencidos</span>
                     <strong id="kpiCobros">0</strong>
                     <small>Cuentas de clientes</small>
                 </article>
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
                     <span>Pagos vencidos</span>
                     <strong id="kpiPagos">0</strong>
                     <small>Cuentas a proveedores</small>
@@ -200,7 +214,7 @@ $versionModulo = is_file($cssModulo)
                     <small id="detalleAlertasKpi">Sin pendientes críticos</small>
                 </article>
 
-                <article class="kpi-card">
+                <article class="kpi-card"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
                     <span>Índice de merma</span>
                     <strong id="kpiMerma">0.00%</strong>
                     <small id="detalleMerma">Costo de merma del mes</small>
@@ -208,13 +222,19 @@ $versionModulo = is_file($cssModulo)
 
             </section>
 
-            <section class="dashboard-trends-heading">
+            <section class="dashboard-trends-heading"<?= $puedeDashboardTendencias ? '' : ' hidden' ?>>
                 <div>
                     <p class="dashboard-eyebrow">TENDENCIAS CLAVE</p>
                     <h2>Comportamiento comercial</h2>
                     <p>
-                        Ventas confirmadas y compras operativas convertidas a la moneda base.
-                        La comparación ayuda a detectar cambios sin mezclar unidades de inventario.
+                        <?php if ($puedeDashboardVentas && $puedeDashboardCompras): ?>
+                            Ventas confirmadas y compras operativas convertidas a la moneda base.
+                            La comparación ayuda a detectar cambios sin mezclar unidades de inventario.
+                        <?php elseif ($puedeDashboardVentas): ?>
+                            Ventas confirmadas convertidas a la moneda base para observar su comportamiento en el tiempo.
+                        <?php else: ?>
+                            Compras operativas convertidas a la moneda base para observar su comportamiento en el tiempo.
+                        <?php endif; ?>
                     </p>
                 </div>
 
@@ -223,7 +243,7 @@ $versionModulo = is_file($cssModulo)
                 </span>
             </section>
 
-            <section class="dashboard-chart-grid" aria-label="Tendencias comerciales">
+            <section class="dashboard-chart-grid" aria-label="Tendencias comerciales"<?= $puedeDashboardTendencias ? '' : ' hidden' ?>>
                 <article class="dashboard-chart-card">
                     <header class="dashboard-chart-card__head">
                         <div>
@@ -235,12 +255,12 @@ $versionModulo = is_file($cssModulo)
                     </header>
 
                     <div class="dashboard-chart-metrics">
-                        <div>
+                        <div<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                             <span>Ventas</span>
                             <strong id="totalVentasSemana">$0.00</strong>
                             <small id="variacionVentasSemana">Sin comparación</small>
                         </div>
-                        <div>
+                        <div<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                             <span>Compras</span>
                             <strong id="totalComprasSemana">$0.00</strong>
                             <small id="variacionComprasSemana">Sin comparación</small>
@@ -248,8 +268,8 @@ $versionModulo = is_file($cssModulo)
                     </div>
 
                     <div class="dashboard-chart-legend" aria-hidden="true">
-                        <span><i class="is-sales"></i>Ventas</span>
-                        <span><i class="is-purchases"></i>Compras</span>
+                        <span<?= $puedeDashboardVentas ? '' : ' hidden' ?>><i class="is-sales"></i>Ventas</span>
+                        <span<?= $puedeDashboardCompras ? '' : ' hidden' ?>><i class="is-purchases"></i>Compras</span>
                     </div>
 
                     <div class="dashboard-chart-shell" id="graficaSemanal">
@@ -268,12 +288,12 @@ $versionModulo = is_file($cssModulo)
                     </header>
 
                     <div class="dashboard-chart-metrics">
-                        <div>
+                        <div<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                             <span>Ventas del mes</span>
                             <strong id="totalVentasMes">$0.00</strong>
                             <small id="variacionVentasMes">Sin comparación</small>
                         </div>
-                        <div>
+                        <div<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                             <span>Compras del mes</span>
                             <strong id="totalComprasMes">$0.00</strong>
                             <small id="variacionComprasMes">Sin comparación</small>
@@ -281,8 +301,8 @@ $versionModulo = is_file($cssModulo)
                     </div>
 
                     <div class="dashboard-chart-legend" aria-hidden="true">
-                        <span><i class="is-sales"></i>Ventas</span>
-                        <span><i class="is-purchases"></i>Compras</span>
+                        <span<?= $puedeDashboardVentas ? '' : ' hidden' ?>><i class="is-sales"></i>Ventas</span>
+                        <span<?= $puedeDashboardCompras ? '' : ' hidden' ?>><i class="is-purchases"></i>Compras</span>
                     </div>
 
                     <div class="dashboard-chart-shell" id="graficaMensual">
@@ -347,9 +367,9 @@ $versionModulo = is_file($cssModulo)
                 </div>
             </section>
 
-            <section class="dashboard-two-columns">
+            <section class="dashboard-two-columns"<?= ($puedeDashboardCobrar || $puedeDashboardPagar) ? '' : ' hidden' ?>>
 
-                <article class="dashboard-panel">
+                <article class="dashboard-panel"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
                     <header class="dashboard-panel__head">
                         <div>
                             <h2>Cuentas por cobrar</h2>
@@ -379,7 +399,7 @@ $versionModulo = is_file($cssModulo)
                     </div>
                 </article>
 
-                <article class="dashboard-panel">
+                <article class="dashboard-panel"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
                     <header class="dashboard-panel__head">
                         <div>
                             <h2>Cuentas por pagar</h2>
@@ -411,7 +431,7 @@ $versionModulo = is_file($cssModulo)
 
             </section>
 
-            <section class="dashboard-panel">
+            <section class="dashboard-panel"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
 
                 <header class="dashboard-panel__head">
                     <div>
@@ -449,9 +469,9 @@ $versionModulo = is_file($cssModulo)
                 </div>
             </section>
 
-            <section class="dashboard-two-columns">
+            <section class="dashboard-two-columns"<?= ($puedeDashboardVentas || $puedeDashboardAuditoria) ? '' : ' hidden' ?>>
 
-                <article class="dashboard-panel">
+                <article class="dashboard-panel"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
 
                     <header class="dashboard-panel__head">
                         <div>
@@ -484,7 +504,7 @@ $versionModulo = is_file($cssModulo)
                     </div>
                 </article>
 
-                <article class="dashboard-panel">
+                <article class="dashboard-panel"<?= $puedeDashboardAuditoria ? '' : ' hidden' ?>>
 
                     <header class="dashboard-panel__head">
                         <div>
@@ -520,7 +540,7 @@ $versionModulo = is_file($cssModulo)
 
             </section>
 
-            <section class="dashboard-panel">
+            <section class="dashboard-panel"<?= $puedeDashboardTopClientes ? '' : ' hidden' ?>>
                 <header class="dashboard-panel__head">
                     <div>
                         <h2>Top 5 clientes del mes</h2>
@@ -558,6 +578,17 @@ $versionModulo = is_file($cssModulo)
 
     const endpoint =
         '?dashboard_api=1&accion=RESUMEN';
+
+    const permisosDashboard = <?= json_encode([
+        'ventas' => $puedeDashboardVentas,
+        'compras' => $puedeDashboardCompras,
+        'inventario' => $puedeDashboardInventario,
+        'merma' => $puedeDashboardMerma,
+        'cuentas_cobrar' => $puedeDashboardCobrar,
+        'cuentas_pagar' => $puedeDashboardPagar,
+        'auditoria' => $puedeDashboardAuditoria,
+        'top_clientes' => $puedeDashboardTopClientes,
+    ], JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
 
     const alertasEndpoint = <?= json_encode(si_url('funciones/alertas_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
     const csrfAlertas = <?= json_encode(si_token_csrf(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -720,10 +751,18 @@ $versionModulo = is_file($cssModulo)
         const plotW = width - pad.left - pad.right;
         const plotH = height - pad.top - pad.bottom;
 
+        const mostrarVentas = permisosDashboard.ventas === true;
+        const mostrarCompras = permisosDashboard.compras === true;
+
+        if (!mostrarVentas && !mostrarCompras) {
+            contenedor.innerHTML = '<div class="dashboard-chart-empty">Sin información autorizada para este periodo.</div>';
+            return;
+        }
+
         const valores = [];
         datos.forEach(function (item) {
-            valores.push(Number(item.ventas || 0));
-            valores.push(Number(item.compras || 0));
+            if (mostrarVentas) valores.push(Number(item.ventas || 0));
+            if (mostrarCompras) valores.push(Number(item.compras || 0));
         });
 
         let maximo = Math.max.apply(null, valores.concat([0]));
@@ -749,7 +788,10 @@ $versionModulo = is_file($cssModulo)
         };
 
         let svg = '';
-        svg += '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="Ventas y compras del periodo">';
+        const etiquetaGrafica = mostrarVentas && mostrarCompras
+            ? 'Ventas y compras del periodo'
+            : (mostrarVentas ? 'Ventas del periodo' : 'Compras del periodo');
+        svg += '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + etiquetaGrafica + '">';
 
         for (let i = 0; i <= 4; i += 1) {
             const valor = maximo * (4 - i) / 4;
@@ -762,19 +804,28 @@ $versionModulo = is_file($cssModulo)
             svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--x" x="' + x(indice).toFixed(2) + '" y="' + (height - 15) + '">' + escapeHtml(item.etiqueta || '') + '</text>';
         });
 
-        svg += '<polyline class="dashboard-chart-line dashboard-chart-line--sales" points="' + puntos('ventas') + '"></polyline>';
-        svg += '<polyline class="dashboard-chart-line dashboard-chart-line--purchases" points="' + puntos('compras') + '"></polyline>';
+        if (mostrarVentas) {
+            svg += '<polyline class="dashboard-chart-line dashboard-chart-line--sales" points="' + puntos('ventas') + '"></polyline>';
+        }
+        if (mostrarCompras) {
+            svg += '<polyline class="dashboard-chart-line dashboard-chart-line--purchases" points="' + puntos('compras') + '"></polyline>';
+        }
 
         datos.forEach(function (item, indice) {
             const px = x(indice).toFixed(2);
-            const ventasY = y(item.ventas).toFixed(2);
-            const comprasY = y(item.compras).toFixed(2);
             const etiqueta = escapeHtml(item.etiqueta || '');
-            const ventaTexto = escapeHtml(dinero(item.ventas || 0, moneda));
-            const compraTexto = escapeHtml(dinero(item.compras || 0, moneda));
 
-            svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2"><title>' + etiqueta + ' · Ventas: ' + ventaTexto + '</title></circle>';
-            svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2"><title>' + etiqueta + ' · Compras: ' + compraTexto + '</title></circle>';
+            if (mostrarVentas) {
+                const ventasY = y(item.ventas).toFixed(2);
+                const ventaTexto = escapeHtml(dinero(item.ventas || 0, moneda));
+                svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2"><title>' + etiqueta + ' · Ventas: ' + ventaTexto + '</title></circle>';
+            }
+
+            if (mostrarCompras) {
+                const comprasY = y(item.compras).toFixed(2);
+                const compraTexto = escapeHtml(dinero(item.compras || 0, moneda));
+                svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2"><title>' + etiqueta + ' · Compras: ' + compraTexto + '</title></circle>';
+            }
         });
 
         svg += '</svg>';

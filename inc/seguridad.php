@@ -572,15 +572,11 @@ function si_refrescar_identidad_sesion_actual(): array
         ];
     }
 
-    require_once __DIR__ . '/integridad_bd.php';
-
     /*
-     * El catálogo se repara antes de consultar autorizaciones.
+     * La identidad se refresca desde la BD, pero no se vuelve a sembrar ni
+     * actualizar el catálogo de roles/permisos en cada petición. Ese trabajo
+     * corresponde al login, a la administración de roles y a la instalación.
      */
-    si_sincronizar_seguridad_base(
-        $conexion
-    );
-
     return si_cargar_identidad_sesion(
         $conexion,
         (int) $_SESSION['usuario_id']
