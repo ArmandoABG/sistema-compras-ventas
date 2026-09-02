@@ -110,7 +110,7 @@ try {
             break;
 
         case 'CANCELAR_RECEPCION':
-            cmp_requerir_permiso('compras.cancelar');
+            cmp_requerir_permiso('recepciones.cancelar');
             cmp_cancelar_recepcion($conexion);
             break;
 

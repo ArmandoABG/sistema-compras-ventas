@@ -13,7 +13,8 @@ si_requerir_permiso('compras.ver', false);
 $tituloPagina = 'Compras';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('compras.crear');
-$puedeCancelar = si_tiene_permiso('compras.cancelar');
+$puedeCancelarCompra = si_tiene_permiso('compras.cancelar');
+$puedeCancelarRecepcion = si_tiene_permiso('recepciones.cancelar');
 $puedeVerRecepciones = si_tiene_permiso('recepciones.ver');
 $puedeRecepcionar = si_tiene_permiso('recepciones.confirmar');
 
@@ -503,7 +504,8 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     'use strict';
 
     const puedeCrear = <?= $puedeCrear ? 'true' : 'false' ?>;
-    const puedeCancelar = <?= $puedeCancelar ? 'true' : 'false' ?>;
+    const puedeCancelarCompra = <?= $puedeCancelarCompra ? 'true' : 'false' ?>;
+    const puedeCancelarRecepcion = <?= $puedeCancelarRecepcion ? 'true' : 'false' ?>;
     const puedeRecepcionar = <?= $puedeRecepcionar ? 'true' : 'false' ?>;
     const csrfToken = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const seccionInicial = <?= json_encode($seccionInicial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -770,7 +772,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
                 acciones += '<button type="button" class="table-action table-action--success" data-action="recibir-compra" data-id="' + c.id + '">Recibir</button>';
             }
 
-            if (puedeCancelar && !['CANCELADA', 'RECIBIDA'].includes(c.estado)) {
+            if (puedeCancelarCompra && !['CANCELADA', 'RECIBIDA'].includes(c.estado)) {
                 acciones += '<button type="button" class="table-action table-action--danger" data-action="cancelar-compra" data-id="' + c.id + '">Cancelar</button>';
             }
 
@@ -1219,7 +1221,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
                 acciones += '<button type="button" class="table-action" data-action="editar-recepcion" data-id="' + r.id + '">Editar</button>';
                 acciones += '<button type="button" class="table-action table-action--success" data-action="confirmar-recepcion" data-id="' + r.id + '">Confirmar</button>';
             }
-            if (puedeCancelar && r.estado !== 'CANCELADA') {
+            if (puedeCancelarRecepcion && r.estado !== 'CANCELADA') {
                 acciones += '<button type="button" class="table-action table-action--danger" data-action="cancelar-recepcion" data-id="' + r.id + '">Cancelar</button>';
             }
             return '<tr>'

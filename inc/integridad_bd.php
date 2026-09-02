@@ -12,9 +12,9 @@ declare(strict_types=1);
 function si_roles_oficiales(): array
 {
     return [
-        ['ADMINISTRADOR', 'Administrador', 'Acceso total al sistema.'],
-        ['VENDEDOR', 'Vendedor', 'Ventas, clientes, cotizaciones y apartados.'],
-        ['SUPERVISOR_ALMACEN', 'Supervisor de Almacén', 'Compras, inventario, recepciones, producción y validación de salida.'],
+        ['ADMINISTRADOR', 'Administrador', 'Seguridad, configuración, auditoría y operaciones excepcionales de alto impacto.'],
+        ['VENDEDOR', 'Vendedor', 'Operación comercial y financiera: clientes, ventas, cobros, pagos y devoluciones de cliente.'],
+        ['SUPERVISOR_ALMACEN', 'Supervisor de Almacén', 'Operación física: proveedores, compras, recepciones, inventario, transferencias, producción y devoluciones a proveedor.'],
     ];
 }
 
@@ -37,6 +37,7 @@ function si_permisos_oficiales(): array
         ['compras.cancelar', 'compras', 'Cancelar compras'],
         ['recepciones.ver', 'compras', 'Ver recepciones'],
         ['recepciones.confirmar', 'compras', 'Confirmar recepciones'],
+        ['recepciones.cancelar', 'compras', 'Cancelar recepciones'],
         ['cuentas_pagar.ver', 'cuentas_por_pagar', 'Ver cuentas por pagar'],
         ['cuentas_pagar.pagar', 'cuentas_por_pagar', 'Registrar pagos a proveedores'],
         ['clientes.ver', 'clientes', 'Ver clientes'],
@@ -75,9 +76,16 @@ function si_permisos_oficiales(): array
 function si_permisos_vendedor_iniciales(): array
 {
     return [
+        // Operación comercial.
         'dashboard.ver', 'productos.ver', 'clientes.ver', 'clientes.administrar',
         'cotizaciones.ver', 'cotizaciones.crear', 'apartados.ver', 'apartados.crear',
-        'ventas.ver', 'ventas.crear', 'cuentas_cobrar.ver', 'cuentas_cobrar.cobrar',
+        'ventas.ver', 'ventas.crear', 'ventas.cancelar',
+
+        // Caja / dinero. El Vendedor puede cerrar el ciclo financiero cotidiano
+        // sin depender del Administrador.
+        'cuentas_cobrar.ver', 'cuentas_cobrar.cobrar',
+        'cuentas_pagar.ver', 'cuentas_pagar.pagar',
+        'devoluciones.ver', 'devoluciones.venta', 'devoluciones.regularizar',
         'reportes.ver',
     ];
 }
@@ -85,10 +93,15 @@ function si_permisos_vendedor_iniciales(): array
 function si_permisos_supervisor_iniciales(): array
 {
     return [
-        'dashboard.ver', 'productos.ver', 'proveedores.ver', 'proveedores.comparar_precios',
-        'compras.ver', 'compras.crear', 'recepciones.ver', 'recepciones.confirmar',
-        'inventario.ver', 'inventario.kardex', 'inventario.ajustar', 'inventario.mermas', 'inventario.transferir', 'inventario.configurar_stock',
+        // Operación de almacén y abastecimiento.
+        'dashboard.ver', 'productos.ver',
+        'proveedores.ver', 'proveedores.administrar', 'proveedores.comparar_precios',
+        'compras.ver', 'compras.crear', 'compras.cancelar',
+        'recepciones.ver', 'recepciones.confirmar', 'recepciones.cancelar',
+        'inventario.ver', 'inventario.kardex', 'inventario.mermas',
+        'inventario.transferir', 'inventario.configurar_stock',
         'almacenes.ver', 'produccion.ver', 'produccion.registrar', 'qr.verificar',
+        'devoluciones.ver', 'devoluciones.compra',
         'reportes.ver',
     ];
 }
