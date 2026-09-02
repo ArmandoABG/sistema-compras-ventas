@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/tipo_cambio_banxico.php';
+
 /*
 |--------------------------------------------------------------------------
 | Motor central de alertas operativas
@@ -48,6 +50,18 @@ function si_alertas_operativas_resumen(PDO $conexion, bool $incluirDetalles = tr
 
     if (si_tiene_permiso('qr.verificar') || si_tiene_permiso('ventas.ver')) {
         $alerta = si_alerta_salidas_qr($conexion, $incluirDetalles);
+        if ($alerta !== null) {
+            $alertas[] = $alerta;
+        }
+    }
+
+    if (
+        si_tiene_permiso('ventas.crear')
+        || si_tiene_permiso('compras.crear')
+        || si_tiene_permiso('cuentas_cobrar.cobrar')
+        || si_tiene_permiso('cuentas_pagar.pagar')
+    ) {
+        $alerta = si_alerta_tipo_cambio_banxico($conexion, $incluirDetalles);
         if ($alerta !== null) {
             $alertas[] = $alerta;
         }
@@ -694,6 +708,67 @@ function si_alerta_notificaciones_internas(PDO $conexion, bool $incluirDetalles)
             ? 'Tienes 1 notificación interna pendiente de revisar.'
             : "Tienes {$total} notificaciones internas pendientes de revisar.",
         $total, si_url('JS/dashboard.php#centroAlertas'), 'Ver centro de alertas', $detalles
+    );
+}
+
+function si_alerta_tipo_cambio_banxico(PDO $conexion, bool $incluirDetalles): ?array
+{
+    $estado = si_tc_banxico_estado($conexion, true);
+    $tokenConfigurado = (bool) ($estado['token_configurado'] ?? false);
+    $desactualizado = (bool) ($estado['desactualizado'] ?? true);
+    $codigo = (string) ($estado['codigo'] ?? '');
+    $fecha = trim((string) ($estado['fecha'] ?? ''));
+    $valor = $estado['tipo_cambio'] ?? null;
+    $fuente = trim((string) ($estado['fuente'] ?? ''));
+
+    if ($tokenConfigurado && !$desactualizado && !in_array($codigo, ['ERROR_RED'], true)) {
+        return null;
+    }
+
+    if (!$tokenConfigurado) {
+        $titulo = 'Configura la conexión con Banco de México';
+        $mensaje = 'El sistema puede usar el último tipo de cambio local, pero falta el token SIE para actualizar automáticamente el FIX USD/MXN.';
+        $prioridad = 'ALTA';
+    } elseif ($desactualizado) {
+        $titulo = 'Tipo de cambio USD/MXN desactualizado';
+        $mensaje = $fecha !== ''
+            ? 'El último FIX disponible en el sistema corresponde al ' . $fecha . '.'
+            : 'No existe un FIX USD/MXN disponible en el sistema.';
+        $prioridad = 'ALTA';
+    } else {
+        $titulo = 'No fue posible consultar Banco de México';
+        $mensaje = 'Se mantiene el último FIX guardado localmente; la operación puede continuar con el respaldo disponible.';
+        $prioridad = 'NORMAL';
+    }
+
+    $detalles = [];
+    if ($incluirDetalles) {
+        if ($valor !== null) {
+            $detalles[] = [
+                'principal' => 'USD/MXN ' . number_format((float) $valor, 4, '.', ','),
+                'secundario' => $fecha !== '' ? 'Fecha FIX: ' . $fecha : 'Sin fecha FIX',
+                'meta' => $fuente !== '' ? $fuente : 'Fuente local',
+            ];
+        }
+        if (!$tokenConfigurado) {
+            $detalles[] = [
+                'principal' => 'Token SIE pendiente',
+                'secundario' => 'inc/banxico_config.local.php',
+                'meta' => 'La operación seguirá usando el último valor local mientras se configura.',
+            ];
+        }
+    }
+
+    return si_alerta_crear(
+        'tipo-cambio-banxico',
+        'MONEDA',
+        $prioridad,
+        $titulo,
+        $mensaje,
+        1,
+        si_url('JS/dashboard.php'),
+        'Revisar tipo de cambio',
+        $detalles
     );
 }
 

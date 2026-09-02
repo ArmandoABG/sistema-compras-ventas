@@ -166,7 +166,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 <div class="modal-backdrop" id="modalSesiones" hidden>
     <section class="modal-card modal-card--large" role="dialog" aria-modal="true">
         <header class="modal-header"><div><small>CONTROL DE SESIONES</small><h2 id="tituloSesiones">Historial de sesiones</h2></div><button type="button" class="modal-close" data-cerrar-modal="modalSesiones">×</button></header>
-        <div class="usuarios-table-wrap"><table class="usuarios-table"><thead><tr><th>Inicio</th><th>Fin</th><th>IP</th><th>Estado</th><th>Motivo</th></tr></thead><tbody id="tablaSesiones"><tr><td colspan="5">Cargando...</td></tr></tbody></table></div>
+        <div class="usuarios-table-wrap"><table class="usuarios-table"><thead><tr><th>Inicio</th><th>Última actividad</th><th>Fin</th><th>IP</th><th>Estado</th><th>Motivo</th></tr></thead><tbody id="tablaSesiones"><tr><td colspan="5">Cargando...</td></tr></tbody></table></div>
         <footer class="modal-footer modal-footer--sessions">
             <div class="session-pagination">
                 <select id="porPaginaSesion" aria-label="Sesiones por página">
@@ -490,7 +490,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         const tbody = $('tablaSesiones');
 
         tbody.innerHTML =
-            '<tr><td colspan="5">Cargando...</td></tr>';
+            '<tr><td colspan="6">Cargando...</td></tr>';
 
         abrirModal('modalSesiones');
 
@@ -530,7 +530,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
             if (!sesiones.length) {
                 tbody.innerHTML =
-                    '<tr><td colspan="5" class="empty-cell">'
+                    '<tr><td colspan="6" class="empty-cell">'
                     + 'Sin sesiones registradas.'
                     + '</td></tr>';
                 return;
@@ -539,6 +539,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             tbody.innerHTML = sesiones.map(
                 s => '<tr>'
                     + '<td>' + escapeHtml(s.inicio_sesion) + '</td>'
+                    + '<td>' + escapeHtml(s.ultima_actividad || s.inicio_sesion || '—') + '</td>'
                     + '<td>' + escapeHtml(s.fin_sesion || '—') + '</td>'
                     + '<td>' + escapeHtml(s.ip || '—') + '</td>'
                     + '<td>'
@@ -554,7 +555,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
         } catch (error) {
             tbody.innerHTML =
-                '<tr><td colspan="5" class="empty-cell">'
+                '<tr><td colspan="6" class="empty-cell">'
                 + escapeHtml(error.message)
                 + '</td></tr>';
         }

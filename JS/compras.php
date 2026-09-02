@@ -362,6 +362,15 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
                 </label>
             </div>
 
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
+            </div>
+
             <section class="purchase-items">
                 <div class="subsection-heading">
                     <div><h3>Productos</h3><p>Solo aparecen materias primas configuradas previamente para el proveedor.</p></div>
@@ -498,6 +507,8 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
         </form>
     </section>
 </div>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {
@@ -1122,7 +1133,12 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
         const d = await api('?compras_api=1&accion=TIPO_CAMBIO&moneda_id=' + monedaId + '&fecha=' + encodeURIComponent(fecha));
         if (d.encontrado) {
             $('compraTipoCambio').value = Number(d.tipo_cambio).toFixed(8).replace(/0+$/, '').replace(/\.$/, '');
-            $('ayudaTipoCambio').textContent = d.fecha_tipo_cambio ? 'Tipo de cambio encontrado para ' + d.fecha_tipo_cambio + (d.fuente ? ' · ' + d.fuente : '') : 'Moneda base.';
+            const baseTexto = d.fecha_tipo_cambio
+                ? 'Tipo de cambio ' + d.fecha_tipo_cambio + (d.fuente ? ' · ' + d.fuente : '')
+                : 'Moneda base.';
+            $('ayudaTipoCambio').textContent = d.desactualizado
+                ? '⚠ ' + baseTexto + ' · Está desactualizado; se usa como respaldo local.'
+                : baseTexto;
         } else {
             $('compraTipoCambio').value = '';
             $('ayudaTipoCambio').textContent = 'No hay tipo de cambio registrado para esa fecha. Captúralo manualmente.';
@@ -1526,6 +1542,10 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     $('compraFechaFactura').addEventListener('change', calcularVencimiento);
     $('compraFecha').addEventListener('change', () => { calcularVencimiento(); cargarTipoCambio().catch(mostrarErrorGlobal); });
     $('compraMoneda').addEventListener('change', () => cargarTipoCambio().catch(mostrarErrorGlobal));
+
+    window.addEventListener('si:tipo-cambio-actualizado', () => {
+        cargarTipoCambio().catch(mostrarErrorGlobal);
+    });
 
     $('formCompra').querySelectorAll('[data-modo-guardar]').forEach(b => b.addEventListener('click', () => estado.modoGuardarCompra = b.dataset.modoGuardar));
     $('formCompra').addEventListener('submit', guardarCompra);

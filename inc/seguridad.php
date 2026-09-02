@@ -196,6 +196,7 @@ function si_requerir_sesion(?bool $json = null): void
     si_forzar_cambio_password_si_aplica($json);
 
     $_SESSION['ultima_actividad'] = time();
+    si_actualizar_actividad_sesion_bd();
 
     $ultimaRegeneracion = (int) (
         $_SESSION['sesion_regenerada_en']
@@ -337,6 +338,57 @@ function si_forzar_cambio_password_si_aplica(bool $json): void
 
     header('Location: ' . $redirect);
     exit;
+}
+
+/**
+ * Mantiene la bitácora administrativa de sesiones alineada con la actividad
+ * real. No participa en la decisión de autenticación: el timeout PHP actual
+ * sigue siendo la autoridad para no arriesgar el flujo de inicio de sesión.
+ */
+function si_actualizar_actividad_sesion_bd(): void
+{
+    $usuarioId = (int) ($_SESSION['usuario_id'] ?? 0);
+    $sesionDbId = (int) ($_SESSION['sesion_db_id'] ?? 0);
+
+    if ($usuarioId <= 0 || $sesionDbId <= 0) {
+        return;
+    }
+
+    $ahora = time();
+    $ultimaActualizacion = (int) ($_SESSION['ultima_actividad_bd_en'] ?? 0);
+
+    // Evita una escritura a MySQL por cada petición AJAX del sistema.
+    if ($ultimaActualizacion > 0 && ($ahora - $ultimaActualizacion) < 60) {
+        return;
+    }
+
+    $conexion = si_obtener_conexion_seguridad();
+    if (!$conexion) {
+        return;
+    }
+
+    try {
+        $stmt = $conexion->prepare(
+            "UPDATE sesiones_usuario
+             SET ultima_actividad = NOW()
+             WHERE id = :id
+               AND usuario_id = :usuario_id
+               AND activa = 1"
+        );
+        $stmt->execute([
+            ':id' => $sesionDbId,
+            ':usuario_id' => $usuarioId,
+        ]);
+
+        $_SESSION['ultima_actividad_bd_en'] = $ahora;
+    } catch (Throwable $e) {
+        // Compatibilidad durante la instalación del parche: si la migración
+        // todavía no fue aplicada, el acceso del usuario no debe romperse.
+        error_log(
+            '[SISTEMA INTEGRAL][ACTIVIDAD SESION] '
+            . $e->getMessage()
+        );
+    }
 }
 
 function si_actualizar_token_sesion_bd(): void
@@ -733,7 +785,7 @@ function si_responder_json(
     string $mensaje,
     array $extra = [],
     int $codigoHttp = 200
-): void {
+): never {
     if (!headers_sent()) {
         http_response_code($codigoHttp);
         header(

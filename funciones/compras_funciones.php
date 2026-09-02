@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
+require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
+
 si_requerir_permiso('compras.ver', true);
 
 if (!($conexion instanceof PDO)) {
@@ -487,6 +490,8 @@ function cmp_tipo_cambio(PDO $conexion): void
             'tipo_cambio' => $tipo['tipo_cambio'] ?? null,
             'fecha_tipo_cambio' => $tipo['fecha'] ?? null,
             'fuente' => $tipo['fuente'] ?? null,
+            'desactualizado' => (bool) ($tipo['desactualizado'] ?? false),
+            'dias_habiles_antiguedad' => (int) ($tipo['dias_habiles_antiguedad'] ?? 0),
             'moneda_base' => $base,
         ]
     );
@@ -3021,55 +3026,35 @@ function cmp_moneda_base(PDO $conexion): ?array
 
 function cmp_buscar_tipo_cambio(PDO $conexion, int $origenId, int $destinoId, string $fecha): ?array
 {
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio, fecha, fuente
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmt->execute([
-        ':origen' => $origenId,
-        ':destino' => $destinoId,
-        ':fecha' => $fecha,
-    ]);
-    $fila = $stmt->fetch();
+    $base = cmp_moneda_base($conexion);
+    if ($base && $destinoId === (int) $base['id']) {
+        return si_tc_resolver_a_base($conexion, $origenId, $fecha, true);
+    }
 
-    if ($fila) {
+    $directo = si_tc_buscar_local($conexion, $origenId, $destinoId, $fecha);
+    if ($directo !== null) {
         return [
-            'tipo_cambio' => (float) $fila['tipo_cambio'],
-            'fecha' => $fila['fecha'],
-            'fuente' => $fila['fuente'],
+            'tipo_cambio' => (float) $directo['tipo_cambio'],
+            'fecha' => (string) $directo['fecha'],
+            'fuente' => $directo['fuente'],
+            'desactualizado' => false,
+            'dias_habiles_antiguedad' => 0,
         ];
     }
 
-    /* También acepta el par inverso y lo invierte de forma explícita. */
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio, fecha, fuente
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :destino
-           AND moneda_destino_id = :origen
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmt->execute([
-        ':origen' => $origenId,
-        ':destino' => $destinoId,
-        ':fecha' => $fecha,
-    ]);
-    $fila = $stmt->fetch();
-
-    if (!$fila || (float) $fila['tipo_cambio'] <= 0) {
+    $inverso = si_tc_buscar_local($conexion, $destinoId, $origenId, $fecha);
+    if ($inverso === null || (float) $inverso['tipo_cambio'] <= 0) {
         return null;
     }
 
     return [
-        'tipo_cambio' => 1 / (float) $fila['tipo_cambio'],
-        'fecha' => $fila['fecha'],
-        'fuente' => ($fila['fuente'] ? $fila['fuente'] . ' · inverso' : 'Par inverso'),
+        'tipo_cambio' => 1 / (float) $inverso['tipo_cambio'],
+        'fecha' => (string) $inverso['fecha'],
+        'fuente' => trim((string) ($inverso['fuente'] ?? '')) !== ''
+            ? (string) $inverso['fuente'] . ' · inverso'
+            : 'Par inverso',
+        'desactualizado' => false,
+        'dias_habiles_antiguedad' => 0,
     ];
 }
 

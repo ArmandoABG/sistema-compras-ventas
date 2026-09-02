@@ -60,6 +60,10 @@ $puedeDashboardPagar = si_tiene_permiso('cuentas_pagar.ver');
 $puedeDashboardAuditoria = si_tiene_permiso('auditoria.ver');
 $puedeDashboardTopClientes = $puedeDashboardVentas && si_tiene_permiso('clientes.ver');
 $puedeDashboardTendencias = $puedeDashboardVentas || $puedeDashboardCompras;
+$puedeActualizarTipoCambio = si_tiene_permiso('ventas.crear')
+    || si_tiene_permiso('compras.crear')
+    || si_tiene_permiso('cuentas_cobrar.cobrar')
+    || si_tiene_permiso('cuentas_pagar.pagar');
 
 $nombreUsuario = trim((string) (
     $_SESSION['nombre_completo']
@@ -357,9 +361,17 @@ $versionModulo = is_file($cssModulo)
                         <button type="button" data-alert-filter="LEIDAS">Leídas</button>
                     </div>
 
-                    <button type="button" class="dashboard-alert-mark-all" id="btnMarcarTodasAlertas">
-                        Marcar todas como leídas
-                    </button>
+                    <div class="dashboard-alert-toolbar__actions">
+                        <?php if ($puedeActualizarTipoCambio): ?>
+                        <button type="button" class="dashboard-alert-mark-all" id="btnActualizarTipoCambio">
+                            Actualizar dólar
+                        </button>
+                        <?php endif; ?>
+
+                        <button type="button" class="dashboard-alert-mark-all" id="btnMarcarTodasAlertas">
+                            Marcar todas como leídas
+                        </button>
+                    </div>
                 </div>
 
                 <div class="dashboard-alert-list" id="listaAlertas">
@@ -1102,6 +1114,66 @@ $versionModulo = is_file($cssModulo)
         renderAlertas(data.alertas_operativas || {});
         window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
     }
+
+    document.getElementById('btnActualizarTipoCambio')?.addEventListener('click', async function () {
+        const button = this;
+        if (button.disabled) return;
+
+        button.disabled = true;
+        const textoOriginal = button.textContent;
+        button.textContent = 'Consultando Banxico...';
+        mensaje.hidden = true;
+
+        try {
+            const body = new URLSearchParams();
+            body.set('accion', 'ACTUALIZAR_TIPO_CAMBIO');
+            body.set('csrf_token', csrfAlertas);
+
+            const response = await fetch(alertasEndpoint, {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                body: body.toString()
+            });
+
+            const text = await response.text();
+            let data;
+            try {
+                data = JSON.parse(text);
+            } catch (error) {
+                throw new Error('El servidor devolvió una respuesta no válida.');
+            }
+
+            if (!response.ok || data.success !== true) {
+                throw new Error(data.mensaje || 'No fue posible actualizar el tipo de cambio.');
+            }
+
+            const valor = Number(data.tipo_cambio || 0);
+            const fecha = String(data.fecha || '');
+            const fuente = String(data.fuente || 'Banco de México');
+
+            mensaje.className = 'dashboard-message dashboard-message--success';
+            mensaje.textContent = valor > 0
+                ? 'Tipo de cambio actualizado: 1 USD = $' + numero(valor, 4) + ' MXN'
+                    + (fecha ? ' · FIX ' + fecha : '')
+                    + (fuente ? ' · ' + fuente : '')
+                : 'Tipo de cambio actualizado correctamente.';
+            mensaje.hidden = false;
+
+            renderAlertas(data.alertas_operativas || {});
+            window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
+        } catch (error) {
+            mensaje.className = 'dashboard-message dashboard-message--error';
+            mensaje.textContent = error.message || 'No fue posible actualizar el tipo de cambio.';
+            mensaje.hidden = false;
+        } finally {
+            button.disabled = false;
+            button.textContent = textoOriginal;
+        }
+    });
 
     document.getElementById('filtrosAlertas')?.addEventListener('click', function (event) {
         const button = event.target.closest('[data-alert-filter]');

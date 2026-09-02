@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
+require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
+
 si_requerir_permiso('apartados.ver', true);
 
 if (!($conexion instanceof PDO)) {
@@ -1508,32 +1511,8 @@ function apa_apartado_de_cotizacion(PDO $conexion, int $cotizacionId): ?array
 
 function apa_tipo_cambio_a_base(PDO $conexion, int $monedaId, string $fecha): ?float
 {
-    $base = $conexion->query("SELECT id FROM monedas WHERE es_base = 1 AND activo = 1 ORDER BY id ASC LIMIT 1")->fetchColumn();
-    if (!$base) {
-        return null;
-    }
-    $baseId = (int) $base;
-    if ($monedaId === $baseId) {
-        return 1.0;
-    }
-
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen AND moneda_destino_id = :destino AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC LIMIT 1"
-    );
-    $stmt->execute([':origen' => $monedaId, ':destino' => $baseId, ':fecha' => $fecha]);
-    $directo = $stmt->fetchColumn();
-    if ($directo !== false && (float) $directo > 0) {
-        return (float) $directo;
-    }
-    $stmt->execute([':origen' => $baseId, ':destino' => $monedaId, ':fecha' => $fecha]);
-    $inverso = $stmt->fetchColumn();
-    if ($inverso !== false && (float) $inverso > 0) {
-        return 1 / (float) $inverso;
-    }
-    return null;
+    $tipo = si_tc_resolver_a_base($conexion, $monedaId, $fecha, true);
+    return $tipo !== null ? (float) $tipo['tipo_cambio'] : null;
 }
 
 /* =========================================================================

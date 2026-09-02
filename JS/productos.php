@@ -991,7 +991,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                 <small id="precioProductoSeleccionado">Selecciona un producto de los resultados.</small>
             </label>
 
-            <div class="form-grid">
+            <div class="form-grid form-grid--price-sale">
                 <label class="field field--span-2">
                     <span>¿Cómo se vende? *</span>
                     <select name="presentacion_id" id="precioPresentacion" required disabled>
@@ -1054,16 +1054,26 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
                     <small id="ayudaImpuestoPrecio">Se usará el impuesto del producto salvo que selecciones otro.</small>
                 </label>
 
-                <label class="field">
+                <label class="field field--span-2">
                     <span>Vigente desde *</span>
                     <input type="datetime-local" name="vigente_desde" id="precioVigenteDesde" required>
                 </label>
 
-                <label class="field">
+                <label class="field field--span-2">
                     <span>Vigente hasta</span>
                     <input type="datetime-local" name="vigente_hasta" id="precioVigenteHasta">
                     <small>Déjalo vacío si no tiene fecha de término.</small>
                 </label>
+            </div>
+
+
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
             </div>
 
             <div class="price-rule-preview" id="resumenReglaPrecio">
@@ -1082,6 +1092,8 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
         </form>
     </section>
 </div>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {

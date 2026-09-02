@@ -209,6 +209,15 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 </label>
             </section>
 
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
+            </div>
+
             <section class="client-summary" id="resumenCliente">
                 <div>
                     <span>Cliente seleccionado</span>
@@ -333,6 +342,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         </footer>
     </section>
 </div>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {
@@ -1670,6 +1681,20 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             Number(monedaActual().es_base) === 1
                 ? '1.00000000'
                 : 'Se determina al guardar';
+    });
+
+    window.addEventListener('si:tipo-cambio-actualizado', async function () {
+        if (String(monedaActual().codigo || '').toUpperCase() !== 'USD') return;
+        try {
+            await Promise.all(
+                estado.lineas.map(function (linea) {
+                    return actualizarPrecioLinea(linea.uid, false);
+                })
+            );
+            recalcularTotales();
+        } catch (error) {
+            mostrarMensaje($('mensajeCotizacion'), error.message || 'Se actualizó el FIX, pero no fue posible refrescar todos los precios sugeridos.', 'error');
+        }
     });
 
     $('formCotizacion').addEventListener('click', function (event) {

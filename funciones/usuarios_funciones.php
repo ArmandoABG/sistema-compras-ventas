@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/notificaciones_stock_email.php';
 
 si_requerir_permiso('usuarios.ver', true);
@@ -180,6 +182,44 @@ function usr_sesiones(PDO $conexion): void
 {
     $id = usr_id($_GET['usuario_id'] ?? null);
 
+    /*
+     * Limpieza administrativa: una sesión que no registra actividad dentro
+     * del mismo timeout que usa seguridad.php deja de mostrarse como activa.
+     * Esto no interviene en el login ni invalida la sesión PHP actual.
+     */
+    $tieneUltimaActividad = false;
+    try {
+        $conexion->query("SELECT ultima_actividad FROM sesiones_usuario LIMIT 0");
+        $tieneUltimaActividad = true;
+
+        $limiteInactividad = date(
+            'Y-m-d H:i:s',
+            time() - SI_TIEMPO_INACTIVIDAD
+        );
+
+        $stmtExpirar = $conexion->prepare(
+            "UPDATE sesiones_usuario
+             SET
+                activa = 0,
+                fin_sesion = COALESCE(fin_sesion, ultima_actividad, inicio_sesion),
+                motivo_cierre = CASE
+                    WHEN motivo_cierre IS NULL OR TRIM(motivo_cierre) = ''
+                        THEN 'EXPIRADA_INACTIVIDAD'
+                    ELSE motivo_cierre
+                END
+             WHERE usuario_id = :usuario_id
+               AND activa = 1
+               AND COALESCE(ultima_actividad, inicio_sesion) < :limite"
+        );
+        $stmtExpirar->execute([
+            ':usuario_id' => $id,
+            ':limite' => $limiteInactividad,
+        ]);
+    } catch (Throwable $e) {
+        // Compatibilidad durante una migración parcial del parche.
+        error_log('[SISTEMA INTEGRAL][SESIONES EXPIRADAS] ' . $e->getMessage());
+    }
+
     $pagina = usr_entero_rango(
         $_GET['pagina'] ?? 1,
         1,
@@ -219,6 +259,7 @@ function usr_sesiones(PDO $conexion): void
             ip,
             user_agent,
             inicio_sesion,
+            " . ($tieneUltimaActividad ? "ultima_actividad" : "inicio_sesion AS ultima_actividad") . ",
             fin_sesion,
             motivo_cierre,
             activa

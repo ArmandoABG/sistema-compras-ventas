@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
+require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
 require_once __DIR__ . '/../inc/qr_core.php';
 
 si_requerir_permiso('ventas.ver', true);
@@ -2638,53 +2641,8 @@ function ven_calcular_descuento_historico(array $detalles): float
 
 function ven_tipo_cambio_a_base(PDO $conexion, int $monedaId, string $fecha): ?float
 {
-    $stmtMoneda = $conexion->prepare("SELECT id, es_base FROM monedas WHERE id = :id AND activo = 1 LIMIT 1");
-    $stmtMoneda->execute([':id' => $monedaId]);
-    $moneda = $stmtMoneda->fetch();
-    if (!$moneda) {
-        return null;
-    }
-    if ((int) $moneda['es_base'] === 1) {
-        return 1.0;
-    }
-
-    $stmtBase = $conexion->query("SELECT id FROM monedas WHERE es_base = 1 AND activo = 1 ORDER BY id ASC LIMIT 1");
-    $baseId = (int) ($stmtBase->fetchColumn() ?: 0);
-    if ($baseId <= 0) {
-        return null;
-    }
-
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmt->execute([':origen' => $monedaId, ':destino' => $baseId, ':fecha' => $fecha]);
-    $tasa = $stmt->fetchColumn();
-    if ($tasa !== false) {
-        return (float) $tasa;
-    }
-
-    $stmtInv = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmtInv->execute([':origen' => $baseId, ':destino' => $monedaId, ':fecha' => $fecha]);
-    $inversa = $stmtInv->fetchColumn();
-    if ($inversa !== false && (float) $inversa > 0) {
-        return 1 / (float) $inversa;
-    }
-
-    return null;
+    $tipo = si_tc_resolver_a_base($conexion, $monedaId, $fecha, true);
+    return $tipo !== null ? (float) $tipo['tipo_cambio'] : null;
 }
 
 /* =========================================================================

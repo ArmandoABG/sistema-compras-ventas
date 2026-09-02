@@ -638,3 +638,288 @@ body.topbar-profile-open{overflow:hidden}
 .topbar-profile-password h3{margin:0;color:#28382f;font-size:16px}
 .topbar-profile-password p{margin:4px 0 13px;color:#6c7971;font-size:12px}
 @media(max-width:850px){.topbar-account{margin-left:auto}.topbar-account__menu{position:fixed;top:72px;right:12px;width:min(280px,calc(100vw - 24px))}.topbar-profile-modal{padding:0}.topbar-profile-card{min-height:100vh;max-height:100vh;border-radius:0}.topbar-profile-grid,.topbar-profile-account-summary{grid-template-columns:1fr}}
+
+/* ================================================================
+   Pulido de formularios dentro de modales
+   - Solo ordena/alinea campos; no cambia reglas ni funcionalidad.
+   - Los títulos de campos de una misma fila conservan una altura
+     mínima para que inputs/selects comiencen alineados.
+   ================================================================ */
+.modal-backdrop .modal-header > div,
+.modal-backdrop .modal-footer > div {
+    min-width: 0;
+}
+
+.modal-backdrop .modal-header h2,
+.modal-backdrop .modal-header p {
+    overflow-wrap: anywhere;
+}
+
+.modal-backdrop .modal-footer {
+    flex-wrap: wrap;
+}
+
+.modal-backdrop .field {
+    min-width: 0;
+    align-content: start;
+}
+
+.modal-backdrop .form-grid,
+.modal-backdrop .purchase-head-grid,
+.modal-backdrop .quote-header-grid,
+.modal-backdrop .venta-header-grid,
+.modal-backdrop .payment-grid,
+.modal-backdrop .warehouse-form-grid,
+.modal-backdrop .transfer-meta-grid,
+.modal-backdrop .return-grid,
+.modal-backdrop .settlement-fields {
+    align-items: start;
+}
+
+.modal-backdrop .form-grid > .field > span,
+.modal-backdrop .purchase-head-grid > .field > span,
+.modal-backdrop .quote-header-grid > .field > span,
+.modal-backdrop .venta-header-grid > .field > span,
+.modal-backdrop .payment-grid > .field > span,
+.modal-backdrop .warehouse-form-grid > .field > span,
+.modal-backdrop .transfer-meta-grid > .field > span,
+.modal-backdrop .return-grid > .field > span,
+.modal-backdrop .settlement-fields > .field > span {
+    display: flex;
+    align-items: flex-end;
+    min-height: 2.45em;
+    line-height: 1.25;
+}
+
+.modal-backdrop .field input,
+.modal-backdrop .field select,
+.modal-backdrop .field textarea,
+.modal-backdrop .field > div {
+    min-width: 0;
+}
+
+.modal-backdrop .field textarea {
+    line-height: 1.4;
+}
+
+@media (max-width: 760px) {
+    .modal-backdrop .form-grid > .field > span,
+    .modal-backdrop .purchase-head-grid > .field > span,
+    .modal-backdrop .quote-header-grid > .field > span,
+    .modal-backdrop .venta-header-grid > .field > span,
+    .modal-backdrop .payment-grid > .field > span,
+    .modal-backdrop .warehouse-form-grid > .field > span,
+    .modal-backdrop .transfer-meta-grid > .field > span,
+    .modal-backdrop .return-grid > .field > span,
+    .modal-backdrop .settlement-fields > .field > span {
+        min-height: 0;
+    }
+}
+
+
+/* ================================================================
+   Pulido estructural 09: espaciado y alineación
+   Solo organiza la geometría de formularios/modales. No define
+   paleta, fondos ni apariencia decorativa.
+   ================================================================ */
+.modal-backdrop .modal-card > form,
+.modal-backdrop .modal-card > .modal-body,
+.modal-backdrop .modal-card > .detail-body,
+.modal-backdrop .modal-card > .audit-detail-body,
+.modal-backdrop .modal-card > .warehouse-detail-body,
+.modal-backdrop .modal-card > .quote-detail-content,
+.modal-backdrop .modal-card > .return-body,
+.modal-backdrop .modal-card > .usuarios-table-wrap,
+.modal-backdrop .modal-card > .transfer-modal__body,
+.modal-backdrop .detail-modal > .detail-modal__body {
+    padding-left: 22px !important;
+    padding-right: 22px !important;
+}
+
+.modal-backdrop .modal-card > .modal-header,
+.modal-backdrop .modal-card > .modal-footer,
+.modal-backdrop .modal-card > .modal-actions,
+.modal-backdrop .detail-modal > .detail-modal__header,
+.modal-backdrop .detail-modal > .detail-modal__footer {
+    padding-left: 22px !important;
+    padding-right: 22px !important;
+}
+
+/* Venta concentra más controles por fila; se deja una respiración interna ligeramente mayor. */
+.modal-backdrop .modal-card--venta > form,
+.modal-backdrop .modal-card--venta > .modal-header,
+.modal-backdrop .modal-card--venta > .modal-footer {
+    padding-left: 24px !important;
+    padding-right: 24px !important;
+}
+
+.inv-stock-modal .inv-stock-modal__header,
+.inv-stock-modal .inv-stock-modal__body,
+.inv-stock-modal .inv-stock-modal__footer {
+    padding-left: 22px !important;
+    padding-right: 22px !important;
+}
+
+.modal-backdrop .modal-card > form > :first-child,
+.modal-backdrop .modal-card > .modal-body > :first-child,
+.modal-backdrop .modal-card > .detail-body > :first-child {
+    min-width: 0;
+}
+
+.modal-backdrop .field,
+.modal-backdrop .field > *,
+.modal-backdrop .form-grid > *,
+.modal-backdrop .purchase-head-grid > *,
+.modal-backdrop .quote-header-grid > *,
+.modal-backdrop .venta-header-grid > * {
+    min-width: 0;
+}
+
+.filters-grid,
+.catalogos-filtros,
+.simple-search,
+.form-grid,
+.purchase-head-grid,
+.quote-header-grid,
+.apartado-header-grid,
+.venta-header-grid,
+.advance-grid,
+.password-reset-grid,
+.stock-policy-grid,
+.transfer-route,
+.transfer-meta-grid,
+.warehouse-stock-filters,
+.return-grid,
+.return-bottom-grid,
+.settlement-fields,
+.quote-bottom-grid,
+.apartado-bottom-grid,
+.venta-bottom-grid {
+    align-items: start;
+}
+
+.filters-grid > .field > span,
+.catalogos-filtros > .field > span,
+.simple-search > .field > span,
+.modal-backdrop .form-grid > .field > span,
+.modal-backdrop .purchase-head-grid > .field > span,
+.modal-backdrop .quote-header-grid > .field > span,
+.modal-backdrop .apartado-header-grid > .field > span,
+.modal-backdrop .venta-header-grid > .field > span,
+.modal-backdrop .payment-grid > .field > span,
+.modal-backdrop .advance-grid > .field > span,
+.modal-backdrop .password-reset-grid > .field > span,
+.modal-backdrop .transfer-route > .field > span,
+.modal-backdrop .transfer-meta-grid > .field > span,
+.modal-backdrop .warehouse-stock-filters > .field > span,
+.modal-backdrop .return-grid > .field > span,
+.modal-backdrop .return-bottom-grid > .field > span,
+.modal-backdrop .settlement-fields > .field > span,
+.modal-backdrop .quote-bottom-grid > .field > span,
+.modal-backdrop .apartado-bottom-grid > .field > span,
+.modal-backdrop .venta-bottom-grid > .field > span,
+.inv-stock-modal .stock-policy-grid > .field > span {
+    display: flex;
+    align-items: flex-end;
+    min-height: 2.45em;
+    line-height: 1.25;
+}
+
+.modal-backdrop input,
+.modal-backdrop select,
+.modal-backdrop textarea {
+    max-width: 100%;
+}
+
+.si-tc-panel {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    min-width: 0;
+    padding: 6px 0 2px;
+}
+
+.si-tc-panel__text {
+    min-width: 0;
+    display: grid;
+    gap: 2px;
+}
+
+.si-tc-panel__text > span,
+.si-tc-panel__text > strong,
+.si-tc-panel__text > small {
+    display: block;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.si-tc-panel__text > small {
+    line-height: 1.35;
+}
+
+.si-tc-panel [data-si-tc-actualizar] {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+    .modal-backdrop .modal-card > form,
+    .modal-backdrop .modal-card > .modal-body,
+    .modal-backdrop .modal-card > .detail-body,
+    .modal-backdrop .modal-card > .audit-detail-body,
+    .modal-backdrop .modal-card > .warehouse-detail-body,
+    .modal-backdrop .modal-card > .quote-detail-content,
+    .modal-backdrop .modal-card > .return-body,
+    .modal-backdrop .modal-card > .usuarios-table-wrap,
+    .modal-backdrop .modal-card > .transfer-modal__body,
+    .modal-backdrop .detail-modal > .detail-modal__body,
+    .modal-backdrop .modal-card > .modal-header,
+    .modal-backdrop .modal-card > .modal-footer,
+    .modal-backdrop .modal-card > .modal-actions,
+    .modal-backdrop .modal-card--venta > form,
+    .modal-backdrop .modal-card--venta > .modal-header,
+    .modal-backdrop .modal-card--venta > .modal-footer,
+    .modal-backdrop .detail-modal > .detail-modal__header,
+    .modal-backdrop .detail-modal > .detail-modal__footer,
+    .inv-stock-modal .inv-stock-modal__header,
+    .inv-stock-modal .inv-stock-modal__body,
+    .inv-stock-modal .inv-stock-modal__footer {
+        padding-left: 15px !important;
+        padding-right: 15px !important;
+    }
+
+    .filters-grid > .field > span,
+    .catalogos-filtros > .field > span,
+    .simple-search > .field > span,
+    .modal-backdrop .form-grid > .field > span,
+    .modal-backdrop .purchase-head-grid > .field > span,
+    .modal-backdrop .quote-header-grid > .field > span,
+    .modal-backdrop .apartado-header-grid > .field > span,
+    .modal-backdrop .venta-header-grid > .field > span,
+    .modal-backdrop .payment-grid > .field > span,
+    .modal-backdrop .advance-grid > .field > span,
+    .modal-backdrop .password-reset-grid > .field > span,
+    .modal-backdrop .transfer-route > .field > span,
+    .modal-backdrop .transfer-meta-grid > .field > span,
+    .modal-backdrop .warehouse-stock-filters > .field > span,
+    .modal-backdrop .return-grid > .field > span,
+    .modal-backdrop .return-bottom-grid > .field > span,
+    .modal-backdrop .settlement-fields > .field > span,
+    .modal-backdrop .quote-bottom-grid > .field > span,
+    .modal-backdrop .apartado-bottom-grid > .field > span,
+    .modal-backdrop .venta-bottom-grid > .field > span,
+    .inv-stock-modal .stock-policy-grid > .field > span {
+        min-height: 0;
+    }
+
+    .si-tc-panel {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .si-tc-panel [data-si-tc-actualizar] {
+        width: 100%;
+    }
+}

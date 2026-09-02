@@ -58,6 +58,12 @@
     border: 1px solid #fde68a;
 }
 
+.dashboard-message--success {
+    background: #ecfdf3;
+    color: #166534;
+    border: 1px solid #bbf7d0;
+}
+
 .kpi-grid {
     display: grid;
     grid-template-columns:
@@ -573,6 +579,14 @@ tbody tr:hover {
     align-items: center;
     flex-wrap: wrap;
     gap: 7px;
+}
+
+.dashboard-alert-toolbar__actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
 }
 
 .dashboard-alert-filters button,

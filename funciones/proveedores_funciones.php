@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
+require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
+
 si_requerir_permiso('proveedores.ver', true);
 
 if (!($conexion instanceof PDO)) {
@@ -1944,7 +1947,6 @@ function prov_opciones_producto(PDO $conexion): void
 function prov_tipo_cambio(PDO $conexion): void
 {
     $monedaId = prov_id($_GET['moneda_id'] ?? null, 'moneda');
-
     $base = prov_moneda_base($conexion);
 
     if (!$base) {
@@ -1957,25 +1959,27 @@ function prov_tipo_cambio(PDO $conexion): void
             'La moneda seleccionada es la moneda base.',
             [
                 'tipo_cambio' => 1,
+                'fecha_tipo_cambio' => date('Y-m-d'),
+                'fuente' => 'Moneda base',
+                'desactualizado' => false,
+                'dias_habiles_antiguedad' => 0,
                 'moneda_base' => $base,
                 'encontrado' => true,
             ]
         );
     }
 
-    $tipo = prov_ultimo_tipo_cambio(
-        $conexion,
-        $monedaId,
-        (int) $base['id']
-    );
+    $tipo = si_tc_resolver_a_base($conexion, $monedaId, date('Y-m-d'), true);
 
     si_responder_json(
         true,
-        $tipo !== null
-            ? 'Tipo de cambio encontrado.'
-            : 'No hay tipo de cambio registrado.',
+        $tipo !== null ? 'Tipo de cambio encontrado.' : 'No hay tipo de cambio registrado.',
         [
-            'tipo_cambio' => $tipo,
+            'tipo_cambio' => $tipo['tipo_cambio'] ?? null,
+            'fecha_tipo_cambio' => $tipo['fecha'] ?? null,
+            'fuente' => $tipo['fuente'] ?? null,
+            'desactualizado' => (bool) ($tipo['desactualizado'] ?? false),
+            'dias_habiles_antiguedad' => (int) ($tipo['dias_habiles_antiguedad'] ?? 0),
             'moneda_base' => $base,
             'encontrado' => $tipo !== null,
         ]
@@ -2221,26 +2225,14 @@ function prov_ultimo_tipo_cambio(
     int $monedaOrigenId,
     int $monedaDestinoId
 ): ?float {
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= CURDATE()
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
+    $base = prov_moneda_base($conexion);
+    if ($base && $monedaDestinoId === (int) $base['id']) {
+        $tipo = si_tc_resolver_a_base($conexion, $monedaOrigenId, date('Y-m-d'), true);
+        return $tipo !== null ? (float) $tipo['tipo_cambio'] : null;
+    }
 
-    $stmt->execute([
-        ':origen' => $monedaOrigenId,
-        ':destino' => $monedaDestinoId,
-    ]);
-
-    $valor = $stmt->fetchColumn();
-
-    return $valor === false
-        ? null
-        : (float) $valor;
+    $local = si_tc_buscar_local($conexion, $monedaOrigenId, $monedaDestinoId, date('Y-m-d'));
+    return $local !== null ? (float) $local['tipo_cambio'] : null;
 }
 
 function prov_generar_codigo_proveedor(int $id): string

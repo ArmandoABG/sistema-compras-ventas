@@ -2,3 +2,5 @@ inc/conexion.php
 
 
 inc/correo_stock_config.local.php
+
+inc/banxico_config.local.php

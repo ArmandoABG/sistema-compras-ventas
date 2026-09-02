@@ -5,6 +5,9 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
+require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
+
 si_requerir_permiso('cuentas_cobrar.ver', true);
 
 if (!($conexion instanceof PDO)) {
@@ -506,62 +509,9 @@ function cxc_tipo_cambio_pago(
     string $fecha,
     float $fallbackVenta
 ): float {
-    $stmtBase = $conexion->query(
-        "SELECT id
-         FROM monedas
-         WHERE es_base = 1
-           AND activo = 1
-         ORDER BY id ASC
-         LIMIT 1"
-    );
-    $baseId = (int) $stmtBase->fetchColumn();
-
-    if ($baseId <= 0) {
-        cxc_cancelar($conexion, 'No existe una moneda base activa configurada.', 409);
-    }
-
-    if ($monedaId === $baseId) {
-        return 1.0;
-    }
-
-    $stmt = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmt->execute([
-        ':origen' => $monedaId,
-        ':destino' => $baseId,
-        ':fecha' => $fecha,
-    ]);
-    $tc = (float) ($stmt->fetchColumn() ?: 0);
-
-    if ($tc > 0) {
-        return $tc;
-    }
-
-    $stmtInverso = $conexion->prepare(
-        "SELECT tipo_cambio
-         FROM tipos_cambio
-         WHERE moneda_origen_id = :origen
-           AND moneda_destino_id = :destino
-           AND fecha <= :fecha
-         ORDER BY fecha DESC, id DESC
-         LIMIT 1"
-    );
-    $stmtInverso->execute([
-        ':origen' => $baseId,
-        ':destino' => $monedaId,
-        ':fecha' => $fecha,
-    ]);
-    $inverso = (float) ($stmtInverso->fetchColumn() ?: 0);
-
-    if ($inverso > 0) {
-        return 1 / $inverso;
+    $tipo = si_tc_resolver_a_base($conexion, $monedaId, $fecha, true);
+    if ($tipo !== null && (float) $tipo['tipo_cambio'] > 0) {
+        return (float) $tipo['tipo_cambio'];
     }
 
     if ($fallbackVenta > 0) {
@@ -870,7 +820,7 @@ function cxc_auditar(
     ]);
 }
 
-function cxc_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): void
+function cxc_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

@@ -179,6 +179,15 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 </label>
             </section>
 
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
+            </div>
+
             <section class="client-summary" id="resumenClienteVenta">
                 <div><span>Cliente</span><strong id="clienteNombreVenta">Público general</strong><small id="clienteCodigoVenta">Sin cliente seleccionado.</small></div>
                 <div><span>Clasificación</span><strong id="clienteNivelVenta">—</strong><small>Determina el descuento comercial.</small></div>
@@ -302,6 +311,8 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         </footer>
     </section>
 </div>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {
@@ -1228,6 +1239,19 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             if (!l.precio_manual) await sugerirPrecio(l, true);
         }
         renderLineas(); renderTotales();
+    });
+
+    window.addEventListener('si:tipo-cambio-actualizado', async () => {
+        if (String(monedaActual().codigo || '').toUpperCase() !== 'USD' || estado.origen !== 'DIRECTO') return;
+        try {
+            for (const linea of estado.lineas) {
+                if (!linea.precio_manual) await sugerirPrecio(linea, false);
+            }
+            renderLineas();
+            renderTotales();
+        } catch (error) {
+            mostrarMensaje('mensajeVenta', error.message || 'Se actualizó el FIX, pero no fue posible refrescar todos los precios sugeridos.', 'error');
+        }
     });
 
     $('ventaAlmacen').addEventListener('change', async () => {

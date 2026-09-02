@@ -450,6 +450,15 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
                 </label>
             </div>
 
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
+            </div>
+
             <div class="smart-note">
                 <strong>El sistema hace el resto</strong>
                 <span>Genera el folio del pago, aplica el abono, actualiza pagado/saldo/estado y conserva al usuario responsable.</span>
@@ -532,6 +541,8 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
     </section>
 </div>
 <?php endif; ?>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {

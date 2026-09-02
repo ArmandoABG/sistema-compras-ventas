@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+
+/** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/alertas_operativas.php';
 
 si_requerir_sesion(true);
@@ -16,6 +18,24 @@ try {
     si_refrescar_identidad_sesion_actual();
 
     $accion = strtoupper(trim((string) ($_GET['accion'] ?? $_POST['accion'] ?? 'RESUMEN')));
+    $puedeActualizarTipoCambio = si_tiene_permiso('ventas.crear')
+        || si_tiene_permiso('compras.crear')
+        || si_tiene_permiso('cuentas_cobrar.cobrar')
+        || si_tiene_permiso('cuentas_pagar.pagar');
+
+    if ($accion === 'TIPO_CAMBIO_ESTADO') {
+        si_requerir_metodo('GET');
+        $estado = si_tc_banxico_estado($conexion, false);
+        si_responder_json(true, 'Tipo de cambio consultado.', [
+            'tipo_cambio' => $estado['tipo_cambio'] ?? null,
+            'fecha' => $estado['fecha'] ?? null,
+            'fuente' => $estado['fuente'] ?? null,
+            'codigo' => $estado['codigo'] ?? null,
+            'desactualizado' => (bool) ($estado['desactualizado'] ?? true),
+            'dias_habiles_antiguedad' => $estado['dias_habiles_antiguedad'] ?? null,
+            'puede_actualizar' => $puedeActualizarTipoCambio,
+        ]);
+    }
 
     if ($accion === 'RESUMEN') {
         si_requerir_metodo('GET');
@@ -23,6 +43,38 @@ try {
         si_responder_json(true, 'Alertas cargadas correctamente.', [
             'alertas_operativas' => $resumen,
         ]);
+    }
+
+    if ($accion === 'ACTUALIZAR_TIPO_CAMBIO') {
+        si_requerir_metodo('POST');
+        si_validar_csrf();
+
+        if (!$puedeActualizarTipoCambio) {
+            si_responder_json(false, 'No tienes permiso para actualizar el tipo de cambio.', [], 403);
+        }
+
+        $estado = si_tc_banxico_sincronizar($conexion, true);
+        $codigo = strtoupper((string) ($estado['codigo'] ?? ''));
+        $detalleTecnico = trim((string) (si_tc_config_valor($conexion, 'banxico.ultimo_mensaje') ?? ''));
+
+        $datos = [
+            'tipo_cambio' => $estado['tipo_cambio'] ?? null,
+            'fecha' => $estado['fecha'] ?? null,
+            'fuente' => $estado['fuente'] ?? null,
+            'codigo' => $codigo,
+            'alertas_operativas' => si_alertas_operativas_resumen($conexion, true),
+        ];
+
+        if ($codigo === 'ACTUALIZADO') {
+            si_responder_json(true, 'Tipo de cambio actualizado correctamente desde Banco de México.', $datos);
+        }
+
+        $mensajeError = 'No fue posible actualizar el tipo de cambio desde Banco de México. Se conserva el último valor local disponible.';
+        if ($detalleTecnico !== '' && strcasecmp($detalleTecnico, 'Consulta correcta.') !== 0) {
+            $mensajeError .= ' Detalle: ' . $detalleTecnico;
+        }
+
+        si_responder_json(false, $mensajeError, $datos, 502);
     }
 
     if (!in_array($accion, ['MARCAR_LEIDA', 'MARCAR_TODAS_LEIDAS'], true)) {

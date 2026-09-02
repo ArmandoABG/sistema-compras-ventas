@@ -167,6 +167,15 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
                 </label>
             </section>
 
+            <div class="si-tc-panel" data-si-tipo-cambio data-endpoint="../funciones/alertas_funciones.php" data-csrf="<?= si_escapar($csrfToken) ?>">
+                <div class="si-tc-panel__text">
+                    <span>FIX actual USD/MXN</span>
+                    <strong data-si-tc-resumen>Consultando FIX...</strong>
+                    <small data-si-tc-detalle>Banco de México SIE</small>
+                </div>
+                <button type="button" class="btn-secondary" data-si-tc-actualizar>Actualizar dólar</button>
+            </div>
+
             <section class="client-summary" id="resumenCliente">
                 <div><span>Cliente</span><strong id="clienteNombreResumen">Ninguno</strong><small id="clienteCodigoResumen">Selecciona un cliente.</small></div>
                 <div><span>Clasificación</span><strong id="clienteNivelResumen">—</strong><small>Condición comercial actual.</small></div>
@@ -285,6 +294,8 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalAnticipo">Cerrar</button><button type="button" class="btn-primary" id="btnGuardarAnticipo">Registrar</button></footer>
     </section>
 </div>
+
+<script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
 
 <script>
 (function () {
@@ -734,6 +745,17 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     $('tablaLineasApartado').addEventListener('click', (e) => { const b = e.target.closest('[data-line-action="eliminar"]'); if (!b) return; const tr = b.closest('[data-key]'); estado.lineas = estado.lineas.filter((x) => Number(x.key) !== Number(tr.dataset.key)); renderLineas(); renderTotales(); });
 
     $('apartadoMoneda').addEventListener('change', async () => { if (estado.cotizacion) return; for (const l of estado.lineas) { l.precio_manual = false; await sugerirPrecio(l, true); } renderLineas(); renderTotales(); });
+
+    window.addEventListener('si:tipo-cambio-actualizado', async () => {
+        if (estado.cotizacion || String(monedaActual().codigo || '').toUpperCase() !== 'USD') return;
+        try {
+            for (const linea of estado.lineas) await sugerirPrecio(linea, false);
+            renderLineas();
+            renderTotales();
+        } catch (error) {
+            mostrarMensaje('mensajeApartado', error.message || 'Se actualizó el FIX, pero no fue posible refrescar todos los precios sugeridos.', 'error');
+        }
+    });
     $('apartadoAlmacen').addEventListener('change', function () {
         const nuevo = Number(this.value || 0);
         if (estado.cotizacion) { estado.almacenSeleccionado = nuevo; estado.lineas.forEach((l) => l.disponible_base = null); renderLineas(); return; }
