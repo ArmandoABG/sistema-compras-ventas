@@ -39,7 +39,7 @@ function si_alertas_operativas_resumen(PDO $conexion, bool $incluirDetalles = tr
         array_push($alertas, ...si_alertas_apartados($conexion, $incluirDetalles));
     }
 
-    if (si_tiene_permiso('devoluciones.ver')) {
+    if (si_tiene_permiso('devoluciones.regularizar')) {
         $alerta = si_alerta_regularizaciones($conexion, $incluirDetalles);
         if ($alerta !== null) {
             $alertas[] = $alerta;

@@ -28,20 +28,24 @@ try {
 
         case 'EXPORTAR_CSV':
         case 'EXPORTAR_XLSX':
-        case 'EXPORTAR_CONTABLE_XLSX':
-            if (!si_tiene_permiso('contabilidad.exportar')) {
-                http_response_code(403);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'No tienes permiso para exportar información.';
-                exit;
-            }
-            if ($accion === 'EXPORTAR_CONTABLE_XLSX') {
-                rep_exportar_contable_xlsx($conexion);
-            } elseif ($accion === 'EXPORTAR_XLSX') {
+            // La exportación normal conserva exactamente los permisos del reporte.
+            // rep_exportar_* vuelve a validar el reporte con rep_codigo_reporte().
+            if ($accion === 'EXPORTAR_XLSX') {
                 rep_exportar_xlsx($conexion);
             } else {
                 rep_exportar_csv($conexion);
             }
+            break;
+
+        case 'EXPORTAR_CONTABLE_XLSX':
+            // El paquete contable sí requiere el permiso financiero específico.
+            if (!si_tiene_permiso('contabilidad.exportar')) {
+                http_response_code(403);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'No tienes permiso para exportar información contable.';
+                exit;
+            }
+            rep_exportar_contable_xlsx($conexion);
             break;
 
         default:
@@ -327,9 +331,9 @@ function rep_reporte_autorizado(string $codigo): bool
         'AJUSTES' => 'inventario.kardex',
         'TRANSFERENCIAS' => 'inventario.kardex',
         'PRODUCCION' => 'produccion.ver',
-        'DEVOLUCIONES_VENTA' => 'devoluciones.ver',
-        'DEVOLUCIONES_COMPRA' => 'devoluciones.ver',
-        'REGULARIZACIONES_DEVOLUCIONES' => 'devoluciones.ver',
+        'DEVOLUCIONES_VENTA' => 'devoluciones.venta',
+        'DEVOLUCIONES_COMPRA' => 'devoluciones.compra',
+        'REGULARIZACIONES_DEVOLUCIONES' => 'devoluciones.regularizar',
         'CUENTAS_PAGAR' => 'cuentas_pagar.ver',
         'PAGOS' => 'cuentas_pagar.ver',
         'CUENTAS_COBRAR' => 'cuentas_cobrar.ver',
@@ -405,7 +409,8 @@ function rep_catalogos(PDO $conexion): void
         'clientes' => $clientes,
         'usuarios' => $usuarios,
         'moneda_base' => strtoupper($monedaBase),
-        'puede_exportar' => si_tiene_permiso('contabilidad.exportar'),
+        'puede_exportar' => si_tiene_permiso('reportes.ver'),
+        'puede_exportar_contable' => si_tiene_permiso('contabilidad.exportar'),
     ]);
 }
 
@@ -723,12 +728,12 @@ function rep_contable_sql_compras(bool $detalle): string
                        COALESCE(NULLIF(c.proveedor_nombre_snapshot,''), pr.razon_social, 'Sin proveedor') AS proveedor,
                        COALESCE(NULLIF(c.proveedor_rfc_snapshot,''), pr.rfc, '') AS rfc,
                        c.condicion_pago, c.estado, mon.codigo AS moneda, c.tipo_cambio_a_base,
-                       (c.subtotal + c.descuento_total) AS importe_bruto,
-                       c.descuento_total AS descuento, c.subtotal AS base_sin_impuesto,
+                       c.subtotal AS importe_bruto,
+                       c.descuento_total AS descuento, (c.subtotal - c.descuento_total) AS base_sin_impuesto,
                        c.impuesto_total AS impuesto, c.total,
-                       (c.subtotal + c.descuento_total) * c.tipo_cambio_a_base AS importe_bruto_base,
+                       c.subtotal * c.tipo_cambio_a_base AS importe_bruto_base,
                        c.descuento_total * c.tipo_cambio_a_base AS descuento_base,
-                       c.subtotal * c.tipo_cambio_a_base AS base_sin_impuesto_base,
+                       (c.subtotal - c.descuento_total) * c.tipo_cambio_a_base AS base_sin_impuesto_base,
                        c.impuesto_total * c.tipo_cambio_a_base AS impuesto_base,
                        c.total * c.tipo_cambio_a_base AS total_base,
                        COALESCE(u.usuario,'—') AS usuario

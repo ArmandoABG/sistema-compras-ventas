@@ -68,9 +68,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
             <section class="module-card devoluciones-card">
                 <div class="module-tabs" role="tablist" aria-label="Tipo de consulta">
-                    <button type="button" class="module-tab is-active" data-tab="VENTA">Clientes</button>
-                    <button type="button" class="module-tab" data-tab="COMPRA">Proveedores</button>
-                    <?php if ($puedeRegularizar): ?><button type="button" class="module-tab" data-tab="REGULARIZACIONES">Regularizaciones</button><?php endif; ?>
+                    <?php if ($puedeVenta): ?><button type="button" class="module-tab<?= $puedeVenta ? ' is-active' : '' ?>" data-tab="VENTA">Clientes</button><?php endif; ?>
+                    <?php if ($puedeCompra): ?><button type="button" class="module-tab<?= !$puedeVenta && $puedeCompra ? ' is-active' : '' ?>" data-tab="COMPRA">Proveedores</button><?php endif; ?>
+                    <?php if ($puedeRegularizar): ?><button type="button" class="module-tab<?= !$puedeVenta && !$puedeCompra ? ' is-active' : '' ?>" data-tab="REGULARIZACIONES">Regularizaciones</button><?php endif; ?>
                 </div>
 
                 <div id="panelDevoluciones">
@@ -201,7 +201,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
                 <?php if ($puedeRegularizar): ?>
                 <section class="settlement-box">
-                    <label class="check-row"><input type="checkbox" id="resolverVenta"><span><strong>Liquidar reembolso ahora, si resulta uno</strong><small>Si la devolución solo reduce saldo pendiente de CxC, no se generará reembolso.</small></span></label>
+                    <label class="check-row"><input type="checkbox" id="resolverVenta" checked><span><strong>Completar el reembolso en esta misma devolución</strong><small id="resumenResolverVenta">El sistema compensará primero cualquier saldo pendiente de CxC y solo devolverá al cliente el excedente.</small></span></label>
                     <div class="settlement-fields" id="camposResolverVenta" hidden>
                         <label class="field"><span>Método *</span><select id="metodoVenta"></select></label>
                         <label class="field"><span>Referencia</span><input type="text" id="referenciaVenta" maxlength="120"></label>
@@ -209,6 +209,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     </div>
                 </section>
                 <?php endif; ?>
+
+                <section class="settlement-box">
+                    <label class="check-row"><input type="checkbox" id="imprimirVentaAlConfirmar" checked><span><strong>Abrir ticket al confirmar</strong><small>Opcional. El comprobante también quedará disponible después en la lista y en Ver detalle.</small></span></label>
+                </section>
             </form>
         </div>
         <footer class="modal-footer">
@@ -270,6 +274,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     </div>
                 </section>
                 <?php endif; ?>
+
+                <section class="settlement-box">
+                    <label class="check-row"><input type="checkbox" id="imprimirCompraAlConfirmar" checked><span><strong>Abrir ticket al confirmar</strong><small>Opcional. El comprobante también quedará disponible después en la lista y en Ver detalle.</small></span></label>
+                </section>
             </form>
         </div>
         <footer class="modal-footer">
@@ -294,7 +302,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             <div class="detail-section-heading"><h3>Regularización financiera</h3></div>
             <div id="detalleRegularizaciones" class="regularization-detail"></div>
         </div>
-        <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalDetalle">Cerrar</button></footer>
+        <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalDetalle">Cerrar</button><a class="btn-secondary btn-link" id="btnImprimirDetalle" target="_blank" rel="noopener" href="#" hidden>Imprimir ticket</a></footer>
     </section>
 </div>
 
@@ -345,6 +353,46 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         }
         const aleatorio = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
         return prefijo + '-' + Date.now().toString(36) + '-' + aleatorio;
+    }
+
+    function urlComprobante(tipo, id) {
+        const devolucionId = Number(id || 0);
+        if (!devolucionId) return '#';
+        return tipo === 'COMPRA'
+            ? 'devolucion_compra_imprimir.php?id=' + encodeURIComponent(devolucionId)
+            : 'devolucion_venta_imprimir.php?id=' + encodeURIComponent(devolucionId);
+    }
+
+    function prepararVentanaComprobante(checkId) {
+        const check = $(checkId);
+        if (!check || !check.checked) return null;
+        const ventana = window.open('', '_blank');
+        if (!ventana) return null;
+        try {
+            ventana.opener = null;
+            ventana.document.title = 'Preparando comprobante...';
+            ventana.document.body.innerHTML = '<p style="font-family:Arial,sans-serif;padding:24px">Preparando ticket de devolución...</p>';
+        } catch (_) {}
+        return ventana;
+    }
+
+    function mostrarComprobante(ventana, tipo, id) {
+        const url = urlComprobante(tipo, id);
+        if (url === '#') {
+            if (ventana && !ventana.closed) ventana.close();
+            return false;
+        }
+        if (ventana && !ventana.closed) {
+            ventana.location.href = url;
+            return true;
+        }
+        return false;
+    }
+
+    function cerrarVentanaComprobante(ventana) {
+        if (ventana && !ventana.closed) {
+            try { ventana.close(); } catch (_) {}
+        }
     }
 
     function escapeHtml(valor) {
@@ -520,7 +568,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 '<td>' + badge(d.regularizacion_estado) + '<small class="cell-secondary">' + labelComp + ': ' + dinero(compensado, d.moneda_simbolo, d.moneda_codigo) + '<br>' + labelContra + ': ' + dinero(contra, d.moneda_simbolo, d.moneda_codigo) + '</small></td>' +
                 '<td><strong>' + dinero(d.total, d.moneda_simbolo, d.moneda_codigo) + '</strong></td>' +
                 '<td>' + escapeHtml(d.creado_por || '—') + '</td>' +
-                '<td class="text-right"><button type="button" class="table-action" data-detalle="' + Number(d.id) + '" data-tipo="' + estado.tab + '">Ver detalle</button></td>' +
+                '<td class="text-right">' +
+                    '<button type="button" class="table-action" data-detalle="' + Number(d.id) + '" data-tipo="' + estado.tab + '">Ver detalle</button>' +
+                    ' <a class="table-action table-action--link" target="_blank" rel="noopener" href="' + urlComprobante(estado.tab, d.id) + '">Imprimir ticket</a>' +
+                '</td>' +
             '</tr>';
         }).join('');
     }
@@ -591,11 +642,13 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('subtituloModalVenta').textContent = 'Busca una venta confirmada cuya salida física esté validada por QR.';
         $('motivoVenta').value = '';
         $('observacionesVenta').value = '';
-        if ($('resolverVenta')) $('resolverVenta').checked = false;
+        if ($('resolverVenta')) $('resolverVenta').checked = true;
+        if ($('resumenResolverVenta')) $('resumenResolverVenta').textContent = 'El sistema compensará primero cualquier saldo pendiente de CxC y solo devolverá al cliente el excedente.';
         if ($('camposResolverVenta')) $('camposResolverVenta').hidden = true;
         if ($('metodoVenta')) $('metodoVenta').value = '';
         if ($('referenciaVenta')) $('referenciaVenta').value = '';
         if ($('notaFinVenta')) $('notaFinVenta').value = '';
+        if ($('imprimirVentaAlConfirmar')) $('imprimirVentaAlConfirmar').checked = true;
         mostrarMensaje('mensajeVenta', '');
     }
 
@@ -671,15 +724,44 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             '<p>Al confirmar, el sistema compensa primero la CxC pendiente. Solo el excedente se registra como reembolso al cliente.</p>';
     }
 
-    function actualizarEstimadoVenta() {
-        if (!estado.venta) return;
+    function estimadoFinancieroVenta() {
+        if (!estado.venta) return { total: 0, compensado: 0, reembolso: 0 };
         let total = 0;
         document.querySelectorAll('.qty-venta').forEach((input) => {
             const l = (estado.venta.lineas || []).find((x) => Number(x.venta_detalle_id) === Number(input.dataset.id));
             const qty = Math.max(0, Math.min(Number(input.value || 0), Number(input.dataset.max || 0)));
-            if (l && Number(l.cantidad_restante) > 0) total += Number(l.importe_restante || 0) * (qty / Number(l.cantidad_restante));
+            if (l && Number(l.cantidad_restante) > 0) {
+                total += Number(l.importe_restante || 0) * (qty / Number(l.cantidad_restante));
+            }
         });
-        $('estimadoVenta').innerHTML = 'Estimado: ' + dinero(total, estado.venta.venta.moneda_simbolo, estado.venta.venta.moneda_codigo);
+        total = Math.max(0, Math.round((total + Number.EPSILON) * 10000) / 10000);
+        const saldoCxc = Math.max(0, Number((estado.venta.finanzas || {}).saldo_cxc || 0));
+        const compensado = Math.min(total, saldoCxc);
+        const reembolso = Math.max(0, total - compensado);
+        return { total, compensado, reembolso };
+    }
+
+    function actualizarLiquidacionVenta() {
+        if (!estado.venta || !$('resolverVenta')) return;
+        const e = estimadoFinancieroVenta();
+        const simbolo = estado.venta.venta.moneda_simbolo || '$';
+        const codigo = estado.venta.venta.moneda_codigo || '';
+        const sufijo = codigo ? ' ' + codigo : '';
+        if ($('resumenResolverVenta')) {
+            $('resumenResolverVenta').textContent = e.reembolso > 0.00005
+                ? 'Reembolso estimado al cliente: ' + simbolo + numero(e.reembolso, 2) + sufijo + '. Se registrará dentro de la misma devolución.'
+                : 'No se estima salida de dinero: el importe se aplicará contra el saldo pendiente de CxC, si existe.';
+        }
+        if ($('camposResolverVenta')) {
+            $('camposResolverVenta').hidden = !$('resolverVenta').checked || e.reembolso <= 0.00005;
+        }
+    }
+
+    function actualizarEstimadoVenta() {
+        if (!estado.venta) return;
+        const e = estimadoFinancieroVenta();
+        $('estimadoVenta').innerHTML = 'Estimado: ' + dinero(e.total, estado.venta.venta.moneda_simbolo, estado.venta.venta.moneda_codigo);
+        actualizarLiquidacionVenta();
     }
 
     function lineasVentaSeleccionadas() {
@@ -694,6 +776,17 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if ($('motivoVenta').value.trim().length < 5) return mostrarMensaje('mensajeVenta', 'Indica un motivo de al menos 5 caracteres.', 'error');
         if (!$('almacenVenta').value) return mostrarMensaje('mensajeVenta', 'Selecciona el almacén de entrada.', 'error');
 
+        const estimado = estimadoFinancieroVenta();
+        const resolverAhora = $('resolverVenta') && $('resolverVenta').checked;
+        if (resolverAhora && estimado.reembolso > 0.00005 && (!$('metodoVenta') || !$('metodoVenta').value)) {
+            return mostrarMensaje('mensajeVenta', 'Selecciona el método con el que se entregará el reembolso al cliente.', 'error');
+        }
+        if (!resolverAhora && estimado.reembolso > 0.00005) {
+            const continuarPendiente = window.confirm('Esta devolución genera un reembolso al cliente. Si continúas sin liquidarlo, el dinero quedará registrado como pendiente. ¿Deseas continuar así?');
+            if (!continuarPendiente) return;
+        }
+
+        const ventanaComprobante = prepararVentanaComprobante('imprimirVentaAlConfirmar');
         estado.guardando = true;
         setBusy($('btnGuardarVenta'), true, 'Confirmando...');
         try {
@@ -703,14 +796,15 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 motivo: $('motivoVenta').value.trim(),
                 observaciones: $('observacionesVenta').value.trim(),
                 lineas: JSON.stringify(lineas),
-                resolver_regularizacion: $('resolverVenta') && $('resolverVenta').checked ? '1' : '0',
+                resolver_regularizacion: resolverAhora ? '1' : '0',
                 metodo_pago_id: $('metodoVenta') ? $('metodoVenta').value : '',
                 referencia: $('referenciaVenta') ? $('referenciaVenta').value.trim() : '',
                 observacion_financiera: $('notaFinVenta') ? $('notaFinVenta').value.trim() : '',
                 idempotency_key: estado.idempotenciaVenta
             });
             cerrarModal('modalVenta');
-            mostrarMensaje('mensajePagina', r.mensaje, 'success');
+            const comprobanteAbierto = mostrarComprobante(ventanaComprobante, 'VENTA', r.devolucion_id);
+            mostrarMensaje('mensajePagina', r.mensaje + (comprobanteAbierto ? ' El ticket se abrió en una nueva pestaña.' : ' Puedes imprimir el ticket desde la columna Acción o desde Ver detalle.'), 'success');
             estado.tab = 'VENTA';
             document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === 'VENTA'));
             $('panelDevoluciones').hidden = false;
@@ -718,6 +812,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             estado.devoluciones.pagina = 1;
             await cargarDevoluciones();
         } catch (e) {
+            cerrarVentanaComprobante(ventanaComprobante);
             mostrarMensaje('mensajeVenta', e.message, 'error');
         } finally {
             estado.guardando = false;
@@ -744,6 +839,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if ($('metodoCompra')) $('metodoCompra').value = '';
         if ($('referenciaCompra')) $('referenciaCompra').value = '';
         if ($('notaFinCompra')) $('notaFinCompra').value = '';
+        if ($('imprimirCompraAlConfirmar')) $('imprimirCompraAlConfirmar').checked = true;
         mostrarMensaje('mensajeCompra', '');
     }
 
@@ -846,6 +942,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if (!lineas.length) return mostrarMensaje('mensajeCompra', 'Captura al menos una cantidad a devolver.', 'error');
         if ($('motivoCompra').value.trim().length < 5) return mostrarMensaje('mensajeCompra', 'Indica un motivo de al menos 5 caracteres.', 'error');
 
+        const ventanaComprobante = prepararVentanaComprobante('imprimirCompraAlConfirmar');
         estado.guardando = true;
         setBusy($('btnGuardarCompra'), true, 'Confirmando...');
         try {
@@ -861,7 +958,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 idempotency_key: estado.idempotenciaCompra
             });
             cerrarModal('modalCompra');
-            mostrarMensaje('mensajePagina', r.mensaje, 'success');
+            const comprobanteAbierto = mostrarComprobante(ventanaComprobante, 'COMPRA', r.devolucion_id);
+            mostrarMensaje('mensajePagina', r.mensaje + (comprobanteAbierto ? ' El ticket se abrió en una nueva pestaña.' : ' Puedes imprimir el ticket desde la columna Acción o desde Ver detalle.'), 'success');
             estado.tab = 'COMPRA';
             document.querySelectorAll('[data-tab]').forEach((b) => b.classList.toggle('is-active', b.dataset.tab === 'COMPRA'));
             $('panelDevoluciones').hidden = false;
@@ -870,6 +968,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             estado.devoluciones.pagina = 1;
             await cargarDevoluciones();
         } catch (e) {
+            cerrarVentanaComprobante(ventanaComprobante);
             mostrarMensaje('mensajeCompra', e.message, 'error');
         } finally {
             estado.guardando = false;
@@ -885,6 +984,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('resumenDetalle').innerHTML = '';
         $('detalleProductos').innerHTML = '<tr><td colspan="6" class="empty-cell">Cargando...</td></tr>';
         $('detalleRegularizaciones').innerHTML = '';
+        if ($('btnImprimirDetalle')) {
+            $('btnImprimirDetalle').hidden = false;
+            $('btnImprimirDetalle').href = urlComprobante(tipo, id);
+        }
         try {
             const r = await apiGet('DETALLE', { tipo, id });
             const d = r.devolucion;
@@ -974,7 +1077,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     $('lineasVenta').addEventListener('input', (e) => { if (e.target.matches('.qty-venta')) actualizarEstimadoVenta(); });
     $('lineasCompra').addEventListener('input', (e) => { if (e.target.matches('.qty-compra')) actualizarEstimadoCompra(); });
 
-    if ($('resolverVenta')) $('resolverVenta').addEventListener('change', () => { $('camposResolverVenta').hidden = !$('resolverVenta').checked; });
+    if ($('resolverVenta')) $('resolverVenta').addEventListener('change', actualizarLiquidacionVenta);
     if ($('resolverCompra')) $('resolverCompra').addEventListener('change', () => { $('camposResolverCompra').hidden = !$('resolverCompra').checked; });
 
     $('tablaDevoluciones').addEventListener('click', (e) => { const b = e.target.closest('[data-detalle]'); if (b) abrirDetalle(b.dataset.tipo, Number(b.dataset.detalle)); });
@@ -997,8 +1100,16 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     (async function iniciar() {
         try {
             await cargarCatalogos();
-            if (!puedeVenta && puedeCompra) cambiarTab('COMPRA');
-            else await cargarDevoluciones();
+            if (puedeVenta) {
+                estado.tab = 'VENTA';
+                await cargarDevoluciones();
+            } else if (puedeCompra) {
+                cambiarTab('COMPRA');
+            } else if (puedeRegularizar) {
+                cambiarTab('REGULARIZACIONES');
+            } else {
+                throw new Error('No tienes permisos operativos de devoluciones asignados.');
+            }
         } catch (e) {
             mostrarMensaje('mensajePagina', e.message, 'error');
             $('tablaDevoluciones').innerHTML = '<tr><td colspan="8" class="empty-cell empty-cell--error">No fue posible iniciar el módulo.</td></tr>';

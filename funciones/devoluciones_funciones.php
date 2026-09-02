@@ -154,6 +154,8 @@ function dev_listar_devoluciones(PDO $conexion): void
         $tipo = 'VENTA';
     }
 
+    dev_requerir_permiso_tipo($tipo);
+
     $q = dev_texto($_GET['busqueda'] ?? '', 180);
     $pagina = dev_entero_rango($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
     $porPagina = dev_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
@@ -1580,6 +1582,12 @@ function dev_detalle(PDO $conexion): void
     $tipo = strtoupper(dev_texto($_GET['tipo'] ?? '', 10));
     $id = dev_id($_GET['id'] ?? null, 'devolución');
 
+    if (!in_array($tipo, ['VENTA', 'COMPRA'], true)) {
+        si_responder_json(false, 'El tipo de devolución no es válido.', [], 422);
+    }
+
+    dev_requerir_permiso_tipo($tipo);
+
     if ($tipo === 'VENTA') {
         $stmt = $conexion->prepare(
             "SELECT
@@ -1616,7 +1624,7 @@ function dev_detalle(PDO $conexion): void
         );
         $stmt->execute([':id' => $id]);
         $detalles = $stmt->fetchAll();
-    } elseif ($tipo === 'COMPRA') {
+    } else { // COMPRA
         $stmt = $conexion->prepare(
             "SELECT
                 d.*, c.folio AS documento_folio, c.fecha_compra AS fecha_documento,
@@ -1655,8 +1663,6 @@ function dev_detalle(PDO $conexion): void
         );
         $stmt->execute([':id' => $id]);
         $detalles = $stmt->fetchAll();
-    } else {
-        si_responder_json(false, 'El tipo de devolución no es válido.', [], 422);
     }
 
     foreach ($detalles as &$d) {
@@ -2529,6 +2535,17 @@ function dev_almacen_activo(PDO $conexion, int $id): bool
     $stmt = $conexion->prepare("SELECT 1 FROM almacenes WHERE id = :id AND activo = 1 LIMIT 1");
     $stmt->execute([':id' => $id]);
     return (bool) $stmt->fetchColumn();
+}
+
+function dev_requerir_permiso_tipo(string $tipo): void
+{
+    $permiso = $tipo === 'VENTA' ? 'devoluciones.venta' : 'devoluciones.compra';
+    if (!si_tiene_permiso($permiso)) {
+        $mensaje = $tipo === 'VENTA'
+            ? 'No tienes permiso para consultar devoluciones de clientes.'
+            : 'No tienes permiso para consultar devoluciones a proveedor.';
+        si_responder_json(false, $mensaje, [], 403);
+    }
 }
 
 /* =========================================================================

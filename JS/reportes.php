@@ -18,7 +18,8 @@ require_once __DIR__ . '/../inc/seguridad.php';
 si_requerir_permiso('reportes.ver', false);
 
 $tituloPagina = 'Reportes';
-$puedeExportar = si_tiene_permiso('contabilidad.exportar');
+$puedeExportarReportes = si_tiene_permiso('reportes.ver');
+$puedeExportarContable = si_tiene_permiso('contabilidad.exportar');
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_reportes.css';
@@ -49,7 +50,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <h1>Reportes</h1>
                     <p>Consulta información formal derivada de los módulos operativos. Este apartado no modifica inventario ni movimientos financieros.</p>
                 </div>
-                <?php if ($puedeExportar): ?>
+                <?php if ($puedeExportarReportes): ?>
                     <div class="filter-actions">
                         <button type="button" class="btn-secondary" id="btnExportarCsv" disabled>Exportar CSV</button>
                         <button type="button" class="btn-secondary" id="btnExportarXlsx" disabled>Exportar Excel</button>
@@ -59,7 +60,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
             <div id="mensajePagina" class="module-message" hidden></div>
 
-            <?php if ($puedeExportar): ?>
+            <?php if ($puedeExportarContable): ?>
             <section class="module-card" id="panelContabilidad">
                 <div class="section-actions">
                     <div>
@@ -195,7 +196,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     const CONFIG = {
         endpoint: 'reportes.php?rep_api=1',
-        puedeExportar: <?= $puedeExportar ? 'true' : 'false' ?>,
+        puedeExportar: <?= $puedeExportarReportes ? 'true' : 'false' ?>,
+        puedeExportarContable: <?= $puedeExportarContable ? 'true' : 'false' ?>,
         monedaBase: 'MXN',
     };
 
@@ -575,7 +577,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     }
 
     function exportarContable() {
-        if (!CONFIG.puedeExportar || !dom.contableDesde || !dom.contableHasta) return;
+        if (!CONFIG.puedeExportarContable || !dom.contableDesde || !dom.contableHasta) return;
         const desde = dom.contableDesde.value;
         const hasta = dom.contableHasta.value;
         if (!desde || !hasta) {

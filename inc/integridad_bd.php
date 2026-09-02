@@ -50,7 +50,7 @@ function si_permisos_oficiales(): array
         ['ventas.cancelar', 'ventas', 'Cancelar ventas'],
         ['cuentas_cobrar.ver', 'cuentas_por_cobrar', 'Ver cuentas por cobrar'],
         ['cuentas_cobrar.cobrar', 'cuentas_por_cobrar', 'Registrar cobros'],
-        ['devoluciones.ver', 'devoluciones', 'Ver devoluciones y regularizaciones'],
+        ['devoluciones.ver', 'devoluciones', 'Acceder al módulo de devoluciones'],
         ['devoluciones.venta', 'devoluciones', 'Registrar devoluciones de cliente'],
         ['devoluciones.compra', 'devoluciones', 'Registrar devoluciones a proveedor'],
         ['devoluciones.regularizar', 'devoluciones', 'Liquidar regularizaciones financieras de devoluciones'],
@@ -78,7 +78,7 @@ function si_permisos_vendedor_iniciales(): array
         'dashboard.ver', 'productos.ver', 'clientes.ver', 'clientes.administrar',
         'cotizaciones.ver', 'cotizaciones.crear', 'apartados.ver', 'apartados.crear',
         'ventas.ver', 'ventas.crear', 'cuentas_cobrar.ver', 'cuentas_cobrar.cobrar',
-        'devoluciones.ver', 'devoluciones.venta', 'reportes.ver',
+        'reportes.ver',
     ];
 }
 
@@ -89,7 +89,7 @@ function si_permisos_supervisor_iniciales(): array
         'compras.ver', 'compras.crear', 'recepciones.ver', 'recepciones.confirmar',
         'inventario.ver', 'inventario.kardex', 'inventario.ajustar', 'inventario.mermas', 'inventario.transferir', 'inventario.configurar_stock',
         'almacenes.ver', 'produccion.ver', 'produccion.registrar', 'qr.verificar',
-        'devoluciones.ver', 'devoluciones.compra', 'reportes.ver',
+        'reportes.ver',
     ];
 }
 
