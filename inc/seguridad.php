@@ -812,7 +812,7 @@ function si_responder_json(
     exit;
 }
 
-function si_escapar($valor): string
+function si_escapar(mixed $valor): string
 {
     return htmlspecialchars(
         (string) $valor,
