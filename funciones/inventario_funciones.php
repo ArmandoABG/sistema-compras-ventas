@@ -39,6 +39,10 @@ try {
                 inv_listar_inventario($conexion);
                 break;
 
+            case 'DETALLE_PRESENTACIONES':
+                inv_detalle_presentaciones($conexion);
+                break;
+
             case 'OBTENER_NIVELES_STOCK':
                 si_requerir_permiso('inventario.configurar_stock', true);
                 inv_obtener_niveles_stock($conexion);
@@ -361,6 +365,154 @@ function inv_listar_inventario(PDO $conexion): void
                 'total' => $total,
                 'total_paginas' => $totalPaginas,
             ],
+        ]
+    );
+}
+
+/* =========================================================================
+   PRESENTACIONES / EQUIVALENCIAS / RECEPCIONES
+   ========================================================================= */
+
+function inv_detalle_presentaciones(PDO $conexion): void
+{
+    $productoId = inv_entero_rango($_GET['producto_id'] ?? 0, 1, PHP_INT_MAX, 0);
+    $almacenId = inv_entero_rango($_GET['almacen_id'] ?? 0, 1, PHP_INT_MAX, 0);
+
+    if ($productoId <= 0 || $almacenId <= 0) {
+        si_responder_json(false, 'Selecciona producto y almacén.', [], 422);
+    }
+
+    $stmtBase = $conexion->prepare(
+        "SELECT
+            p.id AS producto_id,
+            p.sku,
+            p.nombre AS producto,
+            p.activo AS producto_activo,
+            um.nombre AS unidad_base,
+            um.simbolo AS unidad_simbolo,
+            a.id AS almacen_id,
+            a.codigo AS almacen_codigo,
+            a.nombre AS almacen,
+            COALESCE(ea.existencia_fisica, 0) AS existencia_fisica,
+            COALESCE(ea.cantidad_reservada, 0) AS cantidad_reservada,
+            (COALESCE(ea.existencia_fisica, 0) - COALESCE(ea.cantidad_reservada, 0)) AS cantidad_disponible
+         FROM productos p
+         INNER JOIN unidades_medida um ON um.id = p.unidad_base_id
+         INNER JOIN almacenes a ON a.id = :almacen AND a.activo = 1
+         LEFT JOIN existencias_almacen ea
+            ON ea.producto_id = p.id
+           AND ea.almacen_id = a.id
+         WHERE p.id = :producto
+           AND p.controla_inventario = 1
+         LIMIT 1"
+    );
+    $stmtBase->execute([
+        ':almacen' => $almacenId,
+        ':producto' => $productoId,
+    ]);
+    $base = $stmtBase->fetch();
+
+    if (!$base) {
+        si_responder_json(false, 'El producto o almacén ya no está disponible en inventario.', [], 404);
+    }
+
+    foreach (['producto_id', 'producto_activo', 'almacen_id'] as $campo) {
+        $base[$campo] = (int) $base[$campo];
+    }
+    foreach (['existencia_fisica', 'cantidad_reservada', 'cantidad_disponible'] as $campo) {
+        $base[$campo] = (float) $base[$campo];
+    }
+
+    $stmtPresentaciones = $conexion->prepare(
+        "SELECT
+            pp.id,
+            pp.nombre,
+            pp.factor_a_unidad_base,
+            pp.es_compra,
+            pp.es_venta,
+            pp.activo,
+            um.nombre AS unidad,
+            um.simbolo AS unidad_simbolo
+         FROM presentaciones_producto pp
+         INNER JOIN unidades_medida um ON um.id = pp.unidad_id
+         WHERE pp.producto_id = :producto
+         ORDER BY pp.activo DESC, pp.factor_a_unidad_base DESC, pp.nombre ASC, pp.id ASC"
+    );
+    $stmtPresentaciones->execute([':producto' => $productoId]);
+    $presentaciones = $stmtPresentaciones->fetchAll();
+
+    foreach ($presentaciones as &$presentacion) {
+        $factor = (float) $presentacion['factor_a_unidad_base'];
+        $presentacion['id'] = (int) $presentacion['id'];
+        $presentacion['factor_a_unidad_base'] = $factor;
+        $presentacion['es_compra'] = (int) $presentacion['es_compra'];
+        $presentacion['es_venta'] = (int) $presentacion['es_venta'];
+        $presentacion['activo'] = (int) $presentacion['activo'];
+        $presentacion['equivalencia_fisica'] = $factor > 0
+            ? (float) $base['existencia_fisica'] / $factor
+            : null;
+        $presentacion['equivalencia_reservada'] = $factor > 0
+            ? (float) $base['cantidad_reservada'] / $factor
+            : null;
+        $presentacion['equivalencia_disponible'] = $factor > 0
+            ? (float) $base['cantidad_disponible'] / $factor
+            : null;
+    }
+    unset($presentacion);
+
+    $stmtRecepciones = $conexion->prepare(
+        "SELECT
+            rc.id AS recepcion_id,
+            rc.folio AS recepcion_folio,
+            rc.fecha_recepcion,
+            c.folio AS compra_folio,
+            rcd.cantidad_recibida,
+            rcd.cantidad_base,
+            cd.presentacion_id,
+            COALESCE(pp.nombre, cd.unidad_nombre_snapshot) AS presentacion,
+            cd.factor_a_unidad_base,
+            cd.unidad_nombre_snapshot AS unidad,
+            um.simbolo AS unidad_simbolo
+         FROM recepciones_compra_detalle rcd
+         INNER JOIN recepciones_compra rc
+            ON rc.id = rcd.recepcion_id
+           AND rc.estado = 'CONFIRMADA'
+         INNER JOIN compras c ON c.id = rc.compra_id
+         INNER JOIN compras_detalle cd ON cd.id = rcd.compra_detalle_id
+         LEFT JOIN presentaciones_producto pp ON pp.id = cd.presentacion_id
+         LEFT JOIN unidades_medida um ON um.id = cd.unidad_id
+         WHERE rcd.producto_id = :producto
+           AND rcd.almacen_id = :almacen
+         ORDER BY
+            COALESCE(rc.confirmada_at, rc.fecha_recepcion, rc.created_at) DESC,
+            rc.id DESC,
+            rcd.id DESC
+         LIMIT 30"
+    );
+    $stmtRecepciones->execute([
+        ':producto' => $productoId,
+        ':almacen' => $almacenId,
+    ]);
+    $recepciones = $stmtRecepciones->fetchAll();
+
+    foreach ($recepciones as &$recepcion) {
+        $recepcion['recepcion_id'] = (int) $recepcion['recepcion_id'];
+        $recepcion['presentacion_id'] = $recepcion['presentacion_id'] !== null
+            ? (int) $recepcion['presentacion_id']
+            : null;
+        $recepcion['cantidad_recibida'] = (float) $recepcion['cantidad_recibida'];
+        $recepcion['cantidad_base'] = (float) $recepcion['cantidad_base'];
+        $recepcion['factor_a_unidad_base'] = (float) $recepcion['factor_a_unidad_base'];
+    }
+    unset($recepcion);
+
+    si_responder_json(
+        true,
+        'Presentaciones e historial de recepción cargados.',
+        [
+            'detalle' => $base,
+            'presentaciones' => $presentaciones,
+            'recepciones' => $recepciones,
         ]
     );
 }

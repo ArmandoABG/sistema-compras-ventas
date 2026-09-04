@@ -29,7 +29,8 @@ $puedeAjustar = si_tiene_permiso('inventario.ajustar');
 $puedeMermas = si_tiene_permiso('inventario.mermas');
 $puedeConfigurarStock = si_tiene_permiso('inventario.configurar_stock');
 $puedeOperaciones = $puedeAjustar || $puedeMermas;
-$puedeAccionesExistencia = $puedeKardex || $puedeConfigurarStock;
+$puedeVerPresentaciones = true;
+$puedeAccionesExistencia = $puedeKardex || $puedeConfigurarStock || $puedeVerPresentaciones;
 $csrfToken = si_token_csrf();
 $almacenInicial = filter_input(INPUT_GET, 'almacen_id', FILTER_VALIDATE_INT);
 $almacenInicial = is_int($almacenInicial) && $almacenInicial > 0 ? $almacenInicial : 0;
@@ -581,6 +582,101 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
 </div>
 <?php endif; ?>
 
+<div class="inv-stock-modal" id="modalPresentacionesInventario" hidden>
+    <section class="inv-stock-modal__card inv-presentations-card" role="dialog" aria-modal="true" aria-labelledby="tituloPresentacionesInventario">
+        <header class="inv-stock-modal__header">
+            <div>
+                <span class="inv-stock-modal__eyebrow">LECTURA OPERATIVA DEL INVENTARIO</span>
+                <h2 id="tituloPresentacionesInventario">Presentaciones y recepciones</h2>
+                <p>La existencia oficial se conserva en la unidad base. Aquí puedes consultar equivalencias y las presentaciones exactas con las que se recibió mercancía.</p>
+            </div>
+            <button type="button" class="inv-stock-modal__close" data-cerrar-presentaciones aria-label="Cerrar">×</button>
+        </header>
+
+        <div class="inv-stock-modal__body">
+            <section class="stock-context">
+                <div>
+                    <span>Producto</span>
+                    <strong id="presentacionesProducto">—</strong>
+                    <small id="presentacionesSku">—</small>
+                </div>
+                <div>
+                    <span>Almacén</span>
+                    <strong id="presentacionesAlmacen">—</strong>
+                    <small id="presentacionesUnidadBase">—</small>
+                </div>
+            </section>
+
+            <section class="stock-snapshot" aria-label="Existencia oficial en unidad base">
+                <article><span>Física</span><strong id="presentacionesFisica">0</strong></article>
+                <article><span>Reservada</span><strong id="presentacionesReservada">0</strong></article>
+                <article><span>Disponible</span><strong id="presentacionesDisponible">0</strong></article>
+            </section>
+
+            <div class="presentation-explanation">
+                <strong>Importante</strong>
+                <p>Las equivalencias son una conversión matemática del stock base, no un conteo físico de empaques cerrados. Si existen sacos de distintos pesos, producto a granel, fracciones, ajustes o consumos parciales, no es correcto asumir que todo el stock está empacado en una sola presentación.</p>
+            </div>
+
+            <section class="presentation-section">
+                <header>
+                    <div>
+                        <h3>Equivalencias por presentación</h3>
+                        <p>Sirven para lectura rápida. El valor oficial continúa siendo Física / Reservada / Disponible en unidad base.</p>
+                    </div>
+                </header>
+                <div class="table-wrap table-wrap--presentation">
+                    <table class="module-table module-table--presentation">
+                        <thead>
+                            <tr>
+                                <th>Presentación</th>
+                                <th>Uso</th>
+                                <th class="text-right">Factor</th>
+                                <th class="text-right">Física equiv.</th>
+                                <th class="text-right">Reservada equiv.</th>
+                                <th class="text-right">Disponible equiv.</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaEquivalenciasPresentacion">
+                            <tr><td colspan="6" class="empty-cell">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="presentation-section">
+                <header>
+                    <div>
+                        <h3>Últimas recepciones confirmadas</h3>
+                        <p>Este historial sí conserva la presentación exacta recibida: por ejemplo, 50 sacos × 40 kg = 2,000 kg.</p>
+                    </div>
+                </header>
+                <div class="table-wrap table-wrap--presentation-history">
+                    <table class="module-table module-table--presentation-history">
+                        <thead>
+                            <tr>
+                                <th>Recepción</th>
+                                <th>Fecha</th>
+                                <th>Presentación recibida</th>
+                                <th class="text-right">Cantidad</th>
+                                <th class="text-right">Factor</th>
+                                <th class="text-right">Cantidad base</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tablaRecepcionesPresentacion">
+                            <tr><td colspan="6" class="empty-cell">Cargando...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <footer class="inv-stock-modal__footer">
+            <button type="button" class="btn-secondary" data-cerrar-presentaciones>Cerrar</button>
+        </footer>
+    </section>
+</div>
+
 <script>
 (() => {
     'use strict';
@@ -592,6 +688,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         puedeAjustar: <?= $puedeAjustar ? 'true' : 'false' ?>,
         puedeMermas: <?= $puedeMermas ? 'true' : 'false' ?>,
         puedeConfigurarStock: <?= $puedeConfigurarStock ? 'true' : 'false' ?>,
+        puedeVerPresentaciones: <?= $puedeVerPresentaciones ? 'true' : 'false' ?>,
         puedeAccionesExistencia: <?= $puedeAccionesExistencia ? 'true' : 'false' ?>,
         puedeOperaciones: <?= $puedeOperaciones ? 'true' : 'false' ?>,
         csrfToken: <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
@@ -664,6 +761,17 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         nivelesAplicarTodos: $('nivelesAplicarTodos'),
         nivelesVistaPrevia: $('nivelesVistaPrevia'),
         btnGuardarNiveles: $('btnGuardarNiveles'),
+
+        modalPresentaciones: $('modalPresentacionesInventario'),
+        presentacionesProducto: $('presentacionesProducto'),
+        presentacionesSku: $('presentacionesSku'),
+        presentacionesAlmacen: $('presentacionesAlmacen'),
+        presentacionesUnidadBase: $('presentacionesUnidadBase'),
+        presentacionesFisica: $('presentacionesFisica'),
+        presentacionesReservada: $('presentacionesReservada'),
+        presentacionesDisponible: $('presentacionesDisponible'),
+        tablaEquivalenciasPresentacion: $('tablaEquivalenciasPresentacion'),
+        tablaRecepcionesPresentacion: $('tablaRecepcionesPresentacion'),
 
         buscarKardex: $('buscarKardex'),
         filtroAlmacenKardex: $('filtroAlmacenKardex'),
@@ -1014,6 +1122,9 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             const activo = Number(r.producto_activo) === 1;
             const reorden = r.punto_reorden === null ? '—' : numero(r.punto_reorden);
             const acciones = [];
+            if (CONFIG.puedeVerPresentaciones) {
+                acciones.push(`<button type="button" class="table-action table-action--presentation" data-ver-presentaciones="1" data-producto-id="${Number(r.producto_id)}" data-almacen-id="${Number(r.almacen_id)}">Presentaciones</button>`);
+            }
             if (CONFIG.puedeConfigurarStock) {
                 acciones.push(`<button type="button" class="table-action table-action--stock" data-configurar-stock="1" data-producto-id="${Number(r.producto_id)}" data-almacen-id="${Number(r.almacen_id)}">Niveles</button>`);
             }
@@ -1070,6 +1181,95 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         } catch (error) {
             if (requestId !== estado.requestInventario) return;
             dom.tablaInventario.innerHTML = `<tr><td colspan="${CONFIG.puedeAccionesExistencia ? 10 : 9}" class="empty-cell">No fue posible cargar el inventario.</td></tr>`;
+            mostrarMensaje(error.message);
+        }
+    }
+
+    function cerrarModalPresentaciones() {
+        if (!dom.modalPresentaciones) return;
+        dom.modalPresentaciones.hidden = true;
+        document.body.classList.remove('inv-modal-open');
+    }
+
+    function usoPresentacion(presentacion) {
+        const usos = [];
+        if (Number(presentacion.es_compra) === 1) usos.push('Compra');
+        if (Number(presentacion.es_venta) === 1) usos.push('Venta');
+        return usos.length ? usos.join(' / ') : 'Referencia';
+    }
+
+    function renderPresentacionesInventario(data) {
+        const d = data.detalle || {};
+        const unidad = d.unidad_simbolo || d.unidad_base || '';
+
+        dom.presentacionesProducto.textContent = d.producto || '—';
+        dom.presentacionesSku.textContent = d.sku || '—';
+        dom.presentacionesAlmacen.textContent = d.almacen || '—';
+        dom.presentacionesUnidadBase.textContent = `Unidad base oficial: ${unidad || '—'}`;
+        dom.presentacionesFisica.textContent = `${numero(d.existencia_fisica)} ${unidad}`.trim();
+        dom.presentacionesReservada.textContent = `${numero(d.cantidad_reservada)} ${unidad}`.trim();
+        dom.presentacionesDisponible.textContent = `${numero(d.cantidad_disponible)} ${unidad}`.trim();
+
+        const presentaciones = Array.isArray(data.presentaciones) ? data.presentaciones : [];
+        if (dom.tablaEquivalenciasPresentacion) {
+            dom.tablaEquivalenciasPresentacion.innerHTML = presentaciones.length
+                ? presentaciones.map((p) => {
+                    const unidadPresentacion = p.unidad_simbolo || p.unidad || '';
+                    const estadoPresentacion = Number(p.activo) === 1
+                        ? ''
+                        : '<span class="status-badge status-badge--inactive status-badge--inline">Inactiva</span>';
+                    return `
+                        <tr>
+                            <td><strong>${escapar(p.nombre || p.unidad || 'Presentación')}</strong><span class="cell-secondary">${escapar(unidadPresentacion)}</span>${estadoPresentacion}</td>
+                            <td>${escapar(usoPresentacion(p))}</td>
+                            <td class="number-cell">${numero(p.factor_a_unidad_base)} ${escapar(unidad)}</td>
+                            <td class="number-cell">${p.equivalencia_fisica === null ? '—' : numero(p.equivalencia_fisica)}</td>
+                            <td class="number-cell">${p.equivalencia_reservada === null ? '—' : numero(p.equivalencia_reservada)}</td>
+                            <td class="number-cell number-cell--available">${p.equivalencia_disponible === null ? '—' : numero(p.equivalencia_disponible)}</td>
+                        </tr>`;
+                }).join('')
+                : '<tr><td colspan="6" class="empty-cell">Este producto no tiene presentaciones configuradas.</td></tr>';
+        }
+
+        const recepciones = Array.isArray(data.recepciones) ? data.recepciones : [];
+        if (dom.tablaRecepcionesPresentacion) {
+            dom.tablaRecepcionesPresentacion.innerHTML = recepciones.length
+                ? recepciones.map((r) => {
+                    const unidadRecibida = r.unidad_simbolo || r.unidad || '';
+                    return `
+                        <tr>
+                            <td><strong>${escapar(r.recepcion_folio)}</strong><span class="cell-secondary">${escapar(r.compra_folio || '')}</span></td>
+                            <td>${fechaHora(r.fecha_recepcion)}</td>
+                            <td><strong>${escapar(r.presentacion || r.unidad || 'Unidad')}</strong><span class="cell-secondary">${numero(r.factor_a_unidad_base)} ${escapar(unidad)} por ${escapar(unidadRecibida || 'unidad')}</span></td>
+                            <td class="number-cell">${numero(r.cantidad_recibida)} ${escapar(unidadRecibida)}</td>
+                            <td class="number-cell">× ${numero(r.factor_a_unidad_base)}</td>
+                            <td class="number-cell number-cell--available">${numero(r.cantidad_base)} ${escapar(unidad)}</td>
+                        </tr>`;
+                }).join('')
+                : '<tr><td colspan="6" class="empty-cell">No hay recepciones confirmadas de este producto en el almacén seleccionado.</td></tr>';
+        }
+    }
+
+    async function abrirModalPresentaciones(productoId, almacenId) {
+        if (!CONFIG.puedeVerPresentaciones || !dom.modalPresentaciones) return;
+
+        if (dom.tablaEquivalenciasPresentacion) {
+            dom.tablaEquivalenciasPresentacion.innerHTML = '<tr><td colspan="6" class="empty-cell">Cargando presentaciones...</td></tr>';
+        }
+        if (dom.tablaRecepcionesPresentacion) {
+            dom.tablaRecepcionesPresentacion.innerHTML = '<tr><td colspan="6" class="empty-cell">Cargando recepciones...</td></tr>';
+        }
+
+        try {
+            const data = await apiGet('DETALLE_PRESENTACIONES', {
+                producto_id: productoId,
+                almacen_id: almacenId,
+            });
+            if (!data) return;
+            renderPresentacionesInventario(data);
+            dom.modalPresentaciones.hidden = false;
+            document.body.classList.add('inv-modal-open');
+        } catch (error) {
             mostrarMensaje(error.message);
         }
     }
@@ -1624,6 +1824,15 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         });
 
         dom.tablaInventario?.addEventListener('click', (event) => {
+            const botonPresentaciones = event.target.closest('[data-ver-presentaciones="1"]');
+            if (botonPresentaciones) {
+                abrirModalPresentaciones(
+                    Number(botonPresentaciones.dataset.productoId || 0),
+                    Number(botonPresentaciones.dataset.almacenId || 0)
+                );
+                return;
+            }
+
             const botonStock = event.target.closest('[data-configurar-stock="1"]');
             if (botonStock) {
                 abrirModalNiveles(Number(botonStock.dataset.productoId || 0), Number(botonStock.dataset.almacenId || 0));
@@ -1636,6 +1845,18 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                 boton.dataset.producto,
                 boton.dataset.almacenId
             );
+        });
+
+        document.querySelectorAll('[data-cerrar-presentaciones]').forEach((boton) => {
+            boton.addEventListener('click', cerrarModalPresentaciones);
+        });
+        dom.modalPresentaciones?.addEventListener('mousedown', (event) => {
+            if (event.target === dom.modalPresentaciones) cerrarModalPresentaciones();
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && dom.modalPresentaciones && !dom.modalPresentaciones.hidden) {
+                cerrarModalPresentaciones();
+            }
         });
 
         if (CONFIG.puedeConfigurarStock) {
