@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('produccion.ver', true);
 
@@ -19,6 +20,8 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -77,7 +80,11 @@ try {
             break;
         case 'RECETA_GUARDAR':
             prod_receta_guardar($conexion);
-            break;        default:
+            break;
+        case 'RECETA_ELIMINAR':
+            prod_receta_eliminar($conexion);
+            break;
+        default:
             si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
     }
 } catch (PDOException $e) {
@@ -1868,6 +1875,12 @@ function prod_receta_detalle(PDO $conexion): void
     }
     unset($i);
 
+    $stUso = $conexion->prepare("SELECT COUNT(*) FROM producciones WHERE receta_id = :id");
+    $stUso->execute([':id' => $id]);
+    $produccionesVinculadas = (int) $stUso->fetchColumn();
+    $r['producciones_vinculadas'] = $produccionesVinculadas;
+    $r['puede_eliminar'] = $produccionesVinculadas === 0;
+
     $balance = prod_receta_balance_desde_datos($r, $insumos);
     si_responder_json(true, 'Detalle de receta.', ['receta' => $r, 'insumos' => $insumos, 'balance' => $balance]);
 }
@@ -2193,6 +2206,75 @@ function prod_receta_guardar(PDO $conexion): void
     ]);
 }
 
+
+function prod_receta_eliminar(PDO $conexion): void
+{
+    $id = prod_entero($_POST['id'] ?? 0, 1, PHP_INT_MAX, 0);
+    if ($id <= 0) {
+        si_responder_json(false, 'La receta solicitada no es válida.', [], 422);
+    }
+
+    $conexion->beginTransaction();
+
+    $st = $conexion->prepare(
+        "SELECT
+            r.id, r.codigo, r.nombre, r.version, r.activo,
+            r.producto_resultado_id,
+            p.nombre AS producto_resultado,
+            (SELECT COUNT(*) FROM producciones pr WHERE pr.receta_id = r.id) AS producciones_vinculadas,
+            (SELECT COUNT(*) FROM recetas_produccion_insumos ri WHERE ri.receta_id = r.id) AS ingredientes
+         FROM recetas_produccion r
+         INNER JOIN productos p ON p.id = r.producto_resultado_id
+         WHERE r.id = :id
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $st->execute([':id' => $id]);
+    $receta = $st->fetch();
+    if (!$receta) {
+        prod_abort($conexion, 'La receta ya no existe.', 404);
+    }
+
+    $usos = (int) ($receta['producciones_vinculadas'] ?? 0);
+    if ($usos > 0) {
+        prod_abort(
+            $conexion,
+            'Esta receta ya está vinculada a ' . $usos . ' producción(es) y no puede eliminarse porque forma parte del historial. Si ya no debe utilizarse, edítala y márcala como Inactiva.',
+            409
+        );
+    }
+
+    $antes = [
+        'codigo' => (string) $receta['codigo'],
+        'nombre' => (string) $receta['nombre'],
+        'version' => (int) $receta['version'],
+        'activo' => (int) $receta['activo'],
+        'producto_resultado_id' => (int) $receta['producto_resultado_id'],
+        'producto_resultado' => (string) $receta['producto_resultado'],
+        'ingredientes' => (int) $receta['ingredientes'],
+    ];
+
+    $conexion->prepare("DELETE FROM recetas_produccion_insumos WHERE receta_id = :id")->execute([':id' => $id]);
+    $stDelete = $conexion->prepare("DELETE FROM recetas_produccion WHERE id = :id");
+    $stDelete->execute([':id' => $id]);
+    if ($stDelete->rowCount() !== 1) {
+        prod_abort($conexion, 'No fue posible eliminar la receta.', 409);
+    }
+
+    prod_auditar(
+        $conexion,
+        'RECETA_ELIMINADA',
+        $id,
+        'Se eliminó la receta ' . $antes['codigo'] . ' porque nunca había sido utilizada en una producción.',
+        $antes,
+        null,
+        'recetas_produccion',
+        'Produccion'
+    );
+
+    $conexion->commit();
+    si_responder_json(true, 'Receta eliminada correctamente.');
+}
 
 function prod_receta_validar_renglon(PDO $conexion, array $raw, string $tipo): ?array
 {

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../inc/conexion.php';
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
 require_once __DIR__ . '/../inc/qr_core.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('ventas.ver', true);
 
@@ -106,7 +107,7 @@ try {
 
 function ven_catalogos(PDO $conexion): void
 {
-    ven_procesar_apartados_vencidos($conexion);
+    si_stock_preparar_operacion($conexion);
 
     $almacenes = $conexion->query(
         "SELECT id, codigo, nombre, ubicacion
@@ -520,7 +521,7 @@ function ven_cotizacion_para_venta(PDO $conexion): void
 
 function ven_apartado_para_venta(PDO $conexion): void
 {
-    ven_procesar_apartados_vencidos($conexion);
+    si_stock_preparar_operacion($conexion);
 
     $apartadoId = ven_id($_GET['apartado_id'] ?? null, 'apartado');
     $stmt = $conexion->prepare(
@@ -714,6 +715,31 @@ function ven_listar(PDO $conexion): void
             v.folio,
             v.fecha_venta,
             v.estado,
+            EXISTS(
+                SELECT 1
+                FROM tokens_qr_venta tq_estado
+                WHERE tq_estado.venta_id = v.id
+                  AND tq_estado.activo = 1
+                  AND tq_estado.usado_at IS NULL
+                  AND tq_estado.revocado_at IS NULL
+            ) AS salida_pendiente_qr,
+            EXISTS(
+                SELECT 1
+                FROM tokens_qr_venta tq_usado
+                WHERE tq_usado.venta_id = v.id
+                  AND tq_usado.usado_at IS NOT NULL
+                  AND tq_usado.revocado_at IS NULL
+            ) AS salida_confirmada_qr,
+            EXISTS(
+                SELECT 1
+                FROM movimientos_inventario mi_estado
+                INNER JOIN tipos_movimiento_inventario tmi_estado
+                  ON tmi_estado.id = mi_estado.tipo_movimiento_id
+                 AND tmi_estado.codigo = 'SALIDA_VENTA'
+                WHERE mi_estado.origen_tipo = 'VENTA'
+                  AND mi_estado.origen_id = v.id
+                  AND mi_estado.estado = 'APLICADO'
+            ) AS salida_fisica_aplicada,
             v.condicion_pago,
             v.total,
             v.cliente_nombre_snapshot,
@@ -799,6 +825,31 @@ function ven_detalle(PDO $conexion): void
     $stmt = $conexion->prepare(
         "SELECT
             v.*,
+            EXISTS(
+                SELECT 1
+                FROM tokens_qr_venta tq_estado
+                WHERE tq_estado.venta_id = v.id
+                  AND tq_estado.activo = 1
+                  AND tq_estado.usado_at IS NULL
+                  AND tq_estado.revocado_at IS NULL
+            ) AS salida_pendiente_qr,
+            EXISTS(
+                SELECT 1
+                FROM tokens_qr_venta tq_usado
+                WHERE tq_usado.venta_id = v.id
+                  AND tq_usado.usado_at IS NOT NULL
+                  AND tq_usado.revocado_at IS NULL
+            ) AS salida_confirmada_qr,
+            EXISTS(
+                SELECT 1
+                FROM movimientos_inventario mi_estado
+                INNER JOIN tipos_movimiento_inventario tmi_estado
+                  ON tmi_estado.id = mi_estado.tipo_movimiento_id
+                 AND tmi_estado.codigo = 'SALIDA_VENTA'
+                WHERE mi_estado.origen_tipo = 'VENTA'
+                  AND mi_estado.origen_id = v.id
+                  AND mi_estado.estado = 'APLICADO'
+            ) AS salida_fisica_aplicada,
             c.codigo AS cliente_codigo,
             m.codigo AS moneda_codigo,
             m.nombre AS moneda_nombre,
@@ -889,8 +940,11 @@ function ven_detalle(PDO $conexion): void
         "SELECT mi.id, mi.folio, mi.estado, t.codigo AS tipo_codigo, t.nombre AS tipo_nombre
          FROM movimientos_inventario mi
          INNER JOIN tipos_movimiento_inventario t ON t.id = mi.tipo_movimiento_id
-         WHERE mi.origen_tipo = 'VENTA' AND mi.origen_id = :id
-         ORDER BY mi.id ASC
+         WHERE mi.origen_tipo = 'VENTA'
+           AND mi.origen_id = :id
+           AND mi.estado = 'APLICADO'
+           AND t.codigo = 'SALIDA_VENTA'
+         ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) DESC, mi.id DESC
          LIMIT 1"
     );
     $stmtMov->execute([':id' => $ventaId]);
@@ -900,6 +954,12 @@ function ven_detalle(PDO $conexion): void
     }
 
     ven_tipar_venta_detalle_header($venta);
+    $venta['salida_pendiente_qr'] = (bool) ((int) ($venta['salida_pendiente_qr'] ?? 0));
+    $venta['salida_confirmada_qr'] = (bool) ((int) ($venta['salida_confirmada_qr'] ?? 0));
+    $venta['salida_fisica_aplicada'] = (bool) ((int) ($venta['salida_fisica_aplicada'] ?? 0));
+    $venta['estado_operativo'] = ($venta['estado'] === 'CONFIRMADA' && $venta['salida_pendiente_qr'])
+        ? 'PENDIENTE_SALIDA'
+        : $venta['estado'];
     $venta['pagado_directo'] = round($pagadoDirecto, 4);
     $venta['pagado_total'] = round($pagadoDirecto + (float) $venta['importe_anticipado'], 4);
     $venta['saldo_comercial'] = max(0.0, round((float) $venta['total'] - $venta['pagado_total'], 4));
@@ -918,7 +978,7 @@ function ven_detalle(PDO $conexion): void
 
 function ven_crear(PDO $conexion): void
 {
-    ven_procesar_apartados_vencidos($conexion);
+    si_stock_preparar_operacion($conexion);
 
     $origen = strtoupper(ven_texto($_POST['origen'] ?? 'DIRECTO', 20));
     if (!in_array($origen, ['DIRECTO','COTIZACION','APARTADO'], true)) {
@@ -1220,14 +1280,11 @@ function ven_crear(PDO $conexion): void
     }
     unset($d);
 
-    $movimientoId = ven_aplicar_salida_inventario(
-        $conexion,
-        $ventaId,
-        $folio,
-        $detalles,
-        $existenciasBloqueadas,
-        $apartadoId !== null
-    );
+    // Toda venta confirmada pasa primero por una reserva operativa. Si viene de
+    // apartado, esa reserva ya existe y simplemente cambia de documento dueño;
+    // si es directa/cotización se incrementa aquí. Con QR habilitado permanece
+    // reservada hasta el escaneo; sin QR se consume dentro de esta transacción.
+    ven_preparar_reserva_salida($conexion, $existenciasBloqueadas, $apartadoId !== null);
 
     $pagoVentaId = null;
     $cuentaCobrarId = null;
@@ -1260,9 +1317,26 @@ function ven_crear(PDO $conexion): void
     $conexion->prepare("UPDATE ventas SET estado = 'CONFIRMADA' WHERE id = :id")
         ->execute([':id' => $ventaId]);
 
-    // El QR forma parte de la venta confirmada. Si la función está habilitada,
-    // el token se crea dentro de la misma transacción que venta/inventario/pago.
-    $tokenQr = si_qr_asegurar_token_venta($conexion, $ventaId);
+    $qrHabilitado = si_qr_habilitado($conexion);
+    $tokenQr = null;
+    $movimientoId = null;
+
+    if ($qrHabilitado) {
+        // El token se genera en la misma transacción. La mercancía sigue física
+        // en almacén y permanece reservada hasta CONFIRMAR_SALIDA.
+        $tokenQr = si_qr_asegurar_token_venta($conexion, $ventaId);
+        if ($tokenQr === null) {
+            ven_cancelar($conexion, 'La validación QR está habilitada, pero no fue posible generar el QR de salida.', 500);
+        }
+    } else {
+        // Sin validación QR no existe espera física: la reserva recién creada se
+        // consume inmediatamente y el Kardex queda aplicado antes del commit.
+        $movimientoId = si_stock_aplicar_salida_venta(
+            $conexion,
+            $ventaId,
+            'Salida física inmediata de ' . $folio . ' (validación QR deshabilitada).'
+        );
+    }
 
     if ($cotizacionId !== null && $apartadoId === null) {
         $conexion->prepare("UPDATE cotizaciones SET estado = 'CONVERTIDA' WHERE id = :id AND estado = 'ACEPTADA'")
@@ -1274,7 +1348,11 @@ function ven_crear(PDO $conexion): void
             ->execute([':id' => $apartadoId]);
     }
 
-    ven_auditar($conexion, 'VENTA_CONFIRMADA', 'ventas', $ventaId, 'Se confirmó la venta ' . $folio . ' y se aplicó su salida de inventario.', null, [
+    $descripcionAuditoria = $qrHabilitado
+        ? 'Se confirmó la venta ' . $folio . ' y su mercancía quedó reservada hasta validar la salida por QR.'
+        : 'Se confirmó la venta ' . $folio . ' y se aplicó su salida física de inventario.';
+
+    ven_auditar($conexion, 'VENTA_CONFIRMADA', 'ventas', $ventaId, $descripcionAuditoria, null, [
         'folio' => $folio,
         'origen' => $origen,
         'cotizacion_id' => $cotizacionId,
@@ -1292,13 +1370,16 @@ function ven_crear(PDO $conexion): void
 
     $conexion->commit();
 
-    si_responder_json(true, 'Venta confirmada correctamente.', [
+    si_responder_json(true, $qrHabilitado
+        ? 'Venta confirmada. La mercancía quedó reservada hasta confirmar su salida por QR.'
+        : 'Venta confirmada y salida física aplicada correctamente.', [
         'venta_id' => $ventaId,
         'folio' => $folio,
         'movimiento_inventario_id' => $movimientoId,
         'pago_venta_id' => $pagoVentaId,
         'cuenta_por_cobrar_id' => $cuentaCobrarId,
         'qr_generado' => $tokenQr !== null,
+        'salida_pendiente_qr' => $qrHabilitado && $tokenQr !== null,
     ], 201);
 }
 
@@ -1313,6 +1394,9 @@ function ven_cancelar_venta(PDO $conexion): void
     if (mb_strlen($motivo) < 5) {
         si_responder_json(false, 'Captura un motivo de cancelación de al menos 5 caracteres.', ['campo' => 'motivo'], 422);
     }
+
+    // Normaliza reservas vencidas y ventas QR históricas antes de bloquear la cancelación.
+    si_stock_preparar_operacion($conexion);
 
     $conexion->beginTransaction();
 
@@ -1369,6 +1453,20 @@ function ven_cancelar_venta(PDO $conexion): void
         );
     }
 
+    $stmtQrPendiente = $conexion->prepare(
+        "SELECT id
+         FROM tokens_qr_venta
+         WHERE venta_id = :venta_id
+           AND activo = 1
+           AND usado_at IS NULL
+           AND revocado_at IS NULL
+         ORDER BY id DESC
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmtQrPendiente->execute([':venta_id' => $ventaId]);
+    $tokenQrPendienteId = (int) ($stmtQrPendiente->fetchColumn() ?: 0);
+
     if ($venta['apartado_id'] !== null) {
         $stmtApa = $conexion->prepare("SELECT id, folio, estado FROM apartados WHERE id = :id LIMIT 1 FOR UPDATE");
         $stmtApa->execute([':id' => (int) $venta['apartado_id']]);
@@ -1417,8 +1515,9 @@ function ven_cancelar_venta(PDO $conexion): void
          INNER JOIN tipos_movimiento_inventario t ON t.id = mi.tipo_movimiento_id
          WHERE mi.origen_tipo = 'VENTA'
            AND mi.origen_id = :id
+           AND mi.estado = 'APLICADO'
            AND t.codigo = 'SALIDA_VENTA'
-         ORDER BY mi.id ASC
+         ORDER BY mi.id DESC
          LIMIT 1
          FOR UPDATE"
     );
@@ -1496,6 +1595,10 @@ function ven_cancelar_venta(PDO $conexion): void
             ->execute([':id' => (int) $movOriginal['id']]);
     } else {
         $movReversoId = null;
+        if ($tokenQrPendienteId > 0) {
+            // La mercancía nunca salió físicamente: solo se libera el compromiso de esta venta.
+            si_stock_liberar_reserva_venta($conexion, $ventaId);
+        }
     }
 
     $conexion->prepare(
@@ -1555,19 +1658,33 @@ function ven_cancelar_venta(PDO $conexion): void
         ':id' => $ventaId,
     ]);
 
-    ven_auditar($conexion, 'VENTA_CANCELADA_REVERTIDA', 'ventas', $ventaId, 'Se canceló la venta ' . $venta['folio'] . ' y se revirtió su salida de inventario.', [
+    $liberoReservaPendiente = $movReversoId === null && $tokenQrPendienteId > 0;
+    $mensajeAuditoria = $movReversoId !== null
+        ? 'Se canceló la venta ' . $venta['folio'] . ' y se revirtió su salida física de inventario.'
+        : ($liberoReservaPendiente
+            ? 'Se canceló la venta ' . $venta['folio'] . ' antes de su salida QR y se liberó su reserva de inventario.'
+            : 'Se canceló la venta ' . $venta['folio'] . '; no había salida física de inventario que revertir.');
+
+    ven_auditar($conexion, 'VENTA_CANCELADA', 'ventas', $ventaId, $mensajeAuditoria, [
         'estado' => 'CONFIRMADA',
     ], [
         'estado' => 'CANCELADA',
         'motivo' => $motivo,
         'movimiento_reverso_id' => $movReversoId,
+        'reserva_qr_liberada' => $liberoReservaPendiente,
         'cuenta_por_cobrar_cancelada' => $cxc ? (int) $cxc['id'] : null,
     ]);
 
     $conexion->commit();
 
-    si_responder_json(true, 'Venta cancelada. El inventario fue revertido y el historial se conservó.', [
+    $mensajeCancelacion = $movReversoId !== null
+        ? 'Venta cancelada. La salida física fue revertida y el historial se conservó.'
+        : ($liberoReservaPendiente
+            ? 'Venta cancelada antes de la salida QR. La reserva de inventario fue liberada.'
+            : 'Venta cancelada correctamente.');
+    si_responder_json(true, $mensajeCancelacion, [
         'movimiento_reverso_id' => $movReversoId,
+        'reserva_qr_liberada' => $liberoReservaPendiente,
     ]);
 }
 
@@ -1980,12 +2097,8 @@ function ven_bloquear_y_validar_existencias(PDO $conexion, array $detalles, bool
         $disponible = (float) $existencia['cantidad_disponible'];
 
         if ($desdeApartado) {
-            if ($fisica + 0.000001 < $necesario) {
-                ven_cancelar($conexion, 'La existencia física ya no alcanza para surtir ' . $g['producto_nombre'] . '.', 409, [
-                    'producto_id' => $g['producto_id'],
-                    'existencia_fisica' => round($fisica, 6),
-                    'requerido_base' => round($necesario, 6),
-                ]);
+            if ($fisica + 0.000001 < $reservada) {
+                ven_cancelar($conexion, 'La existencia física está por debajo de las reservas vigentes para ' . $g['producto_nombre'] . '. Revisa la integridad del inventario antes de vender.', 409);
             }
             if ($reservada + 0.000001 < $necesario) {
                 ven_cancelar($conexion, 'La reserva almacenada ya no alcanza para surtir ' . $g['producto_nombre'] . '. Revisa la integridad del apartado antes de vender.', 409, [
@@ -1993,11 +2106,6 @@ function ven_bloquear_y_validar_existencias(PDO $conexion, array $detalles, bool
                     'cantidad_reservada' => round($reservada, 6),
                     'requerido_base' => round($necesario, 6),
                 ]);
-            }
-            $fisicaFinal = round($fisica - $necesario, 6);
-            $reservadaFinal = round(max(0, $reservada - $necesario), 6);
-            if ($fisicaFinal + 0.000001 < $reservadaFinal) {
-                ven_cancelar($conexion, 'La venta dejaría la existencia física por debajo de otras reservas vigentes para ' . $g['producto_nombre'] . '.', 409);
             }
         } else {
             if ($disponible + 0.000001 < $necesario) {
@@ -2021,110 +2129,38 @@ function ven_bloquear_y_validar_existencias(PDO $conexion, array $detalles, bool
     return $bloqueadas;
 }
 
-function ven_aplicar_salida_inventario(
-    PDO $conexion,
-    int $ventaId,
-    string $folioVenta,
-    array $detalles,
-    array $existenciasBloqueadas,
-    bool $desdeApartado
-): ?int {
-    $controlados = array_values(array_filter($detalles, static fn(array $d): bool => (int) ($d['controla_inventario'] ?? 1) === 1));
-    if (!$controlados) {
-        return null;
-    }
-
-    $tipoSalida = ven_tipo_movimiento($conexion, 'SALIDA_VENTA');
-    if (!$tipoSalida) {
-        ven_cancelar($conexion, 'No está configurado el tipo de movimiento SALIDA_VENTA.', 500);
-    }
-
-    $movimientoId = ven_crear_movimiento(
-        $conexion,
-        (int) $tipoSalida['id'],
-        'VENTA',
-        $ventaId,
-        'VENTA:' . $ventaId,
-        null,
-        'Salida física por ' . $folioVenta
-    );
-
-    $estadoLocal = [];
-    foreach ($existenciasBloqueadas as $clave => $e) {
-        $estadoLocal[$clave] = [
-            'id' => (int) $e['id'],
-            'fisica' => (float) $e['existencia_fisica'],
-            'reservada' => (float) $e['cantidad_reservada'],
-            'costo' => $e['costo_promedio_base'] !== null ? (float) $e['costo_promedio_base'] : null,
-        ];
-    }
-
-    $stmtDet = $conexion->prepare(
-        "INSERT INTO movimientos_inventario_detalle
-            (movimiento_id, renglon, almacen_id, producto_id, cantidad_delta, existencia_antes,
-             existencia_despues, costo_unitario_base, observaciones)
-         VALUES
-            (:movimiento_id, :renglon, :almacen_id, :producto_id, :delta, :antes,
-             :despues, :costo, :observaciones)"
-    );
-
-    $renglonMov = 1;
-    foreach ($detalles as $d) {
-        if ((int) ($d['controla_inventario'] ?? 1) !== 1) {
+function ven_preparar_reserva_salida(PDO $conexion, array $existenciasBloqueadas, bool $desdeApartado): void
+{
+    foreach ($existenciasBloqueadas as $e) {
+        $necesario = (float) ($e['cantidad_requerida'] ?? 0);
+        if ($necesario <= 0.0000001) {
             continue;
         }
-        $clave = (int) $d['almacen_id'] . ':' . (int) $d['producto_id'];
-        if (!isset($estadoLocal[$clave])) {
-            ven_cancelar($conexion, 'No se encontró la existencia bloqueada para aplicar la venta.', 500);
-        }
-        $antes = $estadoLocal[$clave]['fisica'];
-        $salida = (float) $d['cantidad_base'];
-        $despues = round($antes - $salida, 6);
-        if ($despues < -0.000001) {
-            ven_cancelar($conexion, 'La salida de inventario resultó negativa. No se confirmó la venta.', 409);
-        }
-        $estadoLocal[$clave]['fisica'] = $despues;
 
-        $stmtDet->execute([
-            ':movimiento_id' => $movimientoId,
-            ':renglon' => $renglonMov++,
-            ':almacen_id' => (int) $d['almacen_id'],
-            ':producto_id' => (int) $d['producto_id'],
-            ':delta' => -$salida,
-            ':antes' => $antes,
-            ':despues' => $despues,
-            ':costo' => $estadoLocal[$clave]['costo'],
-            ':observaciones' => 'Salida por ' . $folioVenta . ' · renglón ' . (int) $d['renglon'],
-        ]);
-    }
+        $reservada = (float) $e['cantidad_reservada'];
+        $fisica = (float) $e['existencia_fisica'];
 
-    foreach ($estadoLocal as $clave => $e) {
-        $reservadaFinal = $e['reservada'];
         if ($desdeApartado) {
-            $reservadaFinal = round(max(0, $e['reservada'] - (float) $existenciasBloqueadas[$clave]['cantidad_requerida']), 6);
+            // La reserva fue creada por el apartado y no debe duplicarse al
+            // convertirlo en venta. Solo verificamos que todavía exista.
+            if ($reservada + 0.000001 < $necesario) {
+                ven_cancelar($conexion, 'La reserva del apartado ya no coincide con el inventario.', 409);
+            }
+            continue;
+        }
+
+        $nuevaReserva = round($reservada + $necesario, 6);
+        if ($fisica + 0.000001 < $nuevaReserva) {
+            ven_cancelar($conexion, 'La venta ya no puede reservarse porque otra operación consumió la existencia disponible.', 409);
         }
 
         $conexion->prepare(
-            "UPDATE existencias_almacen
-             SET existencia_fisica = :fisica, cantidad_reservada = :reservada
-             WHERE id = :id"
+            "UPDATE existencias_almacen SET cantidad_reservada = :reservada WHERE id = :id"
         )->execute([
-            ':fisica' => $e['fisica'],
-            ':reservada' => $reservadaFinal,
-            ':id' => $e['id'],
+            ':reservada' => $nuevaReserva,
+            ':id' => (int) $e['id'],
         ]);
     }
-
-    $conexion->prepare(
-        "UPDATE movimientos_inventario
-         SET estado = 'APLICADO', aplicado_at = NOW(), aplicado_by = :usuario
-         WHERE id = :id"
-    )->execute([
-        ':usuario' => (int) $_SESSION['usuario_id'],
-        ':id' => $movimientoId,
-    ]);
-
-    return $movimientoId;
 }
 
 function ven_bloquear_existencia(PDO $conexion, int $almacenId, int $productoId): array
@@ -2360,57 +2396,9 @@ function ven_validar_credito_cliente(PDO $conexion, array $cliente, float $nuevo
 
 function ven_procesar_apartados_vencidos(PDO $conexion): void
 {
-    $propia = !$conexion->inTransaction();
-    if ($propia) {
-        $conexion->beginTransaction();
-    }
-
-    try {
-        $stmt = $conexion->query(
-            "SELECT id, folio
-             FROM apartados
-             WHERE estado = 'ACTIVO'
-               AND reservado_hasta IS NOT NULL
-               AND reservado_hasta < NOW()
-             ORDER BY id ASC
-             FOR UPDATE"
-        );
-        $vencidos = $stmt->fetchAll();
-
-        foreach ($vencidos as $a) {
-            $apartadoId = (int) $a['id'];
-            $det = $conexion->prepare(
-                "SELECT almacen_id, producto_id, SUM(cantidad_base) AS cantidad_base
-                 FROM apartados_detalle
-                 WHERE apartado_id = :id
-                 GROUP BY almacen_id, producto_id
-                 ORDER BY almacen_id ASC, producto_id ASC"
-            );
-            $det->execute([':id' => $apartadoId]);
-
-            foreach ($det->fetchAll() as $d) {
-                $e = ven_bloquear_existencia($conexion, (int) $d['almacen_id'], (int) $d['producto_id']);
-                $nueva = round(max(0, (float) $e['cantidad_reservada'] - (float) $d['cantidad_base']), 6);
-                $conexion->prepare("UPDATE existencias_almacen SET cantidad_reservada = :cantidad WHERE id = :id")
-                    ->execute([':cantidad' => $nueva, ':id' => (int) $e['id']]);
-            }
-
-            $conexion->prepare("UPDATE apartados SET estado = 'VENCIDO' WHERE id = :id AND estado = 'ACTIVO'")
-                ->execute([':id' => $apartadoId]);
-
-            ven_auditar_sistema($conexion, 'APARTADO_VENCIDO', 'apartados', $apartadoId, 'El apartado ' . $a['folio'] . ' venció y su reserva fue liberada automáticamente.', ['estado' => 'ACTIVO'], ['estado' => 'VENCIDO']);
-        }
-
-        if ($propia) {
-            $conexion->commit();
-        }
-    } catch (Throwable $e) {
-        if ($propia && $conexion->inTransaction()) {
-            $conexion->rollBack();
-        }
-        throw $e;
-    }
+    si_stock_liberar_apartados_vencidos($conexion);
 }
+
 
 /* =========================================================================
    CONSULTAS AUXILIARES
@@ -2757,6 +2745,12 @@ function ven_tipar_apartado_fuente(array &$a): void
 function ven_tipar_venta_listado(array &$v): void
 {
     $v['id'] = (int) $v['id'];
+    $v['salida_pendiente_qr'] = (bool) ((int) ($v['salida_pendiente_qr'] ?? 0));
+    $v['salida_confirmada_qr'] = (bool) ((int) ($v['salida_confirmada_qr'] ?? 0));
+    $v['salida_fisica_aplicada'] = (bool) ((int) ($v['salida_fisica_aplicada'] ?? 0));
+    $v['estado_operativo'] = ($v['estado'] === 'CONFIRMADA' && $v['salida_pendiente_qr'])
+        ? 'PENDIENTE_SALIDA'
+        : $v['estado'];
     $v['renglones'] = (int) $v['renglones'];
     $v['total'] = (float) $v['total'];
     $v['importe_anticipado'] = (float) $v['importe_anticipado'];

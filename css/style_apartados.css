@@ -800,3 +800,62 @@ body.modal-open {
     .detail-section-heading { align-items: stretch; flex-direction: column; }
     .btn-danger { width: 100%; }
 }
+
+/* Pulido financiero de apartados vencidos */
+.detail-footer-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.btn-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+}
+.financial-close-banner {
+    margin-top: 12px;
+    padding: 12px 14px;
+    border: 1px solid #dbe5de;
+    border-radius: 10px;
+    background: #fafcfb;
+}
+.financial-close-banner strong,
+.financial-close-banner span,
+.financial-close-banner small { display: block; }
+.financial-close-banner span { margin-top: 5px; }
+.financial-close-banner small { margin-top: 4px; color: #68766d; }
+.operation-note {
+    padding: 11px 12px;
+    border: 1px solid #dbe5de;
+    border-radius: 9px;
+    background: #fafcfb;
+    color: #526159;
+    font-size: 13px;
+    line-height: 1.45;
+}
+.modal-card--financial { width: min(680px, 100%); }
+.cancel-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+}
+.cancel-summary-grid > div {
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid #dbe5de;
+    border-radius: 9px;
+    background: #fafcfb;
+}
+.cancel-summary-grid span,
+.cancel-summary-grid strong { display: block; }
+.cancel-summary-grid span { color: #68766d; font-size: 12px; }
+.cancel-summary-grid strong { margin-top: 4px; font-size: 16px; }
+
+@media (max-width: 760px) {
+    .detail-footer-actions { width: 100%; align-items: stretch; flex-direction: column; }
+    .detail-footer-actions > * { width: 100%; }
+    .cancel-summary-grid { grid-template-columns: 1fr; }
+}

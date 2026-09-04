@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/qr_core.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('qr.verificar', true);
 
@@ -20,6 +21,8 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -50,6 +53,9 @@ try {
             break;
         case 'RECHAZAR_SALIDA':
             qr_rechazar_salida($conexion);
+            break;
+        case 'CAMBIAR_VALIDACION_QR':
+            qr_cambiar_validacion_qr($conexion);
             break;
         case 'REHABILITAR_QR':
             qr_rehabilitar_qr($conexion);
@@ -105,6 +111,7 @@ function qr_resumen(PDO $conexion): void
 
     si_responder_json(true, 'Resumen QR cargado.', [
         'habilitado' => si_qr_habilitado($conexion),
+        'puede_configurar' => qr_es_administrador_actual(),
         'kpis' => [
             'decisiones_hoy' => (int) ($k['decisiones_hoy'] ?? 0),
             'salidas_hoy' => (int) ($k['salidas_hoy'] ?? 0),
@@ -115,6 +122,94 @@ function qr_resumen(PDO $conexion): void
             'tokens_revocados' => (int) ($tokens['revocados'] ?? 0),
         ],
     ]);
+}
+
+function qr_cambiar_validacion_qr(PDO $conexion): void
+{
+    si_refrescar_identidad_sesion_actual();
+    if (!qr_es_administrador_actual()) {
+        si_responder_json(false, 'Solo un Administrador puede cambiar la validación QR de salida.', [], 403);
+    }
+
+    $valor = trim((string) ($_POST['habilitado'] ?? ''));
+    if (!in_array($valor, ['0', '1'], true)) {
+        si_responder_json(false, 'El estado solicitado para la validación QR no es válido.', [], 422);
+    }
+    $habilitado = $valor === '1';
+
+    $conexion->beginTransaction();
+
+    $stmt = $conexion->prepare(
+        "SELECT id, valor_texto
+         FROM configuracion_sistema
+         WHERE clave = 'qr.validacion_salida'
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmt->execute();
+    $config = $stmt->fetch();
+
+    if (!$config) {
+        $stmtInsert = $conexion->prepare(
+            "INSERT INTO configuracion_sistema
+                (clave, valor_texto, valor_json, tipo, descripcion, es_publica, updated_by)
+             VALUES
+                ('qr.validacion_salida', :valor, NULL, 'BOOLEANO',
+                 'Habilita verificación de salida mediante QR.', 0, :usuario)"
+        );
+        $stmtInsert->execute([
+            ':valor' => $habilitado ? '1' : '0',
+            ':usuario' => (int) $_SESSION['usuario_id'],
+        ]);
+        $configId = (int) $conexion->lastInsertId();
+        $anterior = true;
+    } else {
+        $configId = (int) $config['id'];
+        $anterior = in_array(strtolower(trim((string) $config['valor_texto'])), ['1', 'true', 'si', 'sí', 'on'], true);
+        $stmtUpdate = $conexion->prepare(
+            "UPDATE configuracion_sistema
+             SET valor_texto = :valor, updated_by = :usuario
+             WHERE id = :id"
+        );
+        $stmtUpdate->execute([
+            ':valor' => $habilitado ? '1' : '0',
+            ':usuario' => (int) $_SESSION['usuario_id'],
+            ':id' => $configId,
+        ]);
+    }
+
+    $salidasAplicadas = 0;
+    if (!$habilitado) {
+        do {
+            $lote = si_stock_resolver_qr_pendientes_deshabilitados($conexion, 200);
+            $salidasAplicadas += $lote;
+        } while ($lote === 200);
+    }
+
+    si_stock_auditar(
+        $conexion,
+        $habilitado ? 'QR_VALIDACION_HABILITADA' : 'QR_VALIDACION_DESHABILITADA',
+        'QR',
+        'configuracion_sistema',
+        $configId,
+        $habilitado
+            ? 'Se habilitó la validación QR para las salidas físicas de ventas.'
+            : 'Se deshabilitó la validación QR; las ventas pendientes aplicaron su salida física sin escaneo.',
+        ['habilitado' => $anterior],
+        ['habilitado' => $habilitado, 'ventas_pendientes_procesadas' => $salidasAplicadas]
+    );
+
+    $conexion->commit();
+
+    si_responder_json(true,
+        $habilitado
+            ? 'Validación QR habilitada. Las nuevas ventas quedarán reservadas hasta confirmar su salida por QR.'
+            : 'Validación QR deshabilitada. Las ventas pendientes aplicaron su salida física y las nuevas ventas saldrán de inventario al confirmarse.',
+        [
+            'habilitado' => $habilitado,
+            'ventas_pendientes_procesadas' => $salidasAplicadas,
+        ]
+    );
 }
 
 function qr_historial(PDO $conexion): void
@@ -359,6 +454,24 @@ function qr_confirmar_salida(PDO $conexion): void
         throw new RuntimeException('La venta no tiene un token QR disponible para confirmar la salida.');
     }
 
+    // El QR es la compuerta física: hasta este punto la venta solo mantiene
+    // mercancía reservada. Cada ciclo posterior a una rehabilitación recibe una
+    // clave idempotente distinta; un reintento del mismo ciclo conserva la misma.
+    $stmtCiclo = $conexion->prepare(
+        "SELECT COUNT(*)
+         FROM verificaciones_qr_venta
+         WHERE token_qr_id = :token_id
+           AND resultado IN ('VALIDO','CANCELADO')"
+    );
+    $stmtCiclo->execute([':token_id' => (int) $token['id']]);
+    $cicloSalida = (int) $stmtCiclo->fetchColumn() + 1;
+    $movimientoId = si_stock_aplicar_salida_venta(
+        $conexion,
+        (int) $respuesta['venta']['id'],
+        'Salida física confirmada por QR de ' . $respuesta['venta']['folio'] . '.',
+        'SALIDA_FISICA_QR:' . (int) $token['id'] . ':' . $cicloSalida
+    );
+
     $usuarioId = (int) $_SESSION['usuario_id'];
     $stmtUso = $conexion->prepare(
         "UPDATE tokens_qr_venta
@@ -401,12 +514,14 @@ function qr_confirmar_salida(PDO $conexion): void
             'verificacion_id' => $verificacionId,
             'token_id' => (int) $token['id'],
             'estado_pago' => $respuesta['venta']['estado_pago'],
+            'movimiento_inventario_id' => $movimientoId,
         ]
     );
 
     $conexion->commit();
 
     $respuesta['resultado'] = 'VALIDO';
+    $respuesta['movimiento_inventario_id'] = $movimientoId;
     $respuesta['mensaje'] = 'Salida confirmada. Este QR ya no puede utilizarse para autorizar otra salida.';
     $respuesta['puede_confirmar_salida'] = false;
     $respuesta['puede_rechazar_salida'] = false;
@@ -563,6 +678,34 @@ function qr_rehabilitar_qr(PDO $conexion): void
         );
     }
 
+    $detallesVenta = si_qr_detalles_venta($conexion, (int) $venta['id']);
+    $requiereMovimientoFisico = false;
+    foreach ($detallesVenta as $detalleVenta) {
+        if ((int) ($detalleVenta['controla_inventario'] ?? 0) === 1) {
+            $requiereMovimientoFisico = true;
+            break;
+        }
+    }
+
+    // Rehabilitar una salida implica deshacer también el efecto físico. La
+    // salida aplicada se revierte en Kardex y la cantidad vuelve a quedar
+    // reservada para que el siguiente escaneo pueda autorizarla una sola vez.
+    $movimientoReversoId = si_stock_revertir_salida_venta_a_reserva(
+        $conexion,
+        (int) $venta['id'],
+        'REHABILITA_QR:' . (int) $token['id'] . ':' . (int) $verificacionValida['id'],
+        'Rehabilitación administrativa del QR de ' . $venta['folio'] . ': ' . $motivo
+    );
+    if ($requiereMovimientoFisico && $movimientoReversoId === null) {
+        $conexion->rollBack();
+        si_responder_json(
+            false,
+            'El QR figura como utilizado, pero no existe una SALIDA_VENTA aplicada que pueda revertirse. No se rehabilitó para evitar una inconsistencia de inventario.',
+            [],
+            409
+        );
+    }
+
     $antes = [
         'activo' => (int) $token['activo'],
         'usado_at' => $token['usado_at'],
@@ -616,6 +759,7 @@ function qr_rehabilitar_qr(PDO $conexion): void
         'motivo_rehabilitacion' => $motivo,
         'token_corto' => $antes['token_corto'],
         'verificacion_anulada_id' => (int) $verificacionValida['id'],
+        'movimiento_reverso_id' => $movimientoReversoId,
     ];
 
     $stmtAudit = $conexion->prepare(
@@ -643,7 +787,7 @@ function qr_rehabilitar_qr(PDO $conexion): void
         throw new RuntimeException('El QR fue rehabilitado, pero no pudo recargarse su estado.');
     }
     $respuesta = qr_preparar_consulta($conexion, $actual);
-    $respuesta['mensaje'] = 'QR rehabilitado correctamente. La confirmación anterior quedó cancelada en el historial y la venta vuelve a estar disponible para una nueva confirmación de salida.';
+    $respuesta['mensaje'] = 'QR rehabilitado correctamente. La salida física anterior fue revertida, la mercancía volvió a quedar reservada y el QR puede confirmarse nuevamente.';
     $respuesta['rehabilitado'] = true;
     $respuesta['motivo_rehabilitacion'] = $motivo;
 
@@ -658,7 +802,7 @@ function qr_es_administrador_actual(): bool
 
 /**
  * Resuelve token completo, referencia corta ABCDEF-123456 o folio de venta.
- * Para ventas CONFIRMADAS antiguas sin QR, crea el token una sola vez.
+ * Solo crea un token faltante si la venta CONFIRMADA todavía no tiene una salida física aplicada.
  */
 function qr_resolver_referencia(PDO $conexion, string $entrada, bool $bloquear, bool $crearTokenSiFalta): ?array
 {
@@ -727,7 +871,13 @@ function qr_resolver_referencia(PDO $conexion, string $entrada, bool $bloquear, 
 
             $actual = si_qr_token_venta_actual($conexion, $ventaId);
             if ($actual === null && $crearTokenSiFalta && $ventaFolio['estado'] === 'CONFIRMADA') {
-                $actual = si_qr_asegurar_token_venta($conexion, $ventaId);
+                // Una venta confirmada cuando QR estaba deshabilitado ya tiene
+                // SALIDA_VENTA aplicada. Nunca se genera un QR retroactivo para
+                // evitar autorizar una segunda salida física.
+                $salidaAplicada = si_stock_movimiento_salida_venta($conexion, $ventaId, true);
+                if ($salidaAplicada === null) {
+                    $actual = si_qr_asegurar_token_venta($conexion, $ventaId);
+                }
             }
             if ($actual !== null) {
                 $tokenId = (int) $actual['id'];
@@ -805,6 +955,14 @@ function qr_preparar_consulta(PDO $conexion, array $referencia): array
     }
     $detalles = si_qr_detalles_venta($conexion, $ventaId);
     $token = is_array($referencia['token'] ?? null) ? $referencia['token'] : null;
+    $salidaAplicada = si_stock_movimiento_salida_venta($conexion, $ventaId, true);
+    $requiereMovimientoFisico = false;
+    foreach ($detalles as $detalle) {
+        if ((int) ($detalle['controla_inventario'] ?? 1) === 1) {
+            $requiereMovimientoFisico = true;
+            break;
+        }
+    }
 
     $qrPublico = null;
     if ($token !== null) {
@@ -828,9 +986,15 @@ function qr_preparar_consulta(PDO $conexion, array $referencia): array
     if ($venta['estado'] === 'CANCELADA') {
         $resultado = 'CANCELADO';
         $mensaje = 'La venta está cancelada. No autorices la salida.';
+    } elseif ($token === null && $salidaAplicada !== null) {
+        $resultado = 'YA_VERIFICADO';
+        $mensaje = 'La salida física de esta venta ya fue aplicada sin QR. No se generará un QR retroactivo.';
     } elseif ($token === null) {
         $resultado = 'INVALIDO';
         $mensaje = 'La venta no tiene un QR emitido y no puede autorizarse desde este módulo.';
+    } elseif ($token['usado_at'] !== null && $requiereMovimientoFisico && $salidaAplicada === null) {
+        $resultado = 'INVALIDO';
+        $mensaje = 'El QR figura como utilizado, pero falta la salida física en inventario. Revisa el historial antes de continuar.';
     } elseif ($token['usado_at'] !== null) {
         $resultado = 'YA_VERIFICADO';
         $mensaje = 'La salida física de esta venta ya fue confirmada. Este QR no puede volver a utilizarse.';
@@ -915,6 +1079,7 @@ function qr_preparar_consulta(PDO $conexion, array $referencia): array
             && $token['usado_at'] !== null
             && $token['revocado_at'] === null
             && $venta['estado'] === 'CONFIRMADA'
+            && (!$requiereMovimientoFisico || $salidaAplicada !== null)
         ),
         'salida_anterior' => $salidaAnterior,
         'ultimo_rechazo' => $ultimoRechazo,

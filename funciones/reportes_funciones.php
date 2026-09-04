@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 require_once __DIR__ . '/../inc/xlsx_simple.php';
 
 si_requerir_permiso('reportes.ver', true);
@@ -17,6 +18,8 @@ si_requerir_metodo('GET');
 $accion = strtoupper(trim((string) ($_GET['accion'] ?? 'CATALOGOS')));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     switch ($accion) {
         case 'CATALOGOS':
             rep_catalogos($conexion);
@@ -150,7 +153,8 @@ function rep_definiciones(): array
             'descripcion' => 'Consulta rápida de movimientos. Para análisis y exportación avanzada usa Inventario → Kardex.',
             'filtros' => ['fecha', 'almacen', 'producto', 'estado', 'usuario'], 'estados' => $estadosKardex,
             'columnas' => [
-                rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Movimiento'), rep_col('tipo_movimiento', 'Tipo'), rep_col('almacen', 'Almacén'),
+                rep_col('fecha_aplicacion', 'Aplicación', 'fecha_hora'), rep_col('fecha_operacion', 'Operación', 'fecha_hora'),
+                rep_col('folio', 'Movimiento'), rep_col('tipo_movimiento', 'Tipo'), rep_col('almacen', 'Almacén'),
                 rep_col('sku', 'SKU'), rep_col('producto', 'Producto'), rep_col('cantidad_delta', 'Movimiento', 'cantidad'),
                 rep_col('existencia_antes', 'Antes', 'cantidad'), rep_col('existencia_despues', 'Después', 'cantidad'), rep_col('unidad', 'Unidad'),
                 rep_col('estado', 'Estado', 'estado'), rep_col('usuario', 'Usuario'),
@@ -295,11 +299,13 @@ function rep_definiciones(): array
         ],
         'APARTADOS' => [
             'codigo' => 'APARTADOS', 'nombre' => 'Apartados',
-            'descripcion' => 'Reservas de productos con anticipos y saldo pendiente en la moneda del apartado.',
+            'descripcion' => 'Reservas de productos con anticipos, vencimientos y liquidaciones de cancelación en la moneda del apartado.',
             'filtros' => ['fecha', 'cliente', 'producto', 'estado', 'usuario'], 'estados' => $estadosApartado,
             'columnas' => [
                 rep_col('fecha', 'Fecha', 'fecha_hora'), rep_col('folio', 'Folio'), rep_col('cliente', 'Cliente'), rep_col('reservado_hasta', 'Reservado hasta', 'fecha_hora'),
-                rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'), rep_col('total', 'Total', 'moneda'), rep_col('anticipado', 'Anticipado', 'moneda'), rep_col('saldo', 'Saldo', 'moneda'), rep_col('usuario', 'Usuario'),
+                rep_col('estado', 'Estado', 'estado'), rep_col('moneda_codigo', 'Moneda'), rep_col('total', 'Total', 'moneda'), rep_col('anticipado', 'Anticipado', 'moneda'),
+                rep_col('retencion_pct', 'Retención %', 'cantidad'), rep_col('retenido', 'Retenido', 'moneda'), rep_col('reembolsado', 'Reembolsado', 'moneda'),
+                rep_col('saldo', 'Saldo operativo', 'moneda'), rep_col('usuario', 'Usuario'),
             ],
         ],
         'MOVIMIENTOS_USUARIOS' => [
@@ -1600,7 +1606,8 @@ function rep_sql(string $codigo, array $f): array
                         LEFT JOIN usuarios u ON u.id = mi.aplicado_by
                         WHERE " . implode(' AND ', $where);
             } else {
-                $sql = "SELECT mi.fecha_movimiento AS fecha, mi.folio, tmi.nombre AS tipo_movimiento, a.nombre AS almacen,
+                $sql = "SELECT COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) AS fecha_aplicacion,
+                               mi.fecha_movimiento AS fecha_operacion, mi.folio, tmi.nombre AS tipo_movimiento, a.nombre AS almacen,
                                p.sku, p.nombre AS producto, mid.cantidad_delta, mid.existencia_antes, mid.existencia_despues,
                                um.codigo AS unidad, mi.estado, COALESCE(u.usuario,'—') AS usuario
                         FROM movimientos_inventario mi
@@ -1612,7 +1619,10 @@ function rep_sql(string $codigo, array $f): array
                         LEFT JOIN usuarios u ON u.id = mi.aplicado_by
                         WHERE " . implode(' AND ', $where);
             }
-            return [$sql, $params, 'ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon ASC'];
+            $orden = $codigo === 'KARDEX'
+                ? 'ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) DESC, mi.id DESC, mid.renglon ASC'
+                : 'ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon ASC';
+            return [$sql, $params, $orden];
 
         case 'AJUSTES':
             rep_fecha($where, $params, 'ai.fecha_ajuste', $f);
@@ -1889,11 +1899,15 @@ function rep_sql(string $codigo, array $f): array
             rep_buscar($where, $params, $f['buscar'], ['ap.folio', 'cl.nombre_razon_social']);
             $sql = "SELECT ap.fecha_apartado AS fecha, ap.folio, cl.nombre_razon_social AS cliente,
                            ap.reservado_hasta, ap.estado, mon.codigo AS moneda_codigo, ap.total,
-                           ap.importe_anticipado AS anticipado, ap.saldo_pendiente AS saldo, COALESCE(u.usuario,'—') AS usuario
+                           ap.importe_anticipado AS anticipado, COALESCE(ca.retencion_pct, 0) AS retencion_pct,
+                           COALESCE(ca.importe_retenido, 0) AS retenido, COALESCE(ca.importe_reembolsado, 0) AS reembolsado,
+                           CASE WHEN ap.estado = 'CANCELADO' THEN 0 ELSE ap.saldo_pendiente END AS saldo,
+                           COALESCE(u.usuario,'—') AS usuario
                     FROM apartados ap
                     INNER JOIN clientes cl ON cl.id = ap.cliente_id
                     INNER JOIN monedas mon ON mon.id = ap.moneda_id
                     LEFT JOIN usuarios u ON u.id = ap.created_by
+                    LEFT JOIN cancelaciones_apartado ca ON ca.apartado_id = ap.id
                     WHERE " . implode(' AND ', $where);
             return [$sql, $params, 'ORDER BY ap.fecha_apartado DESC, ap.id DESC'];
 

@@ -311,7 +311,8 @@ function si_qr_detalles_venta(PDO $conexion, int $ventaId): array
             d.total,
             a.codigo AS almacen_codigo,
             a.nombre AS almacen_nombre,
-            ub.simbolo AS unidad_base_simbolo
+            ub.simbolo AS unidad_base_simbolo,
+            p.controla_inventario
          FROM ventas_detalle d
          INNER JOIN almacenes a ON a.id = d.almacen_id
          INNER JOIN productos p ON p.id = d.producto_id
@@ -328,6 +329,7 @@ function si_qr_detalles_venta(PDO $conexion, int $ventaId): array
         $fila['cantidad'] = (float) $fila['cantidad'];
         $fila['cantidad_base'] = (float) $fila['cantidad_base'];
         $fila['total'] = (float) $fila['total'];
+        $fila['controla_inventario'] = (int) $fila['controla_inventario'];
     }
     unset($fila);
 

@@ -56,7 +56,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
             </header>
 
             <div class="info-banner">
-                <strong>Flujo:</strong> un apartado ACTIVO aumenta la cantidad reservada y reduce únicamente la disponibilidad. La existencia física y el Kardex no cambian hasta que posteriormente se confirme la venta.
+                <strong>Flujo:</strong> un apartado ACTIVO reserva mercancía sin mover existencia física. Si vence, la reserva se libera pero los anticipos permanecen registrados; después puede reactivarse o cancelarse con reembolso y retención documentados.
             </div>
 
             <div id="mensajePagina" class="module-message" hidden></div>
@@ -254,6 +254,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         <div class="detail-body">
             <div id="mensajeDetalle" class="module-message" hidden></div>
             <section class="detail-summary-grid" id="resumenDetalle"></section>
+            <div class="financial-close-banner" id="cancelacionFinancieraResumen" hidden></div>
 
             <div class="detail-section-heading"><h3>Productos reservados</h3></div>
             <div class="table-wrap">
@@ -276,8 +277,48 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         </div>
         <footer class="modal-footer">
             <button type="button" class="btn-secondary" data-cerrar-modal="modalDetalle">Cerrar</button>
-            <?php if ($puedeCrear): ?><button type="button" class="btn-danger" id="btnCancelarApartado">Cancelar apartado</button><?php endif; ?>
+            <div class="detail-footer-actions">
+                <a class="btn-secondary btn-link" id="btnTicketCancelacion" href="#" target="_blank" rel="noopener" hidden>Imprimir ticket de cancelación</a>
+                <?php if ($puedeCrear): ?>
+                    <button type="button" class="btn-secondary" id="btnReactivarApartado" hidden>Reactivar apartado</button>
+                    <button type="button" class="btn-danger" id="btnCancelarApartado">Cancelar apartado</button>
+                <?php endif; ?>
+            </div>
         </footer>
+    </section>
+</div>
+
+<!-- Reactivar apartado vencido -->
+<div class="modal-backdrop modal-backdrop--nested" id="modalReactivarApartado" hidden>
+    <section class="modal-card modal-card--small" role="dialog" aria-modal="true" aria-labelledby="tituloReactivarApartado">
+        <header class="modal-header"><div><h2 id="tituloReactivarApartado">Reactivar apartado</h2><p id="subtituloReactivarApartado">La mercancía volverá a reservarse si sigue disponible.</p></div><button type="button" class="modal-close" data-cerrar-modal="modalReactivarApartado" aria-label="Cerrar">×</button></header>
+        <form class="small-form" id="formReactivarApartado">
+            <div id="mensajeReactivarApartado" class="module-message" hidden></div>
+            <label class="field"><span>Nueva fecha límite *</span><input type="date" id="reactivarReservadoHasta" required></label>
+            <div class="operation-note">El anticipo existente no se modifica. Solo se vuelve a reservar la misma mercancía y se actualiza la fecha límite.</div>
+        </form>
+        <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalReactivarApartado">Cerrar</button><button type="button" class="btn-primary" id="btnConfirmarReactivar">Reactivar y reservar</button></footer>
+    </section>
+</div>
+
+<!-- Cancelar apartado y liquidar anticipo -->
+<div class="modal-backdrop modal-backdrop--nested" id="modalCancelarApartado" hidden>
+    <section class="modal-card modal-card--financial" role="dialog" aria-modal="true" aria-labelledby="tituloCancelarApartado">
+        <header class="modal-header"><div><h2 id="tituloCancelarApartado">Cancelar apartado</h2><p id="subtituloCancelarApartado">La cancelación es definitiva y quedará documentada.</p></div><button type="button" class="modal-close" data-cerrar-modal="modalCancelarApartado" aria-label="Cerrar">×</button></header>
+        <form class="small-form" id="formCancelarApartado">
+            <div id="mensajeCancelarApartado" class="module-message" hidden></div>
+            <section class="cancel-summary-grid">
+                <div><span>Anticipo recibido</span><strong id="cancelacionAnticipoResumen">$0.00</strong></div>
+                <div><span>Retención</span><strong id="cancelacionRetenidoResumen">$0.00</strong></div>
+                <div><span>Reembolso</span><strong id="cancelacionReembolsoResumen">$0.00</strong></div>
+            </section>
+            <label class="field" id="campoRetencionCancelacion"><span>Retención sobre el anticipo (%) *</span><input type="number" id="cancelacionRetencionPct" min="0" max="100" step="0.01" value="0"><small>No existe un tope comercial prefijado: puedes decidir cualquier porcentaje entre 0% y 100%.</small></label>
+            <label class="field" id="campoMetodoReembolso"><span>Método de reembolso *</span><select id="cancelacionMetodoReembolso"></select></label>
+            <label class="field" id="campoReferenciaReembolso"><span>Referencia</span><input type="text" id="cancelacionReferenciaReembolso" maxlength="120" placeholder="Folio / referencia del reembolso"></label>
+            <label class="field"><span>Motivo de cancelación *</span><textarea id="cancelacionMotivo" rows="4" maxlength="1500" placeholder="Explica por qué se cancela el apartado"></textarea></label>
+            <div class="operation-note" id="notaCancelacionApartado"></div>
+        </form>
+        <footer class="modal-footer"><button type="button" class="btn-secondary" data-cerrar-modal="modalCancelarApartado">Cerrar</button><button type="button" class="btn-danger" id="btnConfirmarCancelarApartado">Cancelar y generar ticket</button></footer>
     </section>
 </div>
 
@@ -418,6 +459,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         const metodosHtml = '<option value="0">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
         $('anticipoInicialMetodo').innerHTML = metodosHtml;
         $('nuevoAnticipoMetodo').innerHTML = '<option value="">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
+        $('cancelacionMetodoReembolso').innerHTML = '<option value="">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
         $('apartadoReservadoHasta').value = r.reserva_sugerida || '';
     }
 
@@ -452,7 +494,10 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
                 + '<td>' + badge(a.estado) + conversion + '</td>'
                 + '<td>' + Number(a.renglones || 0) + '</td>'
                 + '<td><strong>' + moneda(a.total, a.moneda_codigo, a.moneda_simbolo) + '</strong></td>'
-                + '<td>' + moneda(a.importe_anticipado, a.moneda_codigo, a.moneda_simbolo) + '<small class="cell-secondary">Saldo: ' + moneda(a.saldo_pendiente, a.moneda_codigo, a.moneda_simbolo) + '</small></td>'
+                + '<td>' + moneda(a.importe_anticipado, a.moneda_codigo, a.moneda_simbolo)
+                + (a.cancelacion_financiera_id
+                    ? '<small class="cell-secondary">Reembolso: ' + moneda(a.cancelacion_importe_reembolsado, a.moneda_codigo, a.moneda_simbolo) + ' · Retenido: ' + moneda(a.cancelacion_importe_retenido, a.moneda_codigo, a.moneda_simbolo) + '</small>'
+                    : '<small class="cell-secondary">Saldo: ' + moneda(a.saldo_pendiente, a.moneda_codigo, a.moneda_simbolo) + '</small>') + '</td>'
                 + '<td>' + origen + '</td>'
                 + '<td class="text-right actions-cell">'
                 + '<button type="button" class="table-action" data-action="ver" data-id="' + a.id + '">Ver</button>'
@@ -657,21 +702,38 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     }
 
     async function verDetalle(id) {
-        const r = await apiGet('DETALLE_APARTADO', { apartado_id: id }); estado.detalle = r; const a = r.apartado;
+        const r = await apiGet('DETALLE_APARTADO', { apartado_id: id }); estado.detalle = r; const a = r.apartado; const c = r.cancelacion || null;
         $('tituloDetalle').textContent = a.folio; $('subtituloDetalle').textContent = a.cliente_codigo + ' · ' + a.cliente_nombre;
+        const saldoTexto = a.estado === 'CANCELADO' && c
+            ? 'Cancelado · liquidación ' + c.folio
+            : 'Saldo ' + moneda(a.saldo_pendiente, a.moneda_codigo, a.moneda_simbolo);
         $('resumenDetalle').innerHTML = '<div><span>Estado</span><strong>' + badge(a.estado) + '</strong><small>Reserva hasta ' + fechaCorta(a.reservado_hasta) + '</small></div>'
             + '<div><span>Total</span><strong>' + moneda(a.total, a.moneda_codigo, a.moneda_simbolo) + '</strong><small>Subtotal ' + moneda(a.subtotal, a.moneda_codigo, a.moneda_simbolo) + '</small></div>'
-            + '<div><span>Anticipado</span><strong>' + moneda(a.importe_anticipado, a.moneda_codigo, a.moneda_simbolo) + '</strong><small>Saldo ' + moneda(a.saldo_pendiente, a.moneda_codigo, a.moneda_simbolo) + '</small></div>'
+            + '<div><span>Anticipado</span><strong>' + moneda(a.importe_anticipado, a.moneda_codigo, a.moneda_simbolo) + '</strong><small>' + escapeHtml(saldoTexto) + '</small></div>'
             + '<div><span>Origen</span><strong>' + escapeHtml(a.cotizacion_folio || 'Directo') + '</strong><small>' + escapeHtml(a.venta_folio ? 'Venta ' + a.venta_folio : 'Sin venta todavía') + '</small></div>';
         $('tablaDetalleProductos').innerHTML = (r.detalles || []).map((d) => '<tr><td><strong>' + escapeHtml(d.producto_nombre_snapshot) + '</strong><small class="cell-secondary">' + escapeHtml(d.sku) + '</small></td><td>' + escapeHtml(d.almacen_nombre) + '</td><td>' + numero(d.cantidad, 3) + ' ' + escapeHtml(d.unidad_simbolo || d.unidad_codigo) + '</td><td>' + numero(d.cantidad_base, 3) + ' ' + escapeHtml(d.unidad_base_simbolo || d.unidad_base_codigo) + '</td><td>' + moneda(d.precio_unitario, a.moneda_codigo, a.moneda_simbolo) + '</td><td>' + numero(d.descuento_pct, 2) + '%</td><td>' + numero(d.impuesto_pct_snapshot, 2) + '%</td><td><strong>' + moneda(d.total, a.moneda_codigo, a.moneda_simbolo) + '</strong></td></tr>').join('');
-        renderAnticipos(); $('btnAbrirAnticipo').hidden = !puedeCrear || a.estado !== 'ACTIVO'; $('btnCancelarApartado').hidden = !puedeCrear || !['ACTIVO','VENCIDO'].includes(a.estado);
+        renderAnticipos();
+
+        const resumenCancelacion = $('cancelacionFinancieraResumen');
+        resumenCancelacion.hidden = !c;
+        resumenCancelacion.innerHTML = c ? '<strong>Liquidación de cancelación ' + escapeHtml(c.folio) + '</strong>'
+            + '<span>Anticipo recibido: ' + moneda(c.importe_anticipado, a.moneda_codigo, a.moneda_simbolo)
+            + ' · Retención ' + numero(c.retencion_pct, 2) + '% (' + moneda(c.importe_retenido, a.moneda_codigo, a.moneda_simbolo) + ')'
+            + ' · Reembolsado: ' + moneda(c.importe_reembolsado, a.moneda_codigo, a.moneda_simbolo) + '</span>'
+            + '<small>' + escapeHtml(c.metodo_nombre ? 'Método: ' + c.metodo_nombre + (c.referencia ? ' · Ref. ' + c.referencia : '') : 'Sin reembolso monetario') + '</small>' : '';
+
+        $('btnAbrirAnticipo').hidden = !puedeCrear || a.estado !== 'ACTIVO';
+        $('btnCancelarApartado').hidden = !puedeCrear || !['ACTIVO','VENCIDO'].includes(a.estado);
+        $('btnReactivarApartado').hidden = !puedeCrear || a.estado !== 'VENCIDO' || !!a.venta_folio;
+        $('btnTicketCancelacion').hidden = !c;
+        $('btnTicketCancelacion').href = c ? 'apartado_cancelacion_imprimir.php?id=' + Number(c.id) : '#';
         mostrarMensaje('mensajeDetalle', ''); abrirModal('modalDetalle');
     }
 
     function renderAnticipos() {
         const a = estado.detalle.apartado, items = estado.detalle.anticipos || [];
         if (!items.length) { $('tablaAnticipos').innerHTML = '<tr><td colspan="7" class="empty-cell">Todavía no hay anticipos registrados.</td></tr>'; return; }
-        $('tablaAnticipos').innerHTML = items.map((x) => '<tr><td>' + fechaHora(x.fecha_pago) + '</td><td>' + escapeHtml(x.metodo_nombre) + '</td><td>' + escapeHtml(x.referencia || '—') + '</td><td><strong>' + moneda(x.importe, a.moneda_codigo, a.moneda_simbolo) + '</strong></td><td>' + badge(x.estado) + (x.motivo_cancelacion ? '<small class="cell-secondary">' + escapeHtml(x.motivo_cancelacion) + '</small>' : '') + '</td><td>' + escapeHtml(x.registrado_por || '—') + '</td><td class="text-right">' + (puedeCrear && x.estado === 'APLICADO' && a.estado !== 'COMPLETADO' ? '<button type="button" class="table-action table-action--danger" data-anticipo-action="cancelar" data-id="' + x.id + '">Cancelar</button>' : '—') + '</td></tr>').join('');
+        $('tablaAnticipos').innerHTML = items.map((x) => '<tr><td>' + fechaHora(x.fecha_pago) + '</td><td>' + escapeHtml(x.metodo_nombre) + '</td><td>' + escapeHtml(x.referencia || '—') + '</td><td><strong>' + moneda(x.importe, a.moneda_codigo, a.moneda_simbolo) + '</strong></td><td>' + badge(x.estado) + (x.motivo_cancelacion ? '<small class="cell-secondary">' + escapeHtml(x.motivo_cancelacion) + '</small>' : '') + '</td><td>' + escapeHtml(x.registrado_por || '—') + '</td><td class="text-right">' + (puedeCrear && x.estado === 'APLICADO' && a.estado === 'ACTIVO' ? '<button type="button" class="table-action table-action--danger" data-anticipo-action="cancelar" data-id="' + x.id + '">Cancelar</button>' : '—') + '</td></tr>').join('');
     }
 
     async function registrarAnticipo() {
@@ -685,17 +747,110 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     }
 
     async function cancelarAnticipo(id) {
-        const motivo = window.prompt('Motivo de cancelación del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error');
+        if (!window.confirm('Esta opción anula un anticipo capturado por corrección mientras el apartado sigue ACTIVO. Si quieres cerrar el apartado y devolver o retener el dinero, usa “Cancelar apartado”. ¿Continuar?')) return;
+        const motivo = window.prompt('Motivo de anulación/corrección del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error');
         try { const r = await apiPost('CANCELAR_ANTICIPO', { anticipo_id: id, motivo: motivo.trim() }); await verDetalle(estado.detalle.apartado.id); mostrarMensaje('mensajeDetalle', r.mensaje, 'success'); await cargarApartados(); }
         catch (e) { mostrarMensaje('mensajeDetalle', e.message, 'error'); }
     }
 
-    async function cancelarApartado() {
+    function abrirReactivarApartado() {
+        const a = estado.detalle && estado.detalle.apartado; if (!a || a.estado !== 'VENCIDO') return;
+        $('formReactivarApartado').reset();
+        $('reactivarReservadoHasta').value = estado.catalogos.reserva_sugerida || '';
+        $('reactivarReservadoHasta').min = new Date().toISOString().slice(0, 10);
+        $('tituloReactivarApartado').textContent = 'Reactivar ' + a.folio;
+        $('subtituloReactivarApartado').textContent = 'Se conservará el anticipo de ' + moneda(a.importe_anticipado, a.moneda_codigo, a.moneda_simbolo) + '.';
+        mostrarMensaje('mensajeReactivarApartado', '');
+        abrirModal('modalReactivarApartado');
+    }
+
+    async function confirmarReactivarApartado() {
         const a = estado.detalle && estado.detalle.apartado; if (!a) return;
-        const motivo = window.prompt('Motivo de cancelación del apartado ' + a.folio + ':'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error');
-        if (!window.confirm('Se liberará la reserva de inventario. ¿Confirmas la cancelación?')) return;
-        try { const r = await apiPost('CANCELAR_APARTADO', { apartado_id: a.id, motivo: motivo.trim() }); cerrarModal('modalDetalle'); mostrarMensaje('mensajePagina', r.mensaje, 'success'); await cargarApartados(); }
-        catch (e) { mostrarMensaje('mensajeDetalle', e.message, 'error'); }
+        const fecha = $('reactivarReservadoHasta').value;
+        if (!fecha) return mostrarMensaje('mensajeReactivarApartado', 'Selecciona la nueva fecha límite.', 'error');
+        if (!window.confirm('Se volverá a reservar la mercancía del apartado si existe disponibilidad suficiente. ¿Deseas continuar?')) return;
+        $('btnConfirmarReactivar').disabled = true;
+        try {
+            const r = await apiPost('REACTIVAR_APARTADO', { apartado_id: a.id, reservado_hasta: fecha });
+            cerrarModal('modalReactivarApartado');
+            await verDetalle(a.id);
+            mostrarMensaje('mensajeDetalle', r.mensaje, 'success');
+            await cargarApartados();
+        } catch (e) { mostrarMensaje('mensajeReactivarApartado', e.message, 'error'); }
+        finally { $('btnConfirmarReactivar').disabled = false; }
+    }
+
+    function actualizarResumenCancelacion() {
+        const a = estado.detalle && estado.detalle.apartado; if (!a) return;
+        const anticipo = Math.max(0, Number(a.importe_anticipado || 0));
+        let pct = Number($('cancelacionRetencionPct').value || 0);
+        if (!Number.isFinite(pct)) pct = 0;
+        pct = Math.min(100, Math.max(0, pct));
+        const retenido = Math.round((anticipo * pct / 100) * 10000) / 10000;
+        const reembolso = Math.max(0, Math.round((anticipo - retenido) * 10000) / 10000);
+        $('cancelacionAnticipoResumen').textContent = moneda(anticipo, a.moneda_codigo, a.moneda_simbolo);
+        $('cancelacionRetenidoResumen').textContent = moneda(retenido, a.moneda_codigo, a.moneda_simbolo) + ' (' + numero(pct, 2) + '%)';
+        $('cancelacionReembolsoResumen').textContent = moneda(reembolso, a.moneda_codigo, a.moneda_simbolo);
+        $('campoRetencionCancelacion').hidden = anticipo <= 0.0001;
+        $('campoMetodoReembolso').hidden = reembolso <= 0.0001;
+        $('campoReferenciaReembolso').hidden = reembolso <= 0.0001;
+        return { anticipo, pct, retenido, reembolso };
+    }
+
+    function abrirCancelarApartado() {
+        const a = estado.detalle && estado.detalle.apartado; if (!a || !['ACTIVO','VENCIDO'].includes(a.estado)) return;
+        $('formCancelarApartado').reset();
+        $('cancelacionRetencionPct').value = '0';
+        $('cancelacionMetodoReembolso').value = '';
+        $('tituloCancelarApartado').textContent = 'Cancelar ' + a.folio;
+        $('subtituloCancelarApartado').textContent = a.estado === 'VENCIDO'
+            ? 'La reserva ya fue liberada por vencimiento. El anticipo sigue intacto y ahora se liquidará.'
+            : 'La reserva se liberará y el anticipo se liquidará en la misma operación.';
+        $('notaCancelacionApartado').textContent = a.estado === 'VENCIDO'
+            ? 'La existencia física no cambiará: el producto nunca salió. Solo se cerrará el apartado y se registrará el tratamiento del anticipo.'
+            : 'La existencia física no cambiará. Se liberará únicamente la cantidad reservada del apartado.';
+        actualizarResumenCancelacion();
+        mostrarMensaje('mensajeCancelarApartado', '');
+        abrirModal('modalCancelarApartado');
+    }
+
+    async function confirmarCancelarApartado() {
+        const a = estado.detalle && estado.detalle.apartado; if (!a) return;
+        const motivo = $('cancelacionMotivo').value.trim();
+        if (motivo.length < 5) return mostrarMensaje('mensajeCancelarApartado', 'El motivo debe tener al menos 5 caracteres.', 'error');
+        const calculo = actualizarResumenCancelacion();
+        const metodoId = Number($('cancelacionMetodoReembolso').value || 0);
+        const referencia = $('cancelacionReferenciaReembolso').value.trim();
+        if (calculo.reembolso > 0.0001 && !metodoId) return mostrarMensaje('mensajeCancelarApartado', 'Selecciona el método con el que se devolverá el dinero al cliente.', 'error');
+        if (calculo.reembolso > 0.0001) {
+            const metodo = estado.catalogos.metodos.find((m) => Number(m.id) === metodoId);
+            if (metodo && Number(metodo.requiere_referencia || 0) === 1 && !referencia) return mostrarMensaje('mensajeCancelarApartado', 'Ese método requiere una referencia de reembolso.', 'error');
+        }
+        const resumen = calculo.anticipo > 0.0001
+            ? 'Se reembolsarán ' + moneda(calculo.reembolso, a.moneda_codigo, a.moneda_simbolo) + ' y se retendrán ' + moneda(calculo.retenido, a.moneda_codigo, a.moneda_simbolo) + '. '
+            : 'El apartado no tiene anticipo aplicado. ';
+        if (!window.confirm(resumen + 'La cancelación será definitiva. ¿Confirmas?')) return;
+
+        const ventanaTicket = window.open('about:blank', '_blank');
+        $('btnConfirmarCancelarApartado').disabled = true;
+        try {
+            const r = await apiPost('CANCELAR_APARTADO', {
+                apartado_id: a.id,
+                motivo,
+                retencion_pct: calculo.anticipo > 0.0001 ? calculo.pct : 0,
+                metodo_reembolso_id: calculo.reembolso > 0.0001 ? metodoId : 0,
+                referencia_reembolso: calculo.reembolso > 0.0001 ? referencia : ''
+            });
+            cerrarModal('modalCancelarApartado');
+            await cargarApartados();
+            await verDetalle(a.id);
+            mostrarMensaje('mensajeDetalle', r.mensaje, 'success');
+            if (ventanaTicket && r.ticket_url) ventanaTicket.location.href = r.ticket_url;
+            else if (ventanaTicket) ventanaTicket.close();
+        } catch (e) {
+            if (ventanaTicket) ventanaTicket.close();
+            mostrarMensaje('mensajeCancelarApartado', e.message, 'error');
+        } finally { $('btnConfirmarCancelarApartado').disabled = false; }
     }
 
     document.querySelectorAll('[data-cerrar-modal]').forEach((b) => b.addEventListener('click', () => cerrarModal(b.dataset.cerrarModal)));
@@ -704,7 +859,11 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     if ($('btnNuevoApartado')) $('btnNuevoApartado').addEventListener('click', () => { resetNuevo(); abrirModal('modalApartado'); });
     if ($('btnGuardarApartado')) $('btnGuardarApartado').addEventListener('click', guardarApartado);
     if ($('btnGuardarAnticipo')) $('btnGuardarAnticipo').addEventListener('click', registrarAnticipo);
-    if ($('btnCancelarApartado')) $('btnCancelarApartado').addEventListener('click', cancelarApartado);
+    if ($('btnCancelarApartado')) $('btnCancelarApartado').addEventListener('click', abrirCancelarApartado);
+    if ($('btnReactivarApartado')) $('btnReactivarApartado').addEventListener('click', abrirReactivarApartado);
+    if ($('btnConfirmarReactivar')) $('btnConfirmarReactivar').addEventListener('click', confirmarReactivarApartado);
+    if ($('btnConfirmarCancelarApartado')) $('btnConfirmarCancelarApartado').addEventListener('click', confirmarCancelarApartado);
+    if ($('cancelacionRetencionPct')) $('cancelacionRetencionPct').addEventListener('input', actualizarResumenCancelacion);
 
     $('buscarApartado').addEventListener('input', function () { clearTimeout(estado.timerBusqueda); estado.timerBusqueda = setTimeout(() => { estado.pagina = 1; cargarApartados().catch((e) => mostrarMensaje('mensajePagina', e.message)); }, 350); });
     ['filtroEstado','filtroDesde','filtroHasta'].forEach((id) => $(id).addEventListener('change', () => { estado.pagina = 1; cargarApartados().catch((e) => mostrarMensaje('mensajePagina', e.message)); }));

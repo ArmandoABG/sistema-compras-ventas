@@ -223,7 +223,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                 <div class="section-actions">
                     <div>
                         <h2>Historial Kardex</h2>
-                        <p>Los movimientos aplicados y sus reversos permanecen visibles para conservar la trazabilidad del inventario.</p>
+                        <p>La secuencia se muestra por el momento real de aplicación; la fecha de operación se conserva como referencia y para los filtros.</p>
                     </div>
                     <div class="kardex-export-actions">
                         <button type="button" class="btn-secondary" id="btnExportarKardexCsv">Exportar CSV</button>
@@ -342,7 +342,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                         <table class="module-table module-table--kardex">
                             <thead>
                                 <tr>
-                                    <th>Fecha / folio</th>
+                                    <th>Aplicación / operación</th>
                                     <th>Movimiento</th>
                                     <th>Producto</th>
                                     <th>Almacén</th>
@@ -491,7 +491,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                         <div class="table-wrap table-wrap--operations">
                             <table class="module-table module-table--operations">
                                 <thead><tr>
-                                    <th>Fecha / folio</th><th>Tipo</th><th>Producto</th><th>Almacén</th>
+                                    <th>Aplicación / operación</th><th>Tipo</th><th>Producto</th><th>Almacén</th>
                                     <th class="text-right">Movimiento</th><th class="text-right">Antes</th><th class="text-right">Después</th>
                                     <th>Motivo</th><th>Usuario</th><th>Estado</th><th class="text-right">Acciones</th>
                                 </tr></thead>
@@ -1233,7 +1233,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
 
             return `
                 <tr>
-                    <td><strong>${fechaHora(r.fecha_movimiento)}</strong><span class="cell-secondary">${escapar(r.folio)}</span></td>
+                    <td><strong>${fechaHora(r.fecha_aplicacion || r.fecha_movimiento)}</strong><span class="cell-secondary">Operación: ${fechaHora(r.fecha_movimiento)} · ${escapar(r.folio)}</span></td>
                     <td><strong>${escapar(r.tipo_movimiento)}</strong><span class="cell-secondary">${escapar(r.tipo_codigo)}</span></td>
                     <td><strong>${escapar(r.producto)}</strong><span class="cell-secondary">${escapar(r.sku)} · ${escapar(unidad)}</span></td>
                     <td><strong>${escapar(r.almacen)}</strong><span class="cell-secondary">${escapar(r.almacen_codigo)}</span></td>
@@ -1538,7 +1538,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             const mov = delta >= 0 ? `+${numero(delta)}` : `−${numero(Math.abs(delta))}`;
             const clase = delta >= 0 ? 'number-cell--entry' : 'number-cell--exit';
             return `<tr>
-                <td><strong>${fechaHora(r.fecha_movimiento)}</strong><span class="cell-secondary">${escapar(r.folio)}</span></td>
+                <td><strong>${fechaHora(r.fecha_aplicacion || r.fecha_movimiento)}</strong><span class="cell-secondary">Operación: ${fechaHora(r.fecha_movimiento)} · ${escapar(r.folio)}</span></td>
                 <td><strong>${escapar(r.tipo_nombre)}</strong><span class="cell-secondary">${escapar(r.tipo_codigo)}</span></td>
                 <td><strong>${escapar(r.producto)}</strong><span class="cell-secondary">${escapar(r.sku)} · ${escapar(r.unidad_simbolo || r.unidad_base || '')}</span></td>
                 <td><strong>${escapar(r.almacen)}</strong><span class="cell-secondary">${escapar(r.almacen_codigo)}</span></td>

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 require_once __DIR__ . '/../inc/alertas_operativas.php';
 
 si_requerir_permiso(
@@ -36,6 +37,8 @@ if ($accion !== 'RESUMEN') {
 }
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     $usuarioId = (int) $_SESSION['usuario_id'];
 
     /*

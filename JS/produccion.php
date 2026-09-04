@@ -150,7 +150,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 <section class="module-card">
                     <div class="filters-grid recipe-filters">
                         <label class="field field--search"><span>Buscar</span><input type="search" id="recetaBuscar" maxlength="160" placeholder="Nombre, código, producto o SKU" autocomplete="off"></label>
-                        <label class="field"><span>Estado</span><select id="recetaEstado"><option value="ACTIVAS">Activas</option><option value="INACTIVAS">Inactivas</option><option value="TODAS">Todas</option></select></label>
+                        <label class="field"><span>Estado</span><select id="recetaEstado"><option value="TODAS" selected>Todas</option><option value="ACTIVAS">Activas</option><option value="INACTIVAS">Inactivas</option></select><small>Las recetas inactivas permanecen en el catálogo para conservar historial y poder reactivarlas.</small></label>
                         <label class="field"><span>Por página</span><select id="recetaPorPagina"><option value="6">6</option><option value="12" selected>12</option><option value="24">24</option><option value="48">48</option></select></label>
                     </div>
                 </section>
@@ -983,7 +983,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('vistaRecetas').hidden = !recetas;
         if ($('vistaEditor')) $('vistaEditor').hidden = true;
         if ($('vistaRecetaEditor')) $('vistaRecetaEditor').hidden = true;
-        if ($('btnNuevaProduccion')) $('btnNuevaProduccion').hidden = recetas;
+        if ($('btnNuevaProduccion')) {
+            $('btnNuevaProduccion').hidden = recetas;
+            $('btnNuevaProduccion').disabled = false;
+        }
         if (recetas) listarRecetas(); else listar();
         window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -1160,6 +1163,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('btnGuardarReceta').disabled = true;
         try {
             const r = await enviarReceta(p);
+            // La administración debe conservar visibles las recetas inactivas.
+            // El selector de Nueva producción continúa cargando únicamente recetas activas.
+            $('recetaEstado').value = 'TODAS';
+            estado.recetaPagina = 1;
             mensaje(r.mensaje, 'success');
             await cargarRecetasSelector();
             cerrarRecetaEditor();
@@ -1176,6 +1183,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             estado.recetaDetalleId = Number(id);
             const x = r.receta, ins = r.insumos || [], bal = r.balance || {};
             $('recetaDetalleTitulo').textContent = `${x.codigo} · ${x.nombre}`;
+            const usos = Number(x.producciones_vinculadas || 0);
+            const puedeEliminar = Boolean(x.puede_eliminar) && usos === 0;
             $('recetaDetalleContenido').innerHTML = `<div class="detail-summary-grid">
                 <div><span>Producto terminado</span><strong>${escapar(x.producto)}</strong></div>
                 <div><span>Referencia</span><strong>${escapar(x.referencia)}</strong></div>
@@ -1183,16 +1192,34 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 <div><span>Estado</span><strong>${Number(x.activo) === 1 ? 'ACTIVA' : 'INACTIVA'}</strong></div>
             </div>
             <div class="recipe-rule-note"><strong>Cómo se usa</strong><p>Las cantidades de abajo corresponden a <strong>${escapar(x.referencia)}</strong>. Si produces 100 presentaciones, cada ingrediente se multiplica por 100.</p></div>
+            ${usos > 0 ? `<div class="recipe-balance is-neutral"><strong>Historial protegido:</strong> esta receta está vinculada a ${usos} ${usos === 1 ? 'producción' : 'producciones'}. Puede editarse o quedar inactiva, pero no eliminarse porque forma parte de la trazabilidad.</div>` : '<div class="recipe-balance is-neutral">Esta receta todavía no ha sido utilizada en ninguna producción y puede eliminarse definitivamente.</div>'}
             ${x.observaciones ? `<div class="detail-note"><strong>Observaciones</strong><p>${escapar(x.observaciones)}</p></div>` : ''}
             <section class="detail-section"><h3>Ingredientes por ${escapar(x.referencia)}</h3><div class="recipe-detail-ingredients">${ins.map(i => `<div><div><strong>${escapar(i.producto)}</strong><small>${escapar(i.sku)}</small></div><span>${numero(i.cantidad)} ${escapar(i.presentacion || i.unidad || i.simbolo)} <small>= ${numero(i.cantidad_base)} ${escapar(i.simbolo_base)} base</small></span></div>`).join('')}</div></section>
             ${bal.mensaje ? `<div class="recipe-balance ${Number(bal.requiere_confirmacion) === 1 ? 'is-danger' : 'is-neutral'}">${escapar(bal.mensaje)}</div>` : ''}`;
-            $('recetaDetalleAcciones').innerHTML = PUEDE_REGISTRAR ? `${Number(x.activo) === 1 ? '<button type="button" class="btn-primary" data-receta-accion="usar">Usar en producción</button>' : ''}<button type="button" class="btn-secondary" data-receta-accion="editar">Editar</button>` : '';
+            $('recetaDetalleAcciones').innerHTML = PUEDE_REGISTRAR
+                ? `${Number(x.activo) === 1 ? '<button type="button" class="btn-primary" data-receta-accion="usar">Usar en producción</button>' : ''}<button type="button" class="btn-secondary" data-receta-accion="editar">Editar</button><button type="button" class="btn-danger" data-receta-accion="eliminar" ${puedeEliminar ? '' : 'disabled title="No se puede eliminar porque ya tiene producciones vinculadas"'}>Eliminar receta</button>`
+                : '';
             $('modalReceta').hidden = false;
             document.body.classList.add('modal-open');
         } catch (e) { mensaje(e.message, 'error'); }
     }
 
     function cerrarRecetaDetalle() { $('modalReceta').hidden = true; document.body.classList.remove('modal-open'); estado.recetaDetalleId = 0; }
+
+    async function eliminarReceta(id) {
+        if (!(Number(id) > 0)) return;
+        const confirmar = window.confirm('¿Eliminar definitivamente esta receta? Solo se permite cuando nunca ha sido utilizada en una producción. Esta acción no se puede deshacer.');
+        if (!confirmar) return;
+        try {
+            const r = await apiPost('RECETA_ELIMINAR', { id });
+            cerrarRecetaDetalle();
+            await cargarRecetasSelector();
+            await listarRecetas();
+            mensaje(r.mensaje || 'Receta eliminada correctamente.', 'success');
+        } catch (e) {
+            mensaje(e.message, 'error');
+        }
+    }
 
     async function editarReceta(id) {
         try {
@@ -1323,7 +1350,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('recetaSiguiente').addEventListener('click',()=>{if(estado.recetaPagina<estado.recetaPaginas){estado.recetaPagina++;listarRecetas();}});
         $('recetaCards').addEventListener('click',e=>{const b=e.target.closest('[data-ver-receta]');if(b)verReceta(Number(b.dataset.verReceta));});
         $('btnCerrarRecetaDetalle').addEventListener('click',cerrarRecetaDetalle);
-        $('recetaDetalleAcciones').addEventListener('click',e=>{const a=e.target.closest('[data-receta-accion]');if(!a)return;if(a.dataset.recetaAccion==='usar')usarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='editar')editarReceta(estado.recetaDetalleId);});
+        $('recetaDetalleAcciones').addEventListener('click',e=>{const a=e.target.closest('[data-receta-accion]');if(!a||a.disabled)return;if(a.dataset.recetaAccion==='usar')usarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='editar')editarReceta(estado.recetaDetalleId);if(a.dataset.recetaAccion==='eliminar')eliminarReceta(estado.recetaDetalleId);});
         if (PUEDE_REGISTRAR) {
             $('btnNuevaReceta').addEventListener('click',abrirRecetaEditor);
             $('btnVolverRecetas').addEventListener('click',cerrarRecetaEditor);

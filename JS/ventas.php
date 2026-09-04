@@ -50,7 +50,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 <div>
                     <p class="module-eyebrow">GESTIÓN COMERCIAL · SALIDA DE MERCANCÍA</p>
                     <h1>Ventas / Punto de venta</h1>
-                    <p>Confirma ventas directas o provenientes de cotización/apartado, descuenta inventario y conserva el movimiento en Kardex.</p>
+                    <p>Confirma ventas directas o provenientes de cotización/apartado, compromete inventario y registra en Kardex la salida física cuando realmente ocurre.</p>
                 </div>
                 <?php if ($puedeCrear): ?>
                     <button type="button" class="btn-primary" id="btnNuevaVenta">Nueva venta</button>
@@ -58,7 +58,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             </header>
 
             <div class="info-banner">
-                <strong>Flujo:</strong> la venta se valida nuevamente al confirmar. Una venta CONTADO queda liquidada en el momento; una venta CRÉDITO genera automáticamente su Cuenta por Cobrar. Si proviene de un apartado, primero libera esa reserva y después descuenta la existencia física, evitando un doble descuento.
+                <strong>Flujo:</strong> la venta se valida nuevamente al confirmar. Con validación QR activa, el inventario queda reservado hasta confirmar la salida física; sin QR, la salida se aplica de inmediato. Una venta CONTADO queda liquidada en el momento y una venta CRÉDITO genera automáticamente su Cuenta por Cobrar.
             </div>
 
             <div id="mensajePagina" class="module-message" hidden></div>
@@ -146,7 +146,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         <header class="modal-header">
             <div>
                 <h2 id="tituloModalVenta">Nueva venta</h2>
-                <p id="subtituloModalVenta">La existencia se descuenta únicamente al confirmar.</p>
+                <p id="subtituloModalVenta">Al confirmar se compromete inventario. Con QR queda reservado hasta la salida física; sin QR, la salida se aplica de inmediato.</p>
             </div>
             <button type="button" class="modal-close" data-cerrar-modal="modalVenta" aria-label="Cerrar">×</button>
         </header>
@@ -361,7 +361,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
 
     function estadoVisual(valor) {
         return ({
-            CONFIRMADA: ['Confirmada', 'success'], CANCELADA: ['Cancelada', 'danger'], BORRADOR: ['Borrador', 'neutral'],
+            CONFIRMADA: ['Confirmada', 'success'], PENDIENTE_SALIDA: ['Pendiente de salida', 'warning'], CANCELADA: ['Cancelada', 'danger'], BORRADOR: ['Borrador', 'neutral'],
             PAGADA: ['Pagada', 'success'], PENDIENTE: ['Pendiente', 'warning'], PARCIAL: ['Parcial', 'warning'],
             VENCIDA: ['Vencida', 'danger'], APLICADO: ['Aplicado', 'success'], CREDITO: ['Crédito', 'warning'], CONTADO: ['Contado', 'active']
         })[valor] || [valor || '—', 'neutral'];
@@ -717,7 +717,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 + '<td><strong>' + escapeHtml(v.folio) + '</strong><small class="cell-secondary">' + escapeHtml(v.moneda_codigo) + '</small></td>'
                 + '<td><strong>' + escapeHtml(v.cliente_nombre_snapshot || 'Público general') + '</strong><small class="cell-secondary">' + escapeHtml(v.cliente_codigo || '') + '</small></td>'
                 + '<td>' + fechaHora(v.fecha_venta) + '</td>'
-                + '<td>' + badge(v.estado) + '</td>'
+                + '<td>' + badge(v.estado_operativo || v.estado) + ((v.estado_operativo === 'PENDIENTE_SALIDA') ? '<small class="cell-secondary">Venta confirmada · inventario reservado</small>' : '') + '</td>'
                 + '<td>' + financiero + '</td>'
                 + '<td>' + Number(v.renglones || 0) + '</td>'
                 + '<td><strong>' + moneda(v.total, v.moneda_codigo, v.moneda_simbolo) + '</strong></td>'
@@ -740,7 +740,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('contenedorBuscarProductoVenta').hidden = false;
         $('bannerOrigen').hidden = true;
         $('tituloModalVenta').textContent = 'Nueva venta';
-        $('subtituloModalVenta').textContent = 'La existencia se descuenta únicamente al confirmar.';
+        $('subtituloModalVenta').textContent = 'Al confirmar se compromete inventario. Con QR queda reservado hasta la salida física; sin QR, la salida se aplica de inmediato.';
         $('textoOrigenLineasVenta').textContent = 'Agrega los productos de la venta. El stock mostrado es el disponible, no solamente el físico.';
         $('ventaAlmacen').innerHTML = opciones(estado.catalogos.almacenes, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMoneda').innerHTML = opciones(estado.catalogos.monedas, 'id', (x) => x.codigo + ' · ' + x.nombre);
@@ -1012,7 +1012,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 }
             }
         }
-        if (!window.confirm('Al confirmar se descontará inventario y se generará Kardex. ¿Deseas continuar?')) return;
+        if (!window.confirm('Al confirmar se comprometerá el inventario. Con validación QR, la mercancía quedará reservada hasta su salida física; sin QR, la salida se aplicará de inmediato. ¿Deseas continuar?')) return;
 
         const lineas = estado.origen === 'DIRECTO' ? estado.lineas.map((l) => ({
             producto_id: l.producto_id,
@@ -1070,10 +1070,17 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('tituloDetalleVenta').textContent = v.folio;
         $('subtituloDetalleVenta').textContent = (v.cliente_nombre_snapshot || 'Público general') + ' · ' + fechaHora(v.fecha_venta);
         const origen = v.apartado_folio ? 'Apartado ' + v.apartado_folio : (v.cotizacion_folio ? 'Cotización ' + v.cotizacion_folio : 'Venta directa');
-        $('resumenDetalleVenta').innerHTML = '<div><span>Estado</span><strong>' + badge(v.estado) + '</strong><small>' + escapeHtml(v.condicion_pago) + '</small></div>'
+        const estadoOperativo = v.estado_operativo || v.estado;
+        const detalleEstado = estadoOperativo === 'PENDIENTE_SALIDA'
+            ? 'Venta confirmada · mercancía reservada'
+            : escapeHtml(v.condicion_pago);
+        const textoInventario = estadoOperativo === 'PENDIENTE_SALIDA'
+            ? 'Salida física pendiente · aún no corresponde movimiento en Kardex'
+            : (r.movimiento ? 'Kardex ' + escapeHtml(r.movimiento.folio) : 'Sin movimiento físico de inventario');
+        $('resumenDetalleVenta').innerHTML = '<div><span>Estado</span><strong>' + badge(estadoOperativo) + '</strong><small>' + detalleEstado + '</small></div>'
             + '<div><span>Total</span><strong>' + moneda(v.total, v.moneda_codigo, v.moneda_simbolo) + '</strong><small>Descuento ' + moneda(v.descuento_total, v.moneda_codigo, v.moneda_simbolo) + '</small></div>'
             + '<div><span>Pagado / aplicado</span><strong>' + moneda(v.pagado_total, v.moneda_codigo, v.moneda_simbolo) + '</strong><small>Anticipos ' + moneda(v.importe_anticipado, v.moneda_codigo, v.moneda_simbolo) + '</small></div>'
-            + '<div><span>Origen</span><strong>' + escapeHtml(origen) + '</strong><small>' + (r.movimiento ? 'Kardex ' + escapeHtml(r.movimiento.folio) : 'Sin movimiento de inventario') + '</small></div>';
+            + '<div><span>Origen</span><strong>' + escapeHtml(origen) + '</strong><small>' + textoInventario + '</small></div>';
 
         $('tablaDetalleVentaProductos').innerHTML = (r.detalles || []).map((d) => '<tr>'
             + '<td><strong>' + escapeHtml(d.producto_nombre_snapshot) + '</strong><small class="cell-secondary">' + escapeHtml(d.sku_snapshot) + '</small></td>'
@@ -1102,7 +1109,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         }
 
         $('btnImprimirVenta').href = 'venta_imprimir.php?id=' + v.id;
-        if ($('btnCancelarVenta')) $('btnCancelarVenta').hidden = !puedeCancelar || v.estado !== 'CONFIRMADA';
+        if ($('btnCancelarVenta')) $('btnCancelarVenta').hidden = !puedeCancelar || v.estado !== 'CONFIRMADA' || Boolean(v.salida_confirmada_qr);
         mostrarMensaje('mensajeDetalleVenta', ''); abrirModal('modalDetalleVenta');
     }
 
@@ -1112,7 +1119,12 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         const motivo = window.prompt('Motivo de cancelación de la venta ' + v.folio + ':');
         if (motivo === null) return;
         if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalleVenta', 'El motivo debe tener al menos 5 caracteres.', 'error');
-        if (!window.confirm('La cancelación generará un reverso de inventario y conservará todo el historial. ¿Confirmas?')) return;
+        const avisoCancelacion = v.salida_pendiente_qr
+            ? 'La cancelación liberará la reserva pendiente. Como la mercancía todavía no salió físicamente, no se generará un reverso de salida. Todo el historial se conservará. ¿Confirmas?'
+            : (v.salida_fisica_aplicada
+                ? 'La cancelación revertirá la salida física de inventario y conservará todo el historial. ¿Confirmas?'
+                : 'La cancelación conservará todo el historial de la venta. ¿Confirmas?');
+        if (!window.confirm(avisoCancelacion)) return;
         $('btnCancelarVenta').disabled = true;
         try {
             const r = await apiPost('CANCELAR_VENTA', { venta_id: v.id, motivo: motivo.trim() });

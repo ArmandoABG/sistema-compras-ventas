@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('devoluciones.ver', true);
 
@@ -19,6 +20,8 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -247,6 +250,84 @@ function dev_listar_devoluciones(PDO $conexion): void
     ]);
 }
 
+/**
+ * Determina si la mercancía de una venta realmente salió y por tanto puede devolverse.
+ * QR pendiente siempre bloquea; para productos con control de inventario se exige SALIDA_VENTA aplicada.
+ */
+function dev_estado_salida_venta(PDO $conexion, int $ventaId): array
+{
+    $sufijoLock = $conexion->inTransaction() ? ' FOR UPDATE' : '';
+    $stmtPendiente = $conexion->prepare(
+        "SELECT id
+         FROM tokens_qr_venta
+         WHERE venta_id = :venta_id
+           AND activo = 1
+           AND usado_at IS NULL
+           AND revocado_at IS NULL
+         ORDER BY id DESC
+         LIMIT 1" . $sufijoLock
+    );
+    $stmtPendiente->execute([':venta_id' => $ventaId]);
+    $tokenPendienteId = (int) ($stmtPendiente->fetchColumn() ?: 0);
+
+    $stmtControl = $conexion->prepare(
+        "SELECT EXISTS(
+            SELECT 1
+            FROM ventas_detalle vd
+            INNER JOIN productos p ON p.id = vd.producto_id
+            WHERE vd.venta_id = :venta_id AND p.controla_inventario = 1
+         )"
+    );
+    $stmtControl->execute([':venta_id' => $ventaId]);
+    $requiereMovimiento = (bool) $stmtControl->fetchColumn();
+    $movimiento = $requiereMovimiento ? si_stock_movimiento_salida_venta($conexion, $ventaId, true) : null;
+
+    $stmtUsado = $conexion->prepare(
+        "SELECT id, usado_at
+         FROM tokens_qr_venta
+         WHERE venta_id = :venta_id
+           AND usado_at IS NOT NULL
+           AND revocado_at IS NULL
+         ORDER BY usado_at DESC, id DESC
+         LIMIT 1"
+    );
+    $stmtUsado->execute([':venta_id' => $ventaId]);
+    $qrUsado = $stmtUsado->fetch() ?: null;
+
+    if ($tokenPendienteId > 0) {
+        return [
+            'confirmada' => false,
+            'qr_pendiente' => true,
+            'token_qr_id' => $tokenPendienteId,
+            'requiere_movimiento' => $requiereMovimiento,
+            'movimiento_inventario_id' => $movimiento ? (int) $movimiento['id'] : null,
+            'usado_at' => null,
+            'mensaje' => 'La mercancía todavía está reservada y pendiente de salida por QR. Si no salió físicamente, utiliza la cancelación de venta; una devolución requiere una salida real.',
+        ];
+    }
+    if ($requiereMovimiento && !$movimiento) {
+        return [
+            'confirmada' => false,
+            'qr_pendiente' => false,
+            'token_qr_id' => $qrUsado ? (int) $qrUsado['id'] : null,
+            'requiere_movimiento' => true,
+            'movimiento_inventario_id' => null,
+            'usado_at' => $qrUsado['usado_at'] ?? null,
+            'mensaje' => 'La venta no tiene una SALIDA_VENTA aplicada. No se registró la devolución para evitar ingresar mercancía que no consta como salida física.',
+        ];
+    }
+
+    return [
+        'confirmada' => true,
+        'qr_pendiente' => false,
+        'token_qr_id' => $qrUsado ? (int) $qrUsado['id'] : null,
+        'requiere_movimiento' => $requiereMovimiento,
+        'movimiento_inventario_id' => $movimiento ? (int) $movimiento['id'] : null,
+        'usado_at' => $qrUsado['usado_at'] ?? null,
+        'mensaje' => 'Salida física confirmada.',
+    ];
+}
+
 /* =========================================================================
    BÚSQUEDA / PREPARACIÓN DE DEVOLUCIÓN DE CLIENTE
    ========================================================================= */
@@ -269,20 +350,16 @@ function dev_buscar_ventas(PDO $conexion): void
             COALESCE(v.cliente_nombre_snapshot, 'Público general') AS cliente,
             m.codigo AS moneda_codigo,
             m.simbolo AS moneda_simbolo,
-            tq.usado_at AS salida_qr_at,
-            COALESCE(dev.total_devuelto, 0) AS total_devuelto
-         FROM ventas v
-         INNER JOIN monedas m ON m.id = v.moneda_id
-         INNER JOIN tokens_qr_venta tq
-            ON tq.id = (
-                SELECT t2.id
+            (
+                SELECT MAX(t2.usado_at)
                 FROM tokens_qr_venta t2
                 WHERE t2.venta_id = v.id
                   AND t2.usado_at IS NOT NULL
                   AND t2.revocado_at IS NULL
-                ORDER BY t2.usado_at DESC, t2.id DESC
-                LIMIT 1
-            )
+            ) AS salida_qr_at,
+            COALESCE(dev.total_devuelto, 0) AS total_devuelto
+         FROM ventas v
+         INNER JOIN monedas m ON m.id = v.moneda_id
          LEFT JOIN (
             SELECT venta_id, SUM(total) AS total_devuelto
             FROM devoluciones_venta
@@ -290,6 +367,31 @@ function dev_buscar_ventas(PDO $conexion): void
             GROUP BY venta_id
          ) dev ON dev.venta_id = v.id
          WHERE v.estado = 'CONFIRMADA'
+           AND NOT EXISTS (
+                SELECT 1
+                FROM tokens_qr_venta tqp
+                WHERE tqp.venta_id = v.id
+                  AND tqp.activo = 1
+                  AND tqp.usado_at IS NULL
+                  AND tqp.revocado_at IS NULL
+           )
+           AND (
+                NOT EXISTS (
+                    SELECT 1
+                    FROM ventas_detalle vdc
+                    INNER JOIN productos pc ON pc.id = vdc.producto_id
+                    WHERE vdc.venta_id = v.id AND pc.controla_inventario = 1
+                )
+                OR EXISTS (
+                    SELECT 1
+                    FROM movimientos_inventario mis
+                    INNER JOIN tipos_movimiento_inventario tmis
+                      ON tmis.id = mis.tipo_movimiento_id AND tmis.codigo = 'SALIDA_VENTA'
+                    WHERE mis.origen_tipo = 'VENTA'
+                      AND mis.origen_id = v.id
+                      AND mis.estado = 'APLICADO'
+                )
+           )
            AND (v.folio LIKE :q1 OR COALESCE(v.cliente_nombre_snapshot, '') LIKE :q2)
            AND EXISTS (
                 SELECT 1
@@ -343,23 +445,12 @@ function dev_preparar_venta(PDO $conexion): void
         si_responder_json(false, 'La venta no existe o ya no está confirmada.', [], 409);
     }
 
-    $stmtQr = $conexion->prepare(
-        "SELECT id, usado_at, usado_by
-         FROM tokens_qr_venta
-         WHERE venta_id = :venta_id
-           AND usado_at IS NOT NULL
-           AND revocado_at IS NULL
-         ORDER BY usado_at DESC, id DESC
-         LIMIT 1"
-    );
-    $stmtQr->execute([':venta_id' => $ventaId]);
-    $qr = $stmtQr->fetch();
-
-    if (!$qr) {
+    $salida = dev_estado_salida_venta($conexion, $ventaId);
+    if (!$salida['confirmada']) {
         si_responder_json(
             false,
-            'La salida física de esta venta no está confirmada actualmente por QR. Si la mercancía no salió, utiliza la cancelación de venta; una devolución requiere una salida física confirmada.',
-            [],
+            $salida['mensaje'],
+            ['qr_pendiente' => $salida['qr_pendiente'], 'requiere_movimiento' => $salida['requiere_movimiento']],
             409
         );
     }
@@ -446,10 +537,7 @@ function dev_preparar_venta(PDO $conexion): void
 
     si_responder_json(true, 'Venta preparada para devolución.', [
         'venta' => $venta,
-        'salida_qr' => [
-            'token_id' => (int) $qr['id'],
-            'usado_at' => $qr['usado_at'],
-        ],
+        'salida_fisica' => $salida,
         'lineas' => $retornables,
         'finanzas' => $finanzas,
     ]);
@@ -700,24 +788,12 @@ function dev_registrar_devolucion_venta(PDO $conexion): void
         si_responder_json(true, 'La devolución ya había sido confirmada. No se duplicó la operación.', $repetida, 200);
     }
 
-    $stmtQr = $conexion->prepare(
-        "SELECT id, usado_at
-         FROM tokens_qr_venta
-         WHERE venta_id = :venta_id
-           AND usado_at IS NOT NULL
-           AND revocado_at IS NULL
-         ORDER BY usado_at DESC, id DESC
-         LIMIT 1
-         FOR UPDATE"
-    );
-    $stmtQr->execute([':venta_id' => $ventaId]);
-    $qr = $stmtQr->fetch();
-    if (!$qr) {
-        dev_cancelar(
-            $conexion,
-            'La salida física de esta venta no está confirmada por QR. No se registró la devolución.',
-            409
-        );
+    $salida = dev_estado_salida_venta($conexion, $ventaId);
+    if (!$salida['confirmada']) {
+        dev_cancelar($conexion, $salida['mensaje'], 409, [
+            'qr_pendiente' => $salida['qr_pendiente'],
+            'requiere_movimiento' => $salida['requiere_movimiento'],
+        ]);
     }
 
     $idsEntrada = [];

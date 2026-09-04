@@ -58,7 +58,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             </header>
 
             <section class="flow-notes" aria-label="Reglas del módulo">
-                <article><strong>Cliente</strong><span>Solo ventas con salida física confirmada por QR. La mercancía vuelve a existencia física.</span></article>
+                <article><strong>Cliente</strong><span>Solo ventas cuya salida física ya fue confirmada. La mercancía vuelve a existencia física.</span></article>
                 <article><strong>Proveedor</strong><span>Solo mercancía realmente recibida. Nunca se toma stock reservado para devolver.</span></article>
                 <article><strong>Finanzas</strong><span>Primero se compensa saldo pendiente; cualquier excedente queda como reembolso o reintegro.</span></article>
                 <article><strong>Historial</strong><span>La venta, compra, pagos, anticipos y movimientos originales permanecen intactos.</span></article>
@@ -153,7 +153,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 <div class="modal-backdrop" id="modalVenta" hidden>
     <section class="modal-card modal-card--return" role="dialog" aria-modal="true" aria-labelledby="tituloModalVenta">
         <header class="modal-header">
-            <div><small>DEVOLUCIÓN DE CLIENTE</small><h2 id="tituloModalVenta">Seleccionar venta</h2><p id="subtituloModalVenta">Busca una venta confirmada cuya salida física esté validada por QR.</p></div>
+            <div><small>DEVOLUCIÓN DE CLIENTE</small><h2 id="tituloModalVenta">Seleccionar venta</h2><p id="subtituloModalVenta">Busca una venta confirmada cuya salida física ya haya ocurrido.</p></div>
             <button type="button" class="modal-close" data-cerrar-modal="modalVenta" aria-label="Cerrar">×</button>
         </header>
         <div class="return-body">
@@ -164,7 +164,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <span>Buscar venta *</span>
                     <input type="search" id="buscarVentaOrigen" maxlength="180" placeholder="Folio o cliente" autocomplete="off">
                 </label>
-                <p class="picker-help">Solo aparecen ventas confirmadas, con salida QR vigente y con cantidad pendiente por devolver.</p>
+                <p class="picker-help">Solo aparecen ventas confirmadas cuya salida física ya ocurrió y que todavía tienen cantidad pendiente por devolver.</p>
                 <div id="resultadosVentas" class="document-results"><div class="empty-state">Escribe al menos 2 caracteres.</div></div>
             </section>
 
@@ -639,7 +639,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('btnCambiarVenta').hidden = true;
         $('btnGuardarVenta').hidden = true;
         $('tituloModalVenta').textContent = 'Seleccionar venta';
-        $('subtituloModalVenta').textContent = 'Busca una venta confirmada cuya salida física esté validada por QR.';
+        $('subtituloModalVenta').textContent = 'Busca una venta confirmada cuya salida física ya haya ocurrido.';
         $('motivoVenta').value = '';
         $('observacionesVenta').value = '';
         if ($('resolverVenta')) $('resolverVenta').checked = true;
@@ -669,7 +669,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             const r = await apiGet('BUSCAR_VENTAS', { q });
             const items = r.ventas || [];
             if (!items.length) {
-                $('resultadosVentas').innerHTML = '<div class="empty-state">No se encontraron ventas elegibles. Recuerda que la salida debe estar confirmada por QR.</div>';
+                $('resultadosVentas').innerHTML = '<div class="empty-state">No se encontraron ventas elegibles. La venta debe tener una salida física confirmada y cantidad pendiente por devolver.</div>';
                 return;
             }
             $('resultadosVentas').innerHTML = items.map((v) => '<button type="button" class="document-result" data-venta="' + Number(v.id) + '"><span><strong>' + escapeHtml(v.folio) + '</strong><small>' + escapeHtml(v.cliente) + ' · ' + fecha(v.fecha_venta) + '</small></span><span><strong>' + dinero(v.total_restante, v.moneda_simbolo, v.moneda_codigo) + '</strong><small>Pendiente por devolver</small></span></button>').join('');
@@ -690,7 +690,13 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             $('btnCambiarVenta').hidden = false;
             $('btnGuardarVenta').hidden = false;
             $('tituloModalVenta').textContent = r.venta.folio;
-            $('subtituloModalVenta').textContent = 'Salida QR confirmada el ' + (r.salida_qr.usado_at || '—') + '. La venta original no será eliminada ni reescrita.';
+            const salidaFisica = r.salida_fisica || r.salida_qr || {};
+            const textoSalida = salidaFisica.usado_at
+                ? 'Salida física confirmada por QR el ' + fecha(salidaFisica.usado_at) + '.'
+                : (salidaFisica.movimiento_inventario_id
+                    ? 'Salida física confirmada en inventario.'
+                    : 'Salida física confirmada.');
+            $('subtituloModalVenta').textContent = textoSalida + ' La venta original no será eliminada ni reescrita.';
             renderResumenVenta();
             renderLineasVenta();
             renderFinanzasVenta();

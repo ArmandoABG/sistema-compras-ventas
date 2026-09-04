@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 require_once __DIR__ . '/../inc/xlsx_simple.php';
 
 si_requerir_permiso('inventario.ver', true);
@@ -20,6 +21,8 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -590,7 +593,7 @@ function inv_listar_kardex(PDO $conexion): void
     $offset = ($pagina - 1) * $porPagina;
 
     $sql = inv_kardex_select_sql($from, $where)
-        . " ORDER BY mi.fecha_movimiento DESC, mi.id DESC, mid.renglon DESC, mid.id DESC
+        . " ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) DESC, mi.id DESC, mid.renglon DESC, mid.id DESC
             LIMIT :limite OFFSET :offset";
 
     $stmt = $conexion->prepare($sql);
@@ -708,6 +711,9 @@ function inv_kardex_select_sql(string $from, string $where): string
                 mi.id AS movimiento_id,
                 mi.folio,
                 mi.fecha_movimiento,
+                COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) AS fecha_aplicacion,
+                mi.aplicado_at,
+                mi.created_at AS movimiento_created_at,
                 mi.estado,
                 tmi.codigo AS tipo_codigo,
                 tmi.nombre AS tipo_movimiento,
@@ -907,7 +913,7 @@ function inv_exportar_kardex_csv(PDO $conexion): void
     $total = inv_kardex_total_exportacion($conexion, $from, $where, $params);
     inv_kardex_validar_limite_exportacion($total);
 
-    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY mi.fecha_movimiento ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
+    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
     inv_bind_params($stmt, $params);
     $stmt->execute();
 
@@ -935,7 +941,7 @@ function inv_exportar_kardex_xlsx(PDO $conexion): void
     $total = inv_kardex_total_exportacion($conexion, $from, $where, $params);
     inv_kardex_validar_limite_exportacion($total);
 
-    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY mi.fecha_movimiento ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
+    $stmt = $conexion->prepare(inv_kardex_select_sql($from, $where) . ' ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) ASC, mi.id ASC, mid.renglon ASC, mid.id ASC');
     inv_bind_params($stmt, $params);
     $stmt->execute();
     $filasDb = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1093,7 +1099,7 @@ function inv_kardex_validar_limite_exportacion(int $total): void
 
 function inv_kardex_export_headers(): array
 {
-    return ['Fecha', 'Folio movimiento', 'Estado', 'Tipo', 'Código tipo', 'SKU', 'Producto', 'Almacén', 'Código almacén', 'Entrada', 'Salida', 'Delta', 'Antes', 'Después', 'Unidad', 'Costo unitario base', 'Origen', 'Usuario', 'Motivo', 'Observaciones'];
+    return ['Fecha aplicación', 'Fecha operación', 'Folio movimiento', 'Estado', 'Tipo', 'Código tipo', 'SKU', 'Producto', 'Almacén', 'Código almacén', 'Entrada', 'Salida', 'Delta', 'Antes', 'Después', 'Unidad', 'Costo unitario base', 'Origen', 'Usuario', 'Motivo', 'Observaciones'];
 }
 
 function inv_kardex_export_row(array $fila): array
@@ -1105,7 +1111,8 @@ function inv_kardex_export_row(array $fila): array
 function inv_kardex_export_row_assoc(array $fila): array
 {
     return [
-        'fecha' => (string) ($fila['fecha_movimiento'] ?? ''),
+        'fecha_aplicacion' => (string) ($fila['fecha_aplicacion'] ?? $fila['fecha_movimiento'] ?? ''),
+        'fecha_operacion' => (string) ($fila['fecha_movimiento'] ?? ''),
         'folio' => (string) ($fila['folio'] ?? ''),
         'estado' => (string) ($fila['estado'] ?? ''),
         'tipo' => (string) ($fila['tipo_movimiento'] ?? ''),
@@ -1131,7 +1138,8 @@ function inv_kardex_export_row_assoc(array $fila): array
 function inv_kardex_xlsx_columnas(): array
 {
     return [
-        ['campo'=>'fecha','titulo'=>'Fecha','tipo'=>'texto','ancho'=>20],
+        ['campo'=>'fecha_aplicacion','titulo'=>'Fecha aplicación','tipo'=>'texto','ancho'=>20],
+        ['campo'=>'fecha_operacion','titulo'=>'Fecha operación','tipo'=>'texto','ancho'=>20],
         ['campo'=>'folio','titulo'=>'Folio movimiento','tipo'=>'texto','ancho'=>20],
         ['campo'=>'estado','titulo'=>'Estado','tipo'=>'texto','ancho'=>12],
         ['campo'=>'tipo','titulo'=>'Movimiento','tipo'=>'texto','ancho'=>25],
@@ -1300,7 +1308,9 @@ function inv_listar_ajustes_mermas(PDO $conexion): void
     $offset = ($pagina - 1) * $porPagina;
 
     $stmt = $conexion->prepare(
-        "SELECT mi.id movimiento_id, mi.folio, mi.fecha_movimiento, mi.estado, mi.motivo, mi.observaciones,
+        "SELECT mi.id movimiento_id, mi.folio, mi.fecha_movimiento,
+                COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) AS fecha_aplicacion,
+                mi.estado, mi.motivo, mi.observaciones,
                 mi.movimiento_revertido_id, t.codigo tipo_codigo, t.nombre tipo_nombre,
                 d.id detalle_id, d.cantidad_delta, d.existencia_antes, d.existencia_despues,
                 p.id producto_id, p.sku, p.nombre producto, ubase.nombre unidad_base, ubase.simbolo unidad_simbolo,
@@ -1308,7 +1318,7 @@ function inv_listar_ajustes_mermas(PDO $conexion): void
                 COALESCE(NULLIF(TRIM(CONCAT_WS(' ', usr.nombres, usr.apellido_paterno, usr.apellido_materno)), ''), usr.usuario, 'Sistema') usuario
          {$from}
          {$where}
-         ORDER BY mi.fecha_movimiento DESC, mi.id DESC, d.id DESC
+         ORDER BY COALESCE(mi.aplicado_at, mi.created_at, mi.fecha_movimiento) DESC, mi.id DESC, d.id DESC
          LIMIT :limite OFFSET :offset"
     );
     inv_bind_params($stmt, $params);

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('inventario.ver', true);
 
@@ -19,6 +20,8 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 

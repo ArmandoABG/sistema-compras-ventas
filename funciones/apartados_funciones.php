@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
@@ -75,6 +76,9 @@ try {
         case 'CANCELAR_APARTADO':
             apa_cancelar_apartado($conexion);
             break;
+        case 'REACTIVAR_APARTADO':
+            apa_reactivar_apartado($conexion);
+            break;
         default:
             si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
     }
@@ -85,6 +89,10 @@ try {
 
     $referencia = 'APA-' . date('Ymd-His');
     error_log('[' . $referencia . '][APARTADOS][PDO] ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
+
+    if ((string) $e->getCode() === '42S02' && str_contains($e->getMessage(), 'cancelaciones_apartado')) {
+        si_responder_json(false, 'Falta aplicar la actualización SQL de apartados financieros. Ejecuta SQL/PULIDO_FINAL_1_APARTADOS_FINANCIEROS_03-09-2026.sql antes de usar este módulo.', ['referencia' => $referencia], 503);
+    }
 
     if ((string) $e->getCode() === '23000') {
         si_responder_json(false, 'No fue posible guardar porque existe un dato duplicado o una relación inválida.', ['referencia' => $referencia], 409);
@@ -439,7 +447,8 @@ function apa_listar(PDO $conexion): void
              INNER JOIN clientes c ON c.id = a.cliente_id
              INNER JOIN monedas m ON m.id = a.moneda_id
              LEFT JOIN cotizaciones co ON co.id = a.cotizacion_id
-             LEFT JOIN usuarios u ON u.id = a.created_by";
+             LEFT JOIN usuarios u ON u.id = a.created_by
+             LEFT JOIN cancelaciones_apartado ca ON ca.apartado_id = a.id";
     $whereSql = 'WHERE ' . implode(' AND ', $where);
 
     $stmtTotal = $conexion->prepare("SELECT COUNT(*) {$from} {$whereSql}");
@@ -473,6 +482,11 @@ function apa_listar(PDO $conexion): void
             a.total,
             a.importe_anticipado,
             a.saldo_pendiente,
+            ca.id AS cancelacion_financiera_id,
+            ca.folio AS cancelacion_financiera_folio,
+            ca.retencion_pct AS cancelacion_retencion_pct,
+            ca.importe_retenido AS cancelacion_importe_retenido,
+            ca.importe_reembolsado AS cancelacion_importe_reembolsado,
             u.usuario AS creado_por,
             (SELECT COUNT(*) FROM apartados_detalle ad WHERE ad.apartado_id = a.id) AS renglones,
             (SELECT COUNT(*) FROM anticipos_apartado aa WHERE aa.apartado_id = a.id AND aa.estado = 'APLICADO') AS anticipos_aplicados,
@@ -492,6 +506,10 @@ function apa_listar(PDO $conexion): void
         apa_tipar_apartado($a);
         $a['renglones'] = (int) $a['renglones'];
         $a['anticipos_aplicados'] = (int) $a['anticipos_aplicados'];
+        $a['cancelacion_financiera_id'] = $a['cancelacion_financiera_id'] !== null ? (int) $a['cancelacion_financiera_id'] : null;
+        foreach (['cancelacion_retencion_pct', 'cancelacion_importe_retenido', 'cancelacion_importe_reembolsado'] as $campo) {
+            $a[$campo] = $a[$campo] !== null ? (float) $a[$campo] : null;
+        }
     }
     unset($a);
 
@@ -642,15 +660,38 @@ function apa_detalle(PDO $conexion): void
     }
     unset($ant);
 
+    $stmtCan = $conexion->prepare(
+        "SELECT
+            ca.id, ca.folio, ca.importe_anticipado, ca.retencion_pct, ca.importe_retenido,
+            ca.importe_reembolsado, ca.metodo_pago_id, ca.referencia, ca.motivo, ca.created_at,
+            mp.codigo AS metodo_codigo, mp.nombre AS metodo_nombre,
+            CONCAT_WS(' ', u.nombres, u.apellido_paterno, u.apellido_materno) AS registrado_por
+         FROM cancelaciones_apartado ca
+         LEFT JOIN metodos_pago mp ON mp.id = ca.metodo_pago_id
+         LEFT JOIN usuarios u ON u.id = ca.created_by
+         WHERE ca.apartado_id = :id
+         LIMIT 1"
+    );
+    $stmtCan->execute([':id' => $id]);
+    $cancelacion = $stmtCan->fetch() ?: null;
+    if ($cancelacion) {
+        $cancelacion['id'] = (int) $cancelacion['id'];
+        $cancelacion['metodo_pago_id'] = $cancelacion['metodo_pago_id'] !== null ? (int) $cancelacion['metodo_pago_id'] : null;
+        foreach (['importe_anticipado', 'retencion_pct', 'importe_retenido', 'importe_reembolsado'] as $campo) {
+            $cancelacion[$campo] = (float) $cancelacion[$campo];
+        }
+    }
+
     si_responder_json(true, 'Detalle del apartado cargado.', [
         'apartado' => $apartado,
         'detalles' => $detalles,
         'anticipos' => $anticipos,
+        'cancelacion' => $cancelacion,
     ]);
 }
 
 /* =========================================================================
-   CREACIÓN / ANTICIPOS / CANCELACIÓN
+   CREACIÓN / ANTICIPOS / REACTIVACIÓN / CANCELACIÓN
    ========================================================================= */
 
 function apa_crear(PDO $conexion): void
@@ -887,8 +928,14 @@ function apa_cancelar_anticipo(PDO $conexion): void
     if (!$apartado) {
         apa_cancelar($conexion, 'El apartado relacionado ya no existe.', 409);
     }
-    if ($apartado['estado'] === 'COMPLETADO') {
-        apa_cancelar($conexion, 'Un anticipo de un apartado COMPLETADO debe regularizarse desde el flujo de venta.', 409);
+    if ($apartado['estado'] !== 'ACTIVO') {
+        if ($apartado['estado'] === 'VENCIDO') {
+            apa_cancelar($conexion, 'El anticipo de un apartado VENCIDO se conserva intacto. Reactiva el apartado o cancélalo desde la liquidación del apartado para registrar correctamente reembolso y retención.', 409);
+        }
+        if ($apartado['estado'] === 'COMPLETADO') {
+            apa_cancelar($conexion, 'Un anticipo de un apartado COMPLETADO debe regularizarse desde el flujo de venta.', 409);
+        }
+        apa_cancelar($conexion, 'El anticipo ya no puede cancelarse individualmente desde el estado actual del apartado.', 409);
     }
 
     $conexion->prepare(
@@ -919,25 +966,109 @@ function apa_cancelar_apartado(PDO $conexion): void
         si_responder_json(false, 'Captura un motivo de cancelación de al menos 5 caracteres.', ['campo' => 'motivo'], 422);
     }
 
+    $retencionPct = apa_decimal($_POST['retencion_pct'] ?? 0, 'porcentaje de retención', 0.0, 100.0);
+    $metodoReembolsoId = apa_entero_rango($_POST['metodo_reembolso_id'] ?? 0, 0, PHP_INT_MAX, 0);
+    $referenciaReembolso = apa_nullable($_POST['referencia_reembolso'] ?? null, 120);
+
     $conexion->beginTransaction();
     $apartado = apa_bloquear_apartado($conexion, $apartadoId);
     if (!$apartado) {
         apa_cancelar($conexion, 'El apartado ya no existe.', 404);
     }
+
+    $stmtExistente = $conexion->prepare("SELECT id, folio, importe_anticipado, retencion_pct, importe_retenido, importe_reembolsado FROM cancelaciones_apartado WHERE apartado_id = :id LIMIT 1 FOR UPDATE");
+    $stmtExistente->execute([':id' => $apartadoId]);
+    $cancelacionExistente = $stmtExistente->fetch();
+    if ($apartado['estado'] === 'CANCELADO' && $cancelacionExistente) {
+        $conexion->commit();
+        si_responder_json(true, 'El apartado ya estaba cancelado y su liquidación financiera permanece registrada.', [
+            'cancelacion_id' => (int) $cancelacionExistente['id'],
+            'folio_cancelacion' => (string) $cancelacionExistente['folio'],
+            'importe_anticipado' => (float) $cancelacionExistente['importe_anticipado'],
+            'retencion_pct' => (float) $cancelacionExistente['retencion_pct'],
+            'importe_retenido' => (float) $cancelacionExistente['importe_retenido'],
+            'importe_reembolsado' => (float) $cancelacionExistente['importe_reembolsado'],
+            'ticket_url' => 'apartado_cancelacion_imprimir.php?id=' . (int) $cancelacionExistente['id'],
+        ]);
+    }
     if (!in_array($apartado['estado'], ['ACTIVO', 'VENCIDO'], true)) {
         apa_cancelar($conexion, 'Este apartado ya no puede cancelarse desde este flujo.', 409);
+    }
+    if ($cancelacionExistente) {
+        apa_cancelar($conexion, 'Ya existe una liquidación financiera para este apartado. Revisa la integridad antes de continuar.', 409);
+    }
+
+    $stmtVenta = $conexion->prepare("SELECT id, folio FROM ventas WHERE apartado_id = :id LIMIT 1 FOR UPDATE");
+    $stmtVenta->execute([':id' => $apartadoId]);
+    if ($venta = $stmtVenta->fetch()) {
+        apa_cancelar($conexion, 'El apartado ya está relacionado con la venta ' . $venta['folio'] . ' y no puede cancelarse por esta vía.', 409);
     }
 
     $stmtAnt = $conexion->prepare("SELECT COALESCE(SUM(importe), 0) FROM anticipos_apartado WHERE apartado_id = :id AND estado = 'APLICADO'");
     $stmtAnt->execute([':id' => $apartadoId]);
-    $anticiposAplicados = (float) $stmtAnt->fetchColumn();
-    if ($anticiposAplicados > 0.0001) {
-        apa_cancelar($conexion, 'El apartado tiene anticipos aplicados. Cancela o regulariza primero esos anticipos para no perder trazabilidad financiera.', 409, ['importe_anticipado' => $anticiposAplicados]);
+    $anticiposAplicados = round((float) $stmtAnt->fetchColumn(), 4);
+    $anticipadoCabecera = round((float) $apartado['importe_anticipado'], 4);
+    if (abs($anticiposAplicados - $anticipadoCabecera) > 0.0001) {
+        apa_cancelar($conexion, 'Los anticipos aplicados no coinciden con el total anticipado del apartado. No se canceló nada para proteger la trazabilidad financiera.', 409, [
+            'anticipos_aplicados' => $anticiposAplicados,
+            'importe_anticipado' => $anticipadoCabecera,
+        ]);
+    }
+
+    if ($anticiposAplicados <= 0.0001) {
+        $retencionPct = 0.0;
+    }
+    $importeRetenido = round($anticiposAplicados * ($retencionPct / 100), 4);
+    $importeReembolso = round(max(0.0, $anticiposAplicados - $importeRetenido), 4);
+
+    $metodo = null;
+    if ($importeReembolso > 0.0001) {
+        if ($metodoReembolsoId <= 0) {
+            apa_cancelar($conexion, 'Selecciona el método con el que se devolverá el dinero al cliente.', 422, ['campo' => 'metodo_reembolso_id']);
+        }
+        $metodo = apa_metodo_pago($conexion, $metodoReembolsoId);
+        if (!$metodo) {
+            apa_cancelar($conexion, 'El método de reembolso ya no está disponible.', 409, ['campo' => 'metodo_reembolso_id']);
+        }
+        if ((int) $metodo['requiere_referencia'] === 1 && ($referenciaReembolso === null || $referenciaReembolso === '')) {
+            apa_cancelar($conexion, 'Captura la referencia del reembolso para ' . $metodo['nombre'] . '.', 422, ['campo' => 'referencia_reembolso']);
+        }
+    } else {
+        $metodoReembolsoId = 0;
+        $referenciaReembolso = null;
     }
 
     if ($apartado['estado'] === 'ACTIVO') {
         apa_liberar_reserva_apartado($conexion, $apartadoId);
     }
+
+    $folioTmp = 'TMP-CAN-APA-' . bin2hex(random_bytes(8));
+    $stmtCan = $conexion->prepare(
+        "INSERT INTO cancelaciones_apartado
+            (folio, apartado_id, cliente_id, moneda_id, importe_anticipado, retencion_pct,
+             importe_retenido, importe_reembolsado, metodo_pago_id, referencia, motivo, created_by)
+         VALUES
+            (:folio, :apartado_id, :cliente_id, :moneda_id, :anticipado, :retencion_pct,
+             :retenido, :reembolsado, :metodo_id, :referencia, :motivo, :usuario)"
+    );
+    $stmtCan->execute([
+        ':folio' => $folioTmp,
+        ':apartado_id' => $apartadoId,
+        ':cliente_id' => (int) $apartado['cliente_id'],
+        ':moneda_id' => (int) $apartado['moneda_id'],
+        ':anticipado' => $anticiposAplicados,
+        ':retencion_pct' => round($retencionPct, 4),
+        ':retenido' => $importeRetenido,
+        ':reembolsado' => $importeReembolso,
+        ':metodo_id' => $metodoReembolsoId > 0 ? $metodoReembolsoId : null,
+        ':referencia' => $referenciaReembolso,
+        ':motivo' => $motivo,
+        ':usuario' => (int) $_SESSION['usuario_id'],
+    ]);
+    $cancelacionId = (int) $conexion->lastInsertId();
+    $folioCancelacion = 'CAN-APA-' . str_pad((string) $cancelacionId, 7, '0', STR_PAD_LEFT);
+    $conexion->prepare("UPDATE cancelaciones_apartado SET folio = :folio WHERE id = :id")
+        ->execute([':folio' => $folioCancelacion, ':id' => $cancelacionId]);
 
     $conexion->prepare(
         "UPDATE apartados
@@ -949,9 +1080,131 @@ function apa_cancelar_apartado(PDO $conexion): void
         ':id' => $apartadoId,
     ]);
 
-    apa_auditar($conexion, 'CANCELAR', 'apartados', $apartadoId, 'Se canceló el apartado ' . $apartado['folio'] . '.', ['estado' => $apartado['estado']], ['estado' => 'CANCELADO', 'motivo' => $motivo]);
+    apa_auditar(
+        $conexion,
+        'CANCELAR',
+        'apartados',
+        $apartadoId,
+        'Se canceló el apartado ' . $apartado['folio'] . ' y se registró su liquidación financiera ' . $folioCancelacion . '.',
+        ['estado' => $apartado['estado'], 'importe_anticipado' => $anticiposAplicados],
+        [
+            'estado' => 'CANCELADO',
+            'motivo' => $motivo,
+            'folio_cancelacion' => $folioCancelacion,
+            'retencion_pct' => round($retencionPct, 4),
+            'importe_retenido' => $importeRetenido,
+            'importe_reembolsado' => $importeReembolso,
+            'metodo_reembolso' => $metodo['codigo'] ?? null,
+            'referencia_reembolso' => $referenciaReembolso,
+        ]
+    );
+    apa_auditar(
+        $conexion,
+        'REEMBOLSO_APARTADO',
+        'cancelaciones_apartado',
+        $cancelacionId,
+        'Se registró la liquidación financiera ' . $folioCancelacion . ' del apartado ' . $apartado['folio'] . '.',
+        null,
+        [
+            'apartado_id' => $apartadoId,
+            'cliente_id' => (int) $apartado['cliente_id'],
+            'importe_anticipado' => $anticiposAplicados,
+            'retencion_pct' => round($retencionPct, 4),
+            'importe_retenido' => $importeRetenido,
+            'importe_reembolsado' => $importeReembolso,
+            'metodo_reembolso' => $metodo['codigo'] ?? null,
+            'referencia_reembolso' => $referenciaReembolso,
+        ]
+    );
+
     $conexion->commit();
-    si_responder_json(true, 'Apartado cancelado y reserva liberada correctamente.');
+    $mensaje = 'Apartado cancelado correctamente.';
+    if ($anticiposAplicados > 0.0001) {
+        $mensaje .= ' Se registró un reembolso de ' . number_format($importeReembolso, 2, '.', ',')
+            . ' y una retención de ' . number_format($importeRetenido, 2, '.', ',') . '.';
+    }
+    si_responder_json(true, $mensaje, [
+        'cancelacion_id' => $cancelacionId,
+        'folio_cancelacion' => $folioCancelacion,
+        'importe_anticipado' => $anticiposAplicados,
+        'retencion_pct' => round($retencionPct, 4),
+        'importe_retenido' => $importeRetenido,
+        'importe_reembolsado' => $importeReembolso,
+        'ticket_url' => 'apartado_cancelacion_imprimir.php?id=' . $cancelacionId,
+    ]);
+}
+
+function apa_reactivar_apartado(PDO $conexion): void
+{
+    // Primero garantiza que cualquier reserva expirada haya sido liberada por la regla central.
+    apa_procesar_vencidos($conexion);
+
+    $apartadoId = apa_id($_POST['apartado_id'] ?? null, 'apartado');
+    $reservadoHasta = apa_fecha_requerida($_POST['reservado_hasta'] ?? null, 'nueva fecha límite de reserva');
+    $limite = $reservadoHasta . ' 23:59:59';
+    if (strtotime($limite) <= time()) {
+        si_responder_json(false, 'La nueva fecha de reserva debe terminar después del momento actual.', ['campo' => 'reservado_hasta'], 422);
+    }
+
+    $conexion->beginTransaction();
+    $apartado = apa_bloquear_apartado($conexion, $apartadoId);
+    if (!$apartado) {
+        apa_cancelar($conexion, 'El apartado ya no existe.', 404);
+    }
+    if ($apartado['estado'] !== 'VENCIDO') {
+        apa_cancelar($conexion, 'Solo un apartado VENCIDO puede reactivarse.', 409);
+    }
+
+    $stmtCan = $conexion->prepare("SELECT id FROM cancelaciones_apartado WHERE apartado_id = :id LIMIT 1 FOR UPDATE");
+    $stmtCan->execute([':id' => $apartadoId]);
+    if ($stmtCan->fetchColumn()) {
+        apa_cancelar($conexion, 'El apartado ya tiene una liquidación de cancelación y no puede reactivarse.', 409);
+    }
+
+    $stmtVenta = $conexion->prepare("SELECT id, folio FROM ventas WHERE apartado_id = :id LIMIT 1 FOR UPDATE");
+    $stmtVenta->execute([':id' => $apartadoId]);
+    if ($venta = $stmtVenta->fetch()) {
+        apa_cancelar($conexion, 'El apartado ya está relacionado con la venta ' . $venta['folio'] . ' y no puede reactivarse.', 409);
+    }
+
+    $stmtDet = $conexion->prepare(
+        "SELECT ad.almacen_id, ad.producto_id, ad.producto_nombre_snapshot, ad.cantidad_base
+         FROM apartados_detalle ad
+         INNER JOIN productos p ON p.id = ad.producto_id
+         WHERE ad.apartado_id = :id
+           AND p.controla_inventario = 1
+         ORDER BY ad.renglon ASC, ad.id ASC"
+    );
+    $stmtDet->execute([':id' => $apartadoId]);
+    $detalles = $stmtDet->fetchAll();
+    if ($detalles) {
+        $reservas = apa_agrupar_reservas($detalles);
+        apa_validar_y_reservar($conexion, $reservas);
+    }
+
+    $conexion->prepare(
+        "UPDATE apartados
+         SET estado = 'ACTIVO', reservado_hasta = :reservado_hasta,
+             motivo_cancelacion = NULL, cancelado_at = NULL, cancelado_by = NULL
+         WHERE id = :id"
+    )->execute([':reservado_hasta' => $limite, ':id' => $apartadoId]);
+
+    apa_auditar(
+        $conexion,
+        'REACTIVAR',
+        'apartados',
+        $apartadoId,
+        'Se reactivó el apartado ' . $apartado['folio'] . ' y se restauró su reserva de inventario.',
+        ['estado' => 'VENCIDO', 'reservado_hasta' => $apartado['reservado_hasta']],
+        ['estado' => 'ACTIVO', 'reservado_hasta' => $limite, 'importe_anticipado' => (float) $apartado['importe_anticipado']]
+    );
+
+    $conexion->commit();
+    si_responder_json(true, 'Apartado reactivado correctamente. El anticipo se conservó y la mercancía volvió a quedar reservada.', [
+        'apartado_id' => $apartadoId,
+        'reservado_hasta' => $limite,
+        'importe_anticipado' => (float) $apartado['importe_anticipado'],
+    ]);
 }
 
 /* =========================================================================
@@ -1146,82 +1399,58 @@ function apa_validar_y_reservar(PDO $conexion, array $reservas): void
 function apa_liberar_reserva_apartado(PDO $conexion, int $apartadoId): void
 {
     $stmt = $conexion->prepare(
-        "SELECT almacen_id, producto_id, SUM(cantidad_base) AS cantidad_base
-         FROM apartados_detalle
-         WHERE apartado_id = :apartado_id
-         GROUP BY almacen_id, producto_id"
+        "SELECT ad.almacen_id, ad.producto_id, p.nombre AS producto_nombre, SUM(ad.cantidad_base) AS cantidad_base
+         FROM apartados_detalle ad
+         INNER JOIN productos p ON p.id = ad.producto_id
+         WHERE ad.apartado_id = :apartado_id
+           AND p.controla_inventario = 1
+         GROUP BY ad.almacen_id, ad.producto_id, p.nombre
+         ORDER BY ad.almacen_id ASC, ad.producto_id ASC"
     );
     $stmt->execute([':apartado_id' => $apartadoId]);
     $reservas = $stmt->fetchAll();
-    usort($reservas, static function (array $a, array $b): int {
-        return [(int) $a['almacen_id'], (int) $a['producto_id']] <=> [(int) $b['almacen_id'], (int) $b['producto_id']];
-    });
-
-    $lock = $conexion->prepare(
-        "SELECT id, cantidad_reservada
-         FROM existencias_almacen
-         WHERE almacen_id = :almacen_id AND producto_id = :producto_id
-         FOR UPDATE"
-    );
-    $update = $conexion->prepare("UPDATE existencias_almacen SET cantidad_reservada = :cantidad WHERE id = :id");
 
     foreach ($reservas as $r) {
-        $lock->execute([':almacen_id' => (int) $r['almacen_id'], ':producto_id' => (int) $r['producto_id']]);
-        $existencia = $lock->fetch();
-        if (!$existencia) {
-            continue;
+        $existencia = si_stock_bloquear_existencia($conexion, (int) $r['almacen_id'], (int) $r['producto_id']);
+        $reservada = (float) $existencia['cantidad_reservada'];
+        $cantidad = (float) $r['cantidad_base'];
+        if ($reservada + 0.000001 < $cantidad) {
+            apa_cancelar($conexion, 'La reserva del apartado ya no coincide con el inventario para ' . $r['producto_nombre'] . '. No se liberó nada para evitar afectar otras reservas.', 409, [
+                'producto_id' => (int) $r['producto_id'],
+                'reservado_actual' => round($reservada, 6),
+                'requerido_liberar' => round($cantidad, 6),
+            ]);
         }
-        $nuevo = max(0.0, round((float) $existencia['cantidad_reservada'] - (float) $r['cantidad_base'], 6));
-        $update->execute([':cantidad' => $nuevo, ':id' => (int) $existencia['id']]);
+        $conexion->prepare("UPDATE existencias_almacen SET cantidad_reservada = :cantidad WHERE id = :id")
+            ->execute([
+                ':cantidad' => round($reservada - $cantidad, 6),
+                ':id' => (int) $existencia['id'],
+            ]);
     }
 }
 
 function apa_procesar_vencidos(PDO $conexion): void
 {
-    $ids = $conexion->query(
-        "SELECT id
-         FROM apartados
-         WHERE estado = 'ACTIVO'
-           AND reservado_hasta IS NOT NULL
-           AND reservado_hasta < NOW()
-         ORDER BY reservado_hasta ASC, id ASC
-         LIMIT 100"
-    )->fetchAll(PDO::FETCH_COLUMN);
+    // Procesa todos los vencidos por lotes sin mezclar aquí otras tareas de mantenimiento.
+    do {
+        $procesados = si_stock_liberar_apartados_vencidos($conexion, 500);
+    } while ($procesados === 500);
+}
 
-    if (!$ids) {
-        return;
+function apa_metodo_pago(PDO $conexion, int $id): ?array
+{
+    if ($id <= 0) {
+        return null;
     }
-
-    $propia = !$conexion->inTransaction();
-    if ($propia) {
-        $conexion->beginTransaction();
+    $stmt = $conexion->prepare("SELECT id, codigo, nombre, requiere_referencia FROM metodos_pago WHERE id = :id AND activo = 1 LIMIT 1");
+    $stmt->execute([':id' => $id]);
+    $fila = $stmt->fetch();
+    if (!$fila) {
+        return null;
     }
-
-    try {
-        foreach ($ids as $idRaw) {
-            $id = (int) $idRaw;
-            $stmt = $conexion->prepare("SELECT id, folio, estado, reservado_hasta FROM apartados WHERE id = :id FOR UPDATE");
-            $stmt->execute([':id' => $id]);
-            $apartado = $stmt->fetch();
-            if (!$apartado || $apartado['estado'] !== 'ACTIVO' || !$apartado['reservado_hasta'] || strtotime((string) $apartado['reservado_hasta']) >= time()) {
-                continue;
-            }
-
-            apa_liberar_reserva_apartado($conexion, $id);
-            $conexion->prepare("UPDATE apartados SET estado = 'VENCIDO' WHERE id = :id AND estado = 'ACTIVO'")
-                ->execute([':id' => $id]);
-
-            apa_auditar_sistema($conexion, 'APARTADO_VENCIDO_AUTOMATICO', 'apartados', $id, 'El apartado ' . $apartado['folio'] . ' venció y su reserva de inventario fue liberada.', ['estado' => 'ACTIVO'], ['estado' => 'VENCIDO']);
-        }
-        if ($propia) {
-            $conexion->commit();
-        }
-    } catch (Throwable $e) {
-        if ($propia && $conexion->inTransaction()) {
-            $conexion->rollBack();
-        }
-        throw $e;
-    }
+    $fila['id'] = (int) $fila['id'];
+    $fila['requiere_referencia'] = (int) $fila['requiere_referencia'];
+    return $fila;
 }
 
 function apa_insertar_anticipo(PDO $conexion, int $apartadoId, float $importe, int $metodoId, ?string $referencia): int
@@ -1230,9 +1459,7 @@ function apa_insertar_anticipo(PDO $conexion, int $apartadoId, float $importe, i
         apa_cancelar($conexion, 'Selecciona un método de pago para el anticipo.', 422);
     }
 
-    $stmtMetodo = $conexion->prepare("SELECT id, nombre, requiere_referencia FROM metodos_pago WHERE id = :id AND activo = 1 LIMIT 1");
-    $stmtMetodo->execute([':id' => $metodoId]);
-    $metodo = $stmtMetodo->fetch();
+    $metodo = apa_metodo_pago($conexion, $metodoId);
     if (!$metodo) {
         apa_cancelar($conexion, 'El método de pago ya no está disponible.', 409);
     }

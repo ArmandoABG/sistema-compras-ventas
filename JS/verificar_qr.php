@@ -49,12 +49,16 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                 <div>
                     <p class="module-eyebrow">TRAZABILIDAD · CONTROL DE SALIDA</p>
                     <h1>Verificar QR</h1>
-                    <p>Consulta primero la venta. La salida solo se registra cuando un usuario la confirma expresamente.</p>
+                    <p>Con QR habilitado, la salida física se registra al confirmarla aquí. Si el Administrador deshabilita QR, las ventas aplican su salida directamente al confirmarse.</p>
+                </div>
+                <div class="qr-scan-actions" id="controlValidacionQr">
+                    <span class="status-badge status-badge--neutral" id="estadoValidacionQr">Consultando configuración…</span>
+                    <button type="button" class="btn-secondary" id="btnCambiarValidacionQr" hidden>Configurar QR</button>
                 </div>
             </header>
 
             <div class="info-banner">
-                <strong>Flujo:</strong> escanear o buscar → revisar venta y productos → confirmar salida o registrar rechazo. Consultar un QR por sí solo no consume el código.
+                <strong>Flujo con QR habilitado:</strong> escanear o buscar → revisar venta y productos → confirmar salida o registrar rechazo. Consultar un QR por sí solo no consume el código.
             </div>
 
             <div id="mensajePagina" class="module-message" hidden></div>
@@ -144,7 +148,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
                             <div class="qr-admin-heading">
                                 <div>
                                     <strong>Corrección administrativa</strong>
-                                    <p>Solo un Administrador puede rehabilitar un QR marcado por error como salida. La confirmación anterior queda cancelada en el historial y la acción se registra en Auditoría.</p>
+                                    <p>Solo un Administrador puede rehabilitar un QR marcado por error como salida. La salida física se revierte, la mercancía vuelve a quedar reservada, la confirmación anterior se cancela en el historial y todo queda en Auditoría.</p>
                                 </div>
                             </div>
                             <label class="field">
@@ -204,7 +208,9 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         codigoActual: '',
         puedeConfirmar: false,
         puedeRechazar: false,
-        puedeRehabilitar: false
+        puedeRehabilitar: false,
+        qrHabilitado: true,
+        puedeConfigurarQr: false
     };
 
     function escapeHtml(v) {
@@ -255,8 +261,51 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
             $('kpiIncidencias').textContent = r.kpis.incidencias_hoy;
             $('kpiTokensActivos').textContent = r.kpis.tokens_activos;
             $('kpiTokensUsados').textContent = r.kpis.tokens_usados;
-            if (!r.habilitado) mostrarMensaje('mensajePagina', 'La validación QR está deshabilitada en configuración.', 'warning');
+
+            estado.qrHabilitado = Boolean(r.habilitado);
+            estado.puedeConfigurarQr = Boolean(r.puede_configurar);
+            const badgeConfig = $('estadoValidacionQr');
+            badgeConfig.textContent = estado.qrHabilitado ? 'Validación QR habilitada' : 'Validación QR deshabilitada';
+            badgeConfig.className = 'status-badge status-badge--' + (estado.qrHabilitado ? 'success' : 'warning');
+
+            const btnConfig = $('btnCambiarValidacionQr');
+            btnConfig.hidden = !estado.puedeConfigurarQr;
+            btnConfig.textContent = estado.qrHabilitado ? 'Deshabilitar QR' : 'Habilitar QR';
+
+            $('codigoQr').disabled = !estado.qrHabilitado;
+            $('btnVerificar').disabled = !estado.qrHabilitado;
+            $('btnFotoQr').disabled = !estado.qrHabilitado;
+            if (!estado.qrHabilitado) {
+                ocultarDecisiones();
+            }
         } catch (e) { mostrarMensaje('mensajePagina', e.message, 'error'); }
+    }
+
+    async function cambiarValidacionQr() {
+        if (!estado.puedeConfigurarQr) return;
+        const habilitar = !estado.qrHabilitado;
+        const aviso = habilitar
+            ? '¿Habilitar la validación QR? Las nuevas ventas confirmadas quedarán reservadas hasta que su salida física sea autorizada en este módulo.'
+            : '¿Deshabilitar la validación QR? IMPORTANTE: todas las ventas que hoy estén pendientes de QR aplicarán su salida física inmediatamente, sus reservas se consumirán y sus QR pendientes quedarán revocados. Las nuevas ventas también descontarán inventario al confirmarse.';
+        if (!window.confirm(aviso)) return;
+
+        const btn = $('btnCambiarValidacionQr');
+        btn.disabled = true;
+        try {
+            const r = await apiPost('CAMBIAR_VALIDACION_QR', { habilitado: habilitar ? 1 : 0 });
+            mostrarMensaje('mensajePagina', r.mensaje, 'success');
+            await Promise.all([cargarResumen(), cargarHistorial()]);
+            if (!r.habilitado) {
+                estado.codigoActual = '';
+                $('codigoQr').value = '';
+                $('resultadoContenido').hidden = true;
+                $('resultadoVacio').hidden = false;
+            }
+        } catch (e) {
+            mostrarMensaje('mensajePagina', e.message, 'error');
+        } finally {
+            btn.disabled = false;
+        }
     }
 
     function ocultarDecisiones() {
@@ -347,7 +396,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
 
     async function confirmarSalida() {
         if (!estado.codigoActual || !estado.puedeConfirmar) return;
-        if (!window.confirm('¿Confirmar la salida física de esta venta? Después de confirmar, el QR no podrá utilizarse para otra salida.')) return;
+        if (!window.confirm('¿Confirmar la salida física de esta venta? Se consumirá la reserva correspondiente y se registrará la salida en Kardex. Después, el QR no podrá utilizarse para otra salida.')) return;
         $('btnConfirmarSalida').disabled = true;
         $('btnMostrarRechazo').disabled = true;
         try {
@@ -382,7 +431,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         if (!estado.codigoActual || !estado.puedeRehabilitar) return;
         const motivo = $('motivoRehabilitar').value.trim();
         if (motivo.length < 5) return mostrarMensaje('mensajePagina', 'Escribe un motivo de rehabilitación de al menos 5 caracteres.', 'error');
-        if (!window.confirm('¿Rehabilitar este QR? La confirmación de salida anterior quedará cancelada en el historial y la venta podrá volver a confirmarse físicamente. Esta corrección quedará registrada en Auditoría.')) return;
+        if (!window.confirm('¿Rehabilitar este QR? Se revertirá la salida física anterior, la mercancía volverá a quedar reservada y la confirmación anterior quedará cancelada en el historial. Después la venta podrá confirmarse físicamente otra vez. Esta corrección quedará registrada en Auditoría.')) return;
         $('btnRehabilitarQr').disabled = true;
         try {
             const r = await apiPost('REHABILITAR_QR', { codigo: estado.codigoActual, motivo });
@@ -518,6 +567,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     $('btnGuardarRechazo').addEventListener('click', rechazarSalida);
     $('btnCancelarRechazo').addEventListener('click', () => { $('panelRechazo').hidden = true; $('motivoRechazo').value = ''; });
     $('btnRehabilitarQr').addEventListener('click', rehabilitarQr);
+    $('btnCambiarValidacionQr').addEventListener('click', cambiarValidacionQr);
     $('btnCancelarRehabilitar').addEventListener('click', () => { $('panelRehabilitar').hidden = true; $('motivoRehabilitar').value = ''; });
     $('btnFotoQr').addEventListener('click', () => $('archivoQr').click());
     $('archivoQr').addEventListener('change', () => decodificarArchivo($('archivoQr').files && $('archivoQr').files[0]));
@@ -528,8 +578,8 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     $('filtroBuscar').addEventListener('input', () => { clearTimeout(timerBuscar); timerBuscar=setTimeout(() => {estado.pagina=1;cargarHistorial();},350); });
 
     Promise.all([cargarResumen(), cargarHistorial()]).then(() => {
-        if (tokenInicial) { $('codigoQr').value = tokenInicial; consultar(tokenInicial); }
-        else $('codigoQr').focus();
+        if (tokenInicial && estado.qrHabilitado) { $('codigoQr').value = tokenInicial; consultar(tokenInicial); }
+        else if (estado.qrHabilitado) $('codigoQr').focus();
     });
 })();
 </script>

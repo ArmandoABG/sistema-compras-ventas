@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/stock_operativo.php';
 
 si_requerir_permiso('almacenes.ver', true);
 
@@ -15,6 +16,8 @@ $metodo = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $accion = strtoupper(trim((string) ($metodo === 'GET' ? ($_GET['accion'] ?? 'LISTAR_ALMACENES') : ($_POST['accion'] ?? ''))));
 
 try {
+    si_stock_preparar_operacion($conexion);
+
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
         switch ($accion) {
