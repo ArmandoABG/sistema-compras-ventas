@@ -15,7 +15,7 @@ orden numérico sobre un respaldo verificado. La tabla `schema_migrations`
 registra las versiones instaladas. Las migraciones de esta etapa son aditivas y
 no eliminan información histórica.
 
-La versión mínima de esquema requerida por este código es **003**.
+La versión mínima de esquema requerida por este código es **004**.
 
 ## Mantenimiento programado
 
