@@ -22,10 +22,12 @@ if (isset($_GET['cotizaciones_api'])) {
 require_once __DIR__ . '/../inc/seguridad.php';
 
 si_requerir_permiso('cotizaciones.ver', false);
+si_refrescar_identidad_sesion_actual();
 
 $tituloPagina = 'Cotizaciones';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('cotizaciones.crear');
+$puedePrecioManual = si_tiene_permiso('cotizaciones.precio_manual');
 $puedeCrearApartado = si_tiene_permiso('apartados.crear') && si_tiene_permiso('apartados.ver');
 $puedeCrearVenta = si_tiene_permiso('ventas.crear') && si_tiene_permiso('ventas.ver');
 
@@ -350,6 +352,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     'use strict';
 
     const puedeCrear = <?= $puedeCrear ? 'true' : 'false' ?>;
+    const puedePrecioManual = <?= $puedePrecioManual ? 'true' : 'false' ?>;
     const puedeCrearApartado = <?= $puedeCrearApartado ? 'true' : 'false' ?>;
     const puedeCrearVenta = <?= $puedeCrearVenta ? 'true' : 'false' ?>;
     const csrfToken = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
@@ -1179,7 +1182,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 + '<td><select class="line-input line-presentacion" data-uid="' + l.uid + '">' + presentaciones + '</select></td>'
                 + '<td><input type="number" class="line-input line-cantidad" data-uid="' + l.uid + '" min="0.000001" step="0.000001" value="' + l.cantidad + '"></td>'
                 + '<td><div class="price-cell">'
-                + '<input type="number" class="line-input line-precio" data-uid="' + l.uid + '" min="0.0001" step="0.0001" value="' + Number(l.precio_unitario || 0).toFixed(4) + '">'
+                + '<input type="number" class="line-input line-precio" data-uid="' + l.uid + '" min="0.0001" step="0.0001" value="' + Number(l.precio_unitario || 0).toFixed(4) + '" ' + (puedePrecioManual ? '' : 'readonly title="No tienes permiso para modificar el precio manualmente."') + '>'
                 + '<small>' + escapeHtml(origen) + '</small>'
                 + '</div></td>'
                 + '<td><strong>' + porcentaje(l.descuento_pct) + '</strong>'

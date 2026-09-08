@@ -16,8 +16,6 @@ $metodo = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $accion = strtoupper(trim((string) ($metodo === 'GET' ? ($_GET['accion'] ?? 'LISTAR_ALMACENES') : ($_POST['accion'] ?? ''))));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
         switch ($accion) {

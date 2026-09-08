@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/idempotencia.php';
 
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
@@ -427,6 +428,7 @@ function cxc_resumen_pagos(PDO $conexion): array
 
 function cxc_registrar_abono(PDO $conexion): void
 {
+    $idempotencia=si_idempotencia_desde_post();
     $cuentaId=cxc_id($_POST['cuenta_id']??null,'cuenta por cobrar');
     $importe=cxc_decimal_positivo($_POST['importe']??null,'Ingresa un importe de abono válido.');
     $metodoId=cxc_id($_POST['metodo_pago_id']??null,'método de cobro');
@@ -434,6 +436,7 @@ function cxc_registrar_abono(PDO $conexion): void
     $referencia=cxc_nullable($_POST['referencia']??'',120);$observaciones=cxc_nullable($_POST['observaciones']??'',10000);
     if($fechaPago>date('Y-m-d H:i:s',time()+300))si_responder_json(false,'No puedes registrar como aplicado un cobro con fecha futura.',['campo'=>'fecha_pago'],422);
     $conexion->beginTransaction();
+    si_idempotencia_responder_repetida($conexion,si_idempotencia_reservar($conexion,'cuentas_cobrar.abono',$idempotencia['clave'],$idempotencia['hash'],(int)$_SESSION['usuario_id']));
     $cuenta=cxc_recalcular_cuenta($conexion,$cuentaId);
     if($cuenta['estado']==='CANCELADA')cxc_cancelar($conexion,'La cuenta por cobrar está cancelada.',409);
     if (substr($fechaPago, 0, 10) < (string) $cuenta['fecha_documento']) {
@@ -455,8 +458,11 @@ function cxc_registrar_abono(PDO $conexion): void
     $actual=cxc_recalcular_cuenta($conexion,$cuentaId);
     cxc_auditar($conexion,'COBRO_CLIENTE_REGISTRADO','pagos_cliente',$pagoId,'Se registró y aplicó un abono a una cuenta por cobrar.',null,[
         'folio_pago'=>$folio,'cuenta_por_cobrar_id'=>$cuentaId,'cuenta_folio'=>$cuenta['folio'],'cliente_id'=>(int)$cuenta['cliente_id'],'importe'=>cxc_round4($importe),'moneda_id'=>(int)$cuenta['moneda_id'],'metodo_pago'=>$metodo['codigo'],'referencia'=>$referencia,'saldo_anterior'=>$saldo,'saldo_nuevo'=>(float)$actual['saldo_pendiente']]);
+    $mensaje=$actual['estado']==='PAGADA'?'Cobro registrado. La cuenta quedó liquidada.':'Abono registrado correctamente.';
+    $respuesta=['pago_id'=>$pagoId,'folio_pago'=>$folio,'cuenta_id'=>$cuentaId,'estado_cuenta'=>$actual['estado'],'saldo_pendiente'=>(float)$actual['saldo_pendiente']];
+    si_idempotencia_completar($conexion,'cuentas_cobrar.abono',$idempotencia['clave'],'pagos_cliente',$pagoId,$mensaje,$respuesta);
     $conexion->commit();
-    si_responder_json(true,$actual['estado']==='PAGADA'?'Cobro registrado. La cuenta quedó liquidada.':'Abono registrado correctamente.',['pago_id'=>$pagoId,'folio_pago'=>$folio,'cuenta_id'=>$cuentaId,'estado_cuenta'=>$actual['estado'],'saldo_pendiente'=>(float)$actual['saldo_pendiente']],201);
+    si_responder_json(true,$mensaje,$respuesta,201);
 }
 
 function cxc_cancelar_pago(PDO $conexion): void

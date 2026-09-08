@@ -46,7 +46,10 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <h1>Roles y permisos</h1>
                     <p>Define qué puede consultar o modificar cada perfil del sistema.</p>
                 </div>
-                <a href="usuarios.php" class="btn-secondary link-button">Volver a usuarios</a>
+                <div class="permissions-actions">
+                    <button type="button" class="btn-secondary" id="btnSincronizarSeguridad">Sincronizar catálogo</button>
+                    <a href="usuarios.php" class="btn-secondary link-button">Volver a usuarios</a>
+                </div>
             </header>
 
             <div id="mensajeRoles" class="roles-message" hidden></div>
@@ -171,6 +174,23 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     $('btnSeleccionarTodos').addEventListener('click', () => {
         document.querySelectorAll('#gruposPermisos input[type="checkbox"]:not(:disabled)').forEach(c => c.checked = true);
+    });
+
+    $('btnSincronizarSeguridad').addEventListener('click', async function () {
+        if (!window.confirm('¿Sincronizar el catálogo oficial de roles y permisos? Se conservarán las asignaciones personalizadas de los roles configurados.')) return;
+        const form = new FormData();
+        form.append('csrf_token', '<?= si_escapar($csrfToken) ?>');
+        form.append('accion', 'SINCRONIZAR_SEGURIDAD');
+        this.disabled = true;
+        try {
+            const data = await api('?roles_api=1', {method: 'POST', body: form});
+            mostrarMensaje(data.mensaje, 'success');
+            await cargarInicial(estado.rolActual ? estado.rolActual.id : 0);
+        } catch (error) {
+            mostrarMensaje(error.message, 'error');
+        } finally {
+            this.disabled = false;
+        }
     });
 
     $('btnGuardarPermisos').addEventListener('click', async function () {

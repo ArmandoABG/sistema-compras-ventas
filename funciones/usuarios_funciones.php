@@ -182,42 +182,13 @@ function usr_sesiones(PDO $conexion): void
 {
     $id = usr_id($_GET['usuario_id'] ?? null);
 
-    /*
-     * Limpieza administrativa: una sesión que no registra actividad dentro
-     * del mismo timeout que usa seguridad.php deja de mostrarse como activa.
-     * Esto no interviene en el login ni invalida la sesión PHP actual.
-     */
+    // Compatibilidad de lectura con instalaciones que aún no tienen ultima_actividad.
     $tieneUltimaActividad = false;
     try {
         $conexion->query("SELECT ultima_actividad FROM sesiones_usuario LIMIT 0");
         $tieneUltimaActividad = true;
-
-        $limiteInactividad = date(
-            'Y-m-d H:i:s',
-            time() - SI_TIEMPO_INACTIVIDAD
-        );
-
-        $stmtExpirar = $conexion->prepare(
-            "UPDATE sesiones_usuario
-             SET
-                activa = 0,
-                fin_sesion = COALESCE(fin_sesion, ultima_actividad, inicio_sesion),
-                motivo_cierre = CASE
-                    WHEN motivo_cierre IS NULL OR TRIM(motivo_cierre) = ''
-                        THEN 'EXPIRADA_INACTIVIDAD'
-                    ELSE motivo_cierre
-                END
-             WHERE usuario_id = :usuario_id
-               AND activa = 1
-               AND COALESCE(ultima_actividad, inicio_sesion) < :limite"
-        );
-        $stmtExpirar->execute([
-            ':usuario_id' => $id,
-            ':limite' => $limiteInactividad,
-        ]);
     } catch (Throwable $e) {
-        // Compatibilidad durante una migración parcial del parche.
-        error_log('[SISTEMA INTEGRAL][SESIONES EXPIRADAS] ' . $e->getMessage());
+        $tieneUltimaActividad = false;
     }
 
     $pagina = usr_entero_rango(
@@ -280,6 +251,12 @@ function usr_sesiones(PDO $conexion): void
     foreach ($sesiones as &$s) {
         $s['id'] = (int) $s['id'];
         $s['activa'] = (int) $s['activa'];
+        $ultimaActividad = strtotime((string) ($s['ultima_actividad'] ?? $s['inicio_sesion'] ?? ''));
+        if ($s['activa'] === 1 && $ultimaActividad > 0 && $ultimaActividad < time() - SI_TIEMPO_INACTIVIDAD) {
+            $s['activa'] = 0;
+            $s['fin_sesion'] = $s['fin_sesion'] ?: ($s['ultima_actividad'] ?? $s['inicio_sesion']);
+            $s['motivo_cierre'] = $s['motivo_cierre'] ?: 'EXPIRADA_INACTIVIDAD';
+        }
     }
     unset($s);
 
@@ -764,7 +741,7 @@ function usr_auditar(PDO $conexion, int $actorId, string $accion, int $entidadId
     ]);
 }
 
-function usr_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): void
+function usr_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): never
 {
     if ($conexion->inTransaction()) $conexion->rollBack();
     si_responder_json(false, $mensaje, $extra, $codigo);
@@ -1154,4 +1131,3 @@ function usr_requerir_administrador_alertas(): void
         si_responder_json(false, 'Solo un Administrador puede configurar los destinatarios de las alertas por correo.', [], 403);
     }
 }
-

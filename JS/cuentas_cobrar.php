@@ -543,6 +543,7 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
 <?php endif; ?>
 
 <script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
+<script src="../inc/idempotencia_cliente.js?v=20260904-01"></script>
 
 <script>
 (function () {
@@ -1136,11 +1137,13 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
         ocultarMensaje($('mensajeAbono'));
 
         try {
+            SIIdempotencia.prepararFormulario(form, 'cuentas_cobrar.abono');
             const datos = await api('?cxc_api=1', {
                 method: 'POST',
                 body: new FormData(form)
             });
 
+            SIIdempotencia.confirmarFormulario(form);
             cerrarModal('modalAbono');
             mostrarMensaje($('mensajePagina'), datos.mensaje, 'success');
 

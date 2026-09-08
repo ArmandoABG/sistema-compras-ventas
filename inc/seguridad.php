@@ -102,6 +102,13 @@ function si_es_https(): bool
 
 function si_iniciar_sesion_segura(): void
 {
+    if (PHP_SAPI === 'cli') {
+        if (!isset($_SESSION) || !is_array($_SESSION)) {
+            $_SESSION = [];
+        }
+        return;
+    }
+
     if (session_status() === PHP_SESSION_ACTIVE) {
         return;
     }
@@ -219,9 +226,9 @@ function si_requerir_sesion(?bool $json = null): void
 
 function si_obtener_conexion_seguridad(): ?PDO
 {
-    require_once __DIR__ . '/conexion.php';
-
     global $conexion;
+
+    require_once __DIR__ . '/conexion.php';
 
     return $conexion instanceof PDO
         ? $conexion
@@ -487,7 +494,7 @@ function si_validar_csrf(
             false,
             'La sesión del formulario expiró. Recarga la página e inténtalo nuevamente.',
             ['csrf_invalido' => true],
-            419
+            403
         );
     }
 }
@@ -627,7 +634,7 @@ function si_refrescar_identidad_sesion_actual(): array
     /*
      * La identidad se refresca desde la BD, pero no se vuelve a sembrar ni
      * actualizar el catálogo de roles/permisos en cada petición. Ese trabajo
-     * corresponde al login, a la administración de roles y a la instalación.
+     * corresponde a las migraciones, a la administración de roles y a la instalación.
      */
     return si_cargar_identidad_sesion(
         $conexion,

@@ -6,6 +6,7 @@ require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/stock_operativo.php';
 require_once __DIR__ . '/../inc/xlsx_simple.php';
+require_once __DIR__ . '/../inc/csv_seguro.php';
 
 si_requerir_permiso('reportes.ver', true);
 
@@ -13,13 +14,23 @@ if (!($conexion instanceof PDO)) {
     si_responder_json(false, 'No fue posible conectar con la base de datos.', [], 503);
 }
 
-si_requerir_metodo('GET');
-
-$accion = strtoupper(trim((string) ($_GET['accion'] ?? 'CATALOGOS')));
+$metodo = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+$accion = strtoupper(trim((string) ($metodo === 'POST' ? ($_POST['accion'] ?? '') : ($_GET['accion'] ?? 'CATALOGOS'))));
 
 try {
-    si_stock_preparar_operacion($conexion);
+    if ($metodo === 'POST') {
+        si_requerir_metodo('POST');
+        si_validar_csrf();
+        if ($accion !== 'EXPORTAR_CONTABLE_XLSX') {
+            si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
+        }
+        if (!si_tiene_permiso('contabilidad.exportar')) {
+            si_responder_json(false, 'No tienes permiso para exportar información contable.', [], 403);
+        }
+        rep_exportar_contable_xlsx($conexion);
+    }
 
+    si_requerir_metodo('GET');
     switch ($accion) {
         case 'CATALOGOS':
             rep_catalogos($conexion);
@@ -38,17 +49,6 @@ try {
             } else {
                 rep_exportar_csv($conexion);
             }
-            break;
-
-        case 'EXPORTAR_CONTABLE_XLSX':
-            // El paquete contable sí requiere el permiso financiero específico.
-            if (!si_tiene_permiso('contabilidad.exportar')) {
-                http_response_code(403);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'No tienes permiso para exportar información contable.';
-                exit;
-            }
-            rep_exportar_contable_xlsx($conexion);
             break;
 
         default:
@@ -547,8 +547,8 @@ function rep_exportar_contable_xlsx(PDO $conexion): void
     $desdeDefecto = $hoy->modify('first day of this month')->format('Y-m-d');
     $hastaDefecto = $hoy->format('Y-m-d');
 
-    $desde = rep_fecha_valida($_GET['fecha_desde'] ?? '') ?: $desdeDefecto;
-    $hasta = rep_fecha_valida($_GET['fecha_hasta'] ?? '') ?: $hastaDefecto;
+    $desde = rep_fecha_valida($_POST['fecha_desde'] ?? '') ?: $desdeDefecto;
+    $hasta = rep_fecha_valida($_POST['fecha_hasta'] ?? '') ?: $hastaDefecto;
 
     $dDesde = DateTimeImmutable::createFromFormat('!Y-m-d', $desde);
     $dHasta = DateTimeImmutable::createFromFormat('!Y-m-d', $hasta);
@@ -2063,15 +2063,5 @@ function rep_fecha_valida($valor): string
 
 function rep_csv_seguro($valor, string $tipo = 'texto'): string
 {
-    if ($valor === null) {
-        return '';
-    }
-    $texto = (string) $valor;
-    if (in_array($tipo, ['moneda', 'moneda_base', 'cantidad', 'entero'], true)) {
-        return $texto;
-    }
-    if ($texto !== '' && in_array($texto[0], ['=', '+', '-', '@'], true)) {
-        return "'" . $texto;
-    }
-    return $texto;
+    return si_csv_celda_segura($valor, $tipo);
 }

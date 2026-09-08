@@ -23,8 +23,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -157,8 +155,6 @@ try {
 
 function cot_catalogos(PDO $conexion): void
 {
-    cot_marcar_vencidas($conexion);
-
     $monedas = $conexion->query(
         "SELECT id, codigo, nombre, simbolo, es_base
          FROM monedas
@@ -591,8 +587,6 @@ function cot_sugerir_precio(PDO $conexion): void
 
 function cot_listar(PDO $conexion): void
 {
-    cot_marcar_vencidas($conexion);
-
     $pagina = cot_entero_rango($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
     $porPagina = cot_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
     $q = cot_texto($_GET['busqueda'] ?? '', 180);
@@ -620,8 +614,10 @@ function cot_listar(PDO $conexion): void
         $params[':q_codigo_cliente'] = $like;
     }
 
+    $estadoSql = "CASE WHEN c.estado = 'GENERADA' AND c.vigencia_hasta IS NOT NULL AND c.vigencia_hasta < NOW() THEN 'VENCIDA' ELSE c.estado END";
+
     if ($estado !== 'TODOS') {
-        $where[] = 'c.estado = :estado';
+        $where[] = $estadoSql . ' = :estado';
         $params[':estado'] = $estado;
     }
 
@@ -662,7 +658,7 @@ function cot_listar(PDO $conexion): void
             cl.codigo AS cliente_codigo,
             c.fecha_cotizacion,
             c.vigencia_hasta,
-            c.estado,
+            {$estadoSql} AS estado,
             c.moneda_id,
             m.codigo AS moneda_codigo,
             m.simbolo AS moneda_simbolo,
@@ -710,9 +706,9 @@ function cot_listar(PDO $conexion): void
         "SELECT
             COUNT(*) AS total,
             SUM(estado = 'BORRADOR') AS borradores,
-            SUM(estado = 'GENERADA') AS generadas,
+            SUM(estado = 'GENERADA' AND (vigencia_hasta IS NULL OR vigencia_hasta >= NOW())) AS generadas,
             SUM(estado = 'ACEPTADA') AS aceptadas,
-            SUM(estado = 'VENCIDA') AS vencidas
+            SUM(estado = 'VENCIDA' OR (estado = 'GENERADA' AND vigencia_hasta IS NOT NULL AND vigencia_hasta < NOW())) AS vencidas
          FROM cotizaciones"
     )->fetch();
 
@@ -738,13 +734,12 @@ function cot_listar(PDO $conexion): void
 
 function cot_detalle(PDO $conexion): void
 {
-    cot_marcar_vencidas($conexion);
-
     $id = cot_id($_GET['cotizacion_id'] ?? null, 'cotización');
 
     $stmt = $conexion->prepare(
         "SELECT
             c.*,
+            CASE WHEN c.estado = 'GENERADA' AND c.vigencia_hasta IS NOT NULL AND c.vigencia_hasta < NOW() THEN 'VENCIDA' ELSE c.estado END AS estado,
             cl.codigo AS cliente_codigo,
             cl.rfc AS cliente_rfc_actual,
             cl.nivel_cliente_id,
@@ -995,6 +990,8 @@ function cot_guardar_borrador(PDO $conexion): void
     $descuentoHeader = 0.0;
     $impuestoHeader = 0.0;
     $totalHeader = 0.0;
+    si_refrescar_identidad_sesion_actual();
+    $puedePrecioManual = si_tiene_permiso('cotizaciones.precio_manual');
 
     foreach ($lineasNormalizadas as $indice => $entrada) {
         $productoId = (int) $entrada['producto_id'];
@@ -1073,6 +1070,8 @@ function cot_guardar_borrador(PDO $conexion): void
             $stmtPrecio = $conexion->prepare(
                 "SELECT
                     pv.id,
+                    pv.moneda_id,
+                    pv.precio_unitario,
                     COALESCE(pv.tasa_impuesto_id, p.tasa_impuesto_id) AS tasa_id,
                     COALESCE(ti.porcentaje, tip.porcentaje, 0) AS impuesto_pct
                  FROM precios_venta_producto pv
@@ -1103,11 +1102,30 @@ function cot_guardar_borrador(PDO $conexion): void
             $precioConfigurado = $stmtPrecio->fetch();
 
             if ($precioConfigurado) {
-                $tasaId = $precioConfigurado['tasa_id'] !== null ? (int) $precioConfigurado['tasa_id'] : null;
-                $impuestoPct = (float) $precioConfigurado['impuesto_pct'];
+                $origenABase = cot_tipo_cambio_a_base($conexion, (int) $precioConfigurado['moneda_id'], date('Y-m-d'));
+                $destinoABase = cot_tipo_cambio_a_base($conexion, $monedaId, date('Y-m-d'));
+                $precioEsperado = $origenABase !== null && $destinoABase !== null && $destinoABase > 0
+                    ? round(((float) $precioConfigurado['precio_unitario'] * $origenABase) / $destinoABase, 4)
+                    : null;
+
+                if ($precioEsperado !== null && abs($precioEsperado - $precio) <= 0.0001) {
+                    $tasaId = $precioConfigurado['tasa_id'] !== null ? (int) $precioConfigurado['tasa_id'] : null;
+                    $impuestoPct = (float) $precioConfigurado['impuesto_pct'];
+                } else {
+                    $precioVentaId = 0;
+                }
             } else {
                 $precioVentaId = 0;
             }
+        }
+
+        if ($precioVentaId <= 0 && !$puedePrecioManual) {
+            cot_cancelar(
+                $conexion,
+                'No tienes permiso para modificar manualmente el precio de la cotización. Usa un precio vigente o solicita autorización.',
+                403,
+                ['campo' => 'precio_unitario', 'producto_id' => $productoId]
+            );
         }
 
         $importeBruto = round($cantidad * $precio, 4);
@@ -1531,81 +1549,6 @@ function cot_rechazar(PDO $conexion): void
    REGLAS Y AUXILIARES
    ========================================================================= */
 
-function cot_marcar_vencidas(PDO $conexion): void
-{
-    $stmt = $conexion->query(
-        "SELECT id, folio
-         FROM cotizaciones
-         WHERE estado = 'GENERADA'
-           AND vigencia_hasta IS NOT NULL
-           AND vigencia_hasta < NOW()
-         LIMIT 200"
-    );
-
-    $vencidas = $stmt->fetchAll();
-
-    if (!$vencidas) {
-        return;
-    }
-
-    $propia = !$conexion->inTransaction();
-
-    if ($propia) {
-        $conexion->beginTransaction();
-    }
-
-    $update = $conexion->prepare(
-        "UPDATE cotizaciones
-         SET estado = 'VENCIDA'
-         WHERE id = :id
-           AND estado = 'GENERADA'"
-    );
-
-    $audit = $conexion->prepare(
-        "INSERT INTO auditoria
-            (
-                usuario_id,
-                accion,
-                modulo,
-                entidad_tabla,
-                entidad_id,
-                descripcion,
-                datos_anteriores,
-                datos_nuevos,
-                ip,
-                user_agent
-            )
-         VALUES
-            (
-                NULL,
-                'COTIZACION_VENCIDA_AUTOMATICA',
-                'cotizaciones',
-                'cotizaciones',
-                :id,
-                :descripcion,
-                JSON_OBJECT('estado', 'GENERADA'),
-                JSON_OBJECT('estado', 'VENCIDA'),
-                NULL,
-                'Proceso automático por vigencia'
-            )"
-    );
-
-    foreach ($vencidas as $fila) {
-        $update->execute([':id' => (int) $fila['id']]);
-
-        if ($update->rowCount() > 0) {
-            $audit->execute([
-                ':id' => (int) $fila['id'],
-                ':descripcion' => 'La cotización ' . $fila['folio'] . ' cambió a VENCIDA por fecha de vigencia.',
-            ]);
-        }
-    }
-
-    if ($propia) {
-        $conexion->commit();
-    }
-}
-
 function cot_cliente_activo(PDO $conexion, int $id): ?array
 {
     $stmt = $conexion->prepare(
@@ -1810,7 +1753,7 @@ function cot_auditar(
     ]);
 }
 
-function cot_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): void
+function cot_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

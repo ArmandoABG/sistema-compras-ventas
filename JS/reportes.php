@@ -20,6 +20,7 @@ si_requerir_permiso('reportes.ver', false);
 $tituloPagina = 'Reportes';
 $puedeExportarReportes = si_tiene_permiso('reportes.ver');
 $puedeExportarContable = si_tiene_permiso('contabilidad.exportar');
+$csrfToken = si_token_csrf();
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_reportes.css';
@@ -198,6 +199,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         endpoint: 'reportes.php?rep_api=1',
         puedeExportar: <?= $puedeExportarReportes ? 'true' : 'false' ?>,
         puedeExportarContable: <?= $puedeExportarContable ? 'true' : 'false' ?>,
+        csrfToken: <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>,
         monedaBase: 'MXN',
     };
 
@@ -576,7 +578,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         dom.contableHasta.value = fechaLocalISO(hoy);
     }
 
-    function exportarContable() {
+    async function exportarContable() {
         if (!CONFIG.puedeExportarContable || !dom.contableDesde || !dom.contableHasta) return;
         const desde = dom.contableDesde.value;
         const hasta = dom.contableHasta.value;
@@ -585,16 +587,49 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             return;
         }
         if (desde > hasta) {
-            mostrarMensaje('La fecha Desde no puede ser posterior a Hasta.');
+            mostrarMensaje('La fecha «Desde» no puede ser posterior a «Hasta».');
             return;
         }
 
         mostrarMensaje('');
-        const url = new URL(CONFIG.endpoint, window.location.href);
-        url.searchParams.set('accion', 'EXPORTAR_CONTABLE_XLSX');
-        url.searchParams.set('fecha_desde', desde);
-        url.searchParams.set('fecha_hasta', hasta);
-        window.location.href = url.toString();
+        const body = new URLSearchParams({
+            accion: 'EXPORTAR_CONTABLE_XLSX',
+            csrf_token: CONFIG.csrfToken,
+            fecha_desde: desde,
+            fecha_hasta: hasta,
+        });
+        dom.btnExportarContable.disabled = true;
+        try {
+            const respuesta = await fetch(new URL(CONFIG.endpoint, window.location.href), {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8',
+                },
+                credentials: 'same-origin',
+                body: body.toString(),
+            });
+            if (!respuesta.ok) {
+                const texto = await respuesta.text();
+                let mensaje = texto;
+                try { mensaje = JSON.parse(texto).mensaje || texto; } catch (_) {}
+                throw new Error(mensaje || 'No fue posible generar el paquete contable.');
+            }
+            const blob = await respuesta.blob();
+            const enlace = document.createElement('a');
+            const urlDescarga = URL.createObjectURL(blob);
+            enlace.href = urlDescarga;
+            enlace.download = 'entrega_contable_' + desde.replaceAll('-', '') + '_a_' + hasta.replaceAll('-', '') + '.xlsx';
+            document.body.appendChild(enlace);
+            enlace.click();
+            enlace.remove();
+            window.setTimeout(() => URL.revokeObjectURL(urlDescarga), 0);
+            mostrarMensaje('Paquete contable generado correctamente.', 'success');
+        } catch (error) {
+            mostrarMensaje(error.message || 'No fue posible generar el paquete contable.');
+        } finally {
+            dom.btnExportarContable.disabled = false;
+        }
     }
 
     function debounce(fn, espera = 350) {

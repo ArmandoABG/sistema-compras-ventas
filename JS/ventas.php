@@ -16,11 +16,13 @@ if (isset($_GET['ventas_api'])) {
 
 require_once __DIR__ . '/../inc/seguridad.php';
 si_requerir_permiso('ventas.ver', false);
+si_refrescar_identidad_sesion_actual();
 
 $tituloPagina = 'Ventas';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('ventas.crear');
 $puedeCancelar = si_tiene_permiso('ventas.cancelar');
+$puedePrecioManual = si_tiene_permiso('ventas.precio_manual');
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
 $cssModulo = __DIR__ . '/../css/style_ventas.css';
@@ -313,6 +315,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
 </div>
 
 <script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
+<script src="../inc/idempotencia_cliente.js?v=20260904-01"></script>
 
 <script>
 (function () {
@@ -321,6 +324,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     const csrfToken = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const puedeCrear = <?= $puedeCrear ? 'true' : 'false' ?>;
     const puedeCancelar = <?= $puedeCancelar ? 'true' : 'false' ?>;
+    const puedePrecioManual = <?= $puedePrecioManual ? 'true' : 'false' ?>;
     const cotizacionInicial = <?= (int) $cotizacionInicial ?>;
     const apartadoInicial = <?= (int) $apartadoInicial ?>;
     const $ = (id) => document.getElementById(id);
@@ -982,7 +986,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 + '<td><strong>' + escapeHtml(l.nombre) + '</strong><small class="cell-secondary">' + escapeHtml(l.sku) + '</small></td>'
                 + '<td>' + presentacion + '</td>'
                 + '<td>' + (l.bloqueada ? '<strong>' + numero(l.cantidad, 3) + '</strong>' : '<input class="line-input line-input--number" data-line-field="cantidad" type="number" min="0.000001" step="0.001" value="' + Number(l.cantidad || 0) + '">') + '</td>'
-                + '<td>' + (l.bloqueada ? '<strong>' + moneda(l.precio, m.codigo, m.simbolo) + '</strong>' : '<input class="line-input line-input--number" data-line-field="precio" type="number" min="0.0001" step="0.01" value="' + Number(l.precio || 0) + '"><small class="cell-secondary">' + (l.precio_manual ? 'Manual' : (Number(l.precio_venta_id || 0) > 0 ? 'Automático' : 'Sin precio configurado')) + '</small>') + '</td>'
+                + '<td>' + (l.bloqueada ? '<strong>' + moneda(l.precio, m.codigo, m.simbolo) + '</strong>' : '<input class="line-input line-input--number" data-line-field="precio" type="number" min="0.0001" step="0.01" value="' + Number(l.precio || 0) + '" ' + (puedePrecioManual ? '' : 'readonly title="No tienes permiso para modificar el precio manualmente."') + '><small class="cell-secondary">' + (l.precio_manual ? 'Manual' : (Number(l.precio_venta_id || 0) > 0 ? 'Automático' : 'Sin precio configurado')) + '</small>') + '</td>'
                 + '<td>' + badge(l.nivel_precio === 'HISTORICO' ? 'Histórico' : l.nivel_precio) + '</td>'
                 + '<td>' + numero(l.descuento, 2) + '%</td>'
                 + '<td>' + numero(l.impuesto_pct, 2) + '%</td>'
@@ -1024,7 +1028,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
 
         $('btnConfirmarVenta').disabled = true;
         try {
-            const r = await apiPost('CREAR_VENTA', {
+            const solicitud = SIIdempotencia.adjuntar('ventas.crear', {
                 origen: estado.origen,
                 origen_id: estado.origenId,
                 cliente_id: estado.cliente ? estado.cliente.id : 0,
@@ -1036,6 +1040,8 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 observaciones: $('ventaObservaciones').value.trim(),
                 lineas: JSON.stringify(lineas)
             });
+            const r = await apiPost('CREAR_VENTA', solicitud);
+            SIIdempotencia.confirmar('ventas.crear');
             cerrarModal('modalVenta');
             mostrarMensaje('mensajePagina', r.mensaje + ' Folio: ' + r.folio, 'success');
             await cargarVentas();

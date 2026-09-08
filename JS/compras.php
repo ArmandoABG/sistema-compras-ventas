@@ -509,6 +509,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
 </div>
 
 <script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
+<script src="../inc/idempotencia_cliente.js?v=20260904-01"></script>
 
 <script>
 (function () {
@@ -1171,6 +1172,9 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
             descuento_pct: l.descuento_pct
         })));
 
+        if (!Number($('compraId').value || 0)) {
+            SIIdempotencia.prepararFormulario(event.currentTarget, 'compras.crear');
+        }
         const form = new FormData(event.currentTarget);
         const botones = event.currentTarget.querySelectorAll('button[type="submit"]');
         botones.forEach(b => b.disabled = true);
@@ -1184,6 +1188,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
              * apuntando al borrador guardado y un reintento no duplica compras.
              */
             $('compraId').value = String(d.compra_id);
+            SIIdempotencia.confirmarFormulario(event.currentTarget);
             if (d.folio) $('compraFolio').value = d.folio;
 
             if (estado.modoGuardarCompra === 'confirmar') {

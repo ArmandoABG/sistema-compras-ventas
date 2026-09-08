@@ -44,10 +44,12 @@ function si_permisos_oficiales(): array
         ['clientes.administrar', 'clientes', 'Administrar clientes'],
         ['cotizaciones.ver', 'ventas', 'Ver cotizaciones'],
         ['cotizaciones.crear', 'ventas', 'Crear cotizaciones'],
+        ['cotizaciones.precio_manual', 'ventas', 'Modificar precios en cotizaciones'],
         ['apartados.ver', 'ventas', 'Ver apartados'],
         ['apartados.crear', 'ventas', 'Crear apartados'],
         ['ventas.ver', 'ventas', 'Ver ventas'],
         ['ventas.crear', 'ventas', 'Crear ventas'],
+        ['ventas.precio_manual', 'ventas', 'Modificar precios en ventas'],
         ['ventas.cancelar', 'ventas', 'Cancelar ventas'],
         ['cuentas_cobrar.ver', 'cuentas_por_cobrar', 'Ver cuentas por cobrar'],
         ['cuentas_cobrar.cobrar', 'cuentas_por_cobrar', 'Registrar cobros'],
@@ -78,8 +80,8 @@ function si_permisos_vendedor_iniciales(): array
     return [
         // Operación comercial.
         'dashboard.ver', 'productos.ver', 'clientes.ver', 'clientes.administrar',
-        'cotizaciones.ver', 'cotizaciones.crear', 'apartados.ver', 'apartados.crear',
-        'ventas.ver', 'ventas.crear', 'ventas.cancelar',
+        'cotizaciones.ver', 'cotizaciones.crear', 'cotizaciones.precio_manual', 'apartados.ver', 'apartados.crear',
+        'ventas.ver', 'ventas.crear', 'ventas.precio_manual', 'ventas.cancelar',
 
         // Caja / dinero. El Vendedor puede cerrar el ciclo financiero cotidiano
         // sin depender del Administrador.

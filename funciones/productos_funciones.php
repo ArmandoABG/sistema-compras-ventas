@@ -25,8 +25,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -3057,7 +3055,7 @@ function cat_cancelar(
     string $mensaje,
     int $codigo,
     array $extra = []
-): void {
+): never {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();
     }

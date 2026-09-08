@@ -20,8 +20,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -1604,7 +1602,7 @@ function prod_normalizar_detalles(array &$filas): void
     unset($f);
 }
 
-function prod_abort(PDO $conexion, string $mensaje, int $status = 409, array $extra = []): void
+function prod_abort(PDO $conexion, string $mensaje, int $status = 409, array $extra = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

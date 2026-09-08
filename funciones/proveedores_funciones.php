@@ -1336,6 +1336,7 @@ function prov_registrar_precio(PDO $conexion): void
 
     $vigenciaHastaTexto = trim((string) ($_POST['vigencia_hasta'] ?? ''));
     $vigenciaHasta = null;
+    $fechaPrecio = date('Y-m-d H:i:s');
 
     if ($vigenciaHastaTexto !== '') {
         $vigenciaHasta = prov_fecha_hora($vigenciaHastaTexto);
@@ -1344,6 +1345,15 @@ function prov_registrar_precio(PDO $conexion): void
             si_responder_json(
                 false,
                 'La fecha de vigencia no es válida.',
+                ['campo' => 'vigencia_hasta'],
+                422
+            );
+        }
+
+        if ($vigenciaHasta <= $fechaPrecio) {
+            si_responder_json(
+                false,
+                'La vigencia del precio debe finalizar después de la fecha y hora actuales.',
                 ['campo' => 'vigencia_hasta'],
                 422
             );
@@ -1477,7 +1487,7 @@ function prov_registrar_precio(PDO $conexion): void
          VALUES
             (
                 :relacion_id,
-                NOW(),
+                :fecha_precio,
                 :unidad_id,
                 1,
                 :precio_unitario,
@@ -1495,6 +1505,7 @@ function prov_registrar_precio(PDO $conexion): void
 
     $stmtInsert->execute([
         ':relacion_id' => $relacionId,
+        ':fecha_precio' => $fechaPrecio,
         ':unidad_id' => $unidadId,
         ':precio_unitario' => $precio,
         ':moneda_id' => $monedaId,
@@ -2490,7 +2501,7 @@ function prov_cancelar(
     string $mensaje,
     int $codigo,
     array $extra = []
-): void {
+): never {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();
     }

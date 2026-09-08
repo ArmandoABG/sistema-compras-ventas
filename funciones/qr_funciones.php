@@ -21,8 +21,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 

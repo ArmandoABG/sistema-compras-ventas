@@ -20,8 +20,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -2666,7 +2664,7 @@ function dev_auditar(
    VALIDACIÓN / RESPUESTAS
    ========================================================================= */
 
-function dev_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): void
+function dev_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

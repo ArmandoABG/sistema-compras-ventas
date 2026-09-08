@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
+require_once __DIR__ . '/../inc/idempotencia.php';
 
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
@@ -850,6 +851,7 @@ function cxp_resumen_pagos(PDO $conexion): array
 
 function cxp_registrar_abono(PDO $conexion): void
 {
+    $idempotencia = si_idempotencia_desde_post();
     $cuentaId = cxp_id($_POST['cuenta_id'] ?? null, 'cuenta por pagar');
     $importe = cxp_decimal_positivo(
         $_POST['importe'] ?? null,
@@ -870,6 +872,16 @@ function cxp_registrar_abono(PDO $conexion): void
     }
 
     $conexion->beginTransaction();
+    si_idempotencia_responder_repetida(
+        $conexion,
+        si_idempotencia_reservar(
+            $conexion,
+            'cuentas_pagar.abono',
+            $idempotencia['clave'],
+            $idempotencia['hash'],
+            (int) $_SESSION['usuario_id']
+        )
+    );
 
     $cuenta = cxp_recalcular_cuenta($conexion, $cuentaId);
 
@@ -1017,22 +1029,28 @@ function cxp_registrar_abono(PDO $conexion): void
         ]
     );
 
-    $conexion->commit();
-
-    si_responder_json(
-        true,
-        $cuentaActualizada['estado'] === 'PAGADA'
+    $mensaje = $cuentaActualizada['estado'] === 'PAGADA'
             ? 'Pago registrado. La cuenta quedó liquidada.'
-            : 'Abono registrado correctamente.',
-        [
+            : 'Abono registrado correctamente.';
+    $respuesta = [
             'pago_id' => $pagoId,
             'folio_pago' => $folio,
             'cuenta_id' => $cuentaId,
             'estado_cuenta' => $cuentaActualizada['estado'],
             'saldo_pendiente' => (float) $cuentaActualizada['saldo_pendiente'],
-        ],
-        201
+        ];
+    si_idempotencia_completar(
+        $conexion,
+        'cuentas_pagar.abono',
+        $idempotencia['clave'],
+        'pagos_proveedor',
+        $pagoId,
+        $mensaje,
+        $respuesta
     );
+    $conexion->commit();
+
+    si_responder_json(true, $mensaje, $respuesta, 201);
 }
 
 function cxp_cancelar_pago(PDO $conexion): void

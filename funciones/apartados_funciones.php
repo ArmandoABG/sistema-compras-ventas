@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/stock_operativo.php';
+require_once __DIR__ . '/../inc/idempotencia.php';
 
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
@@ -91,7 +92,7 @@ try {
     error_log('[' . $referencia . '][APARTADOS][PDO] ' . $e->getMessage() . ' | ' . $e->getFile() . ':' . $e->getLine());
 
     if ((string) $e->getCode() === '42S02' && str_contains($e->getMessage(), 'cancelaciones_apartado')) {
-        si_responder_json(false, 'Falta aplicar la actualización SQL de apartados financieros. Ejecuta SQL/PULIDO_FINAL_1_APARTADOS_FINANCIEROS_03-09-2026.sql antes de usar este módulo.', ['referencia' => $referencia], 503);
+        si_responder_json(false, 'La base de datos no contiene la estructura financiera requerida por Apartados. Revisa la instalación y las migraciones indicadas en README.md.', ['referencia' => $referencia], 503);
     }
 
     if ((string) $e->getCode() === '23000') {
@@ -115,8 +116,6 @@ try {
 
 function apa_catalogos(PDO $conexion): void
 {
-    apa_procesar_vencidos($conexion);
-
     $almacenes = $conexion->query(
         "SELECT id, codigo, nombre, ubicacion
          FROM almacenes
@@ -244,6 +243,7 @@ function apa_buscar_productos(PDO $conexion): void
             p.sku,
             p.nombre,
             p.tipo,
+            p.permite_fraccion,
             p.unidad_base_id,
             ub.codigo AS unidad_base_codigo,
             ub.nombre AS unidad_base_nombre,
@@ -282,6 +282,7 @@ function apa_buscar_productos(PDO $conexion): void
     $productos = $stmt->fetchAll();
     foreach ($productos as &$p) {
         $p['id'] = (int) $p['id'];
+        $p['permite_fraccion'] = (int) $p['permite_fraccion'];
         $p['unidad_base_id'] = (int) $p['unidad_base_id'];
         $p['tasa_impuesto_id'] = $p['tasa_impuesto_id'] !== null ? (int) $p['tasa_impuesto_id'] : null;
         $p['impuesto_pct'] = (float) $p['impuesto_pct'];
@@ -361,7 +362,6 @@ function apa_sugerir_precio(PDO $conexion): void
 
 function apa_cotizacion_para_apartar(PDO $conexion): void
 {
-    apa_procesar_vencidos($conexion);
     $id = apa_id($_GET['cotizacion_id'] ?? null, 'cotización');
     $cotizacion = apa_cargar_cotizacion($conexion, $id, false);
 
@@ -399,8 +399,6 @@ function apa_cotizacion_para_apartar(PDO $conexion): void
 
 function apa_listar(PDO $conexion): void
 {
-    apa_procesar_vencidos($conexion);
-
     $pagina = apa_entero_rango($_GET['pagina'] ?? 1, 1, PHP_INT_MAX, 1);
     $porPagina = apa_entero_rango($_GET['por_pagina'] ?? 20, 10, 100, 20);
     $q = apa_texto($_GET['busqueda'] ?? '', 180);
@@ -425,8 +423,10 @@ function apa_listar(PDO $conexion): void
         $params[':cotizacion'] = $like;
     }
 
+    $estadoSql = "CASE WHEN a.estado = 'ACTIVO' AND a.reservado_hasta IS NOT NULL AND a.reservado_hasta < NOW() THEN 'VENCIDO' ELSE a.estado END";
+
     if ($estado !== 'TODOS') {
-        $where[] = 'a.estado = :estado';
+        $where[] = $estadoSql . ' = :estado';
         $params[':estado'] = $estado;
     }
 
@@ -473,7 +473,7 @@ function apa_listar(PDO $conexion): void
             co.folio AS cotizacion_folio,
             a.fecha_apartado,
             a.reservado_hasta,
-            a.estado,
+            {$estadoSql} AS estado,
             a.moneda_id,
             m.codigo AS moneda_codigo,
             m.simbolo AS moneda_simbolo,
@@ -516,9 +516,9 @@ function apa_listar(PDO $conexion): void
     $kpis = $conexion->query(
         "SELECT
             COUNT(*) AS total,
-            SUM(estado = 'ACTIVO') AS activos,
+            SUM(estado = 'ACTIVO' AND (reservado_hasta IS NULL OR reservado_hasta >= NOW())) AS activos,
             SUM(estado = 'ACTIVO' AND reservado_hasta IS NOT NULL AND reservado_hasta BETWEEN NOW() AND DATE_ADD(NOW(), INTERVAL 2 DAY)) AS por_vencer,
-            SUM(estado = 'VENCIDO') AS vencidos,
+            SUM(estado = 'VENCIDO' OR (estado = 'ACTIVO' AND reservado_hasta IS NOT NULL AND reservado_hasta < NOW())) AS vencidos,
             SUM(estado = 'COMPLETADO') AS completados
          FROM apartados"
     )->fetch();
@@ -541,12 +541,12 @@ function apa_listar(PDO $conexion): void
 
 function apa_detalle(PDO $conexion): void
 {
-    apa_procesar_vencidos($conexion);
     $id = apa_id($_GET['apartado_id'] ?? null, 'apartado');
 
     $stmt = $conexion->prepare(
         "SELECT
             a.*,
+            CASE WHEN a.estado = 'ACTIVO' AND a.reservado_hasta IS NOT NULL AND a.reservado_hasta < NOW() THEN 'VENCIDO' ELSE a.estado END AS estado,
             c.codigo AS cliente_codigo,
             c.nombre_razon_social AS cliente_nombre,
             c.rfc AS cliente_rfc,
@@ -696,9 +696,7 @@ function apa_detalle(PDO $conexion): void
 
 function apa_crear(PDO $conexion): void
 {
-    // Libera reservas vencidas antes de calcular disponibilidad para un apartado nuevo.
-    apa_procesar_vencidos($conexion);
-
+    $idempotencia = si_idempotencia_desde_post();
     $clienteId = apa_id($_POST['cliente_id'] ?? null, 'cliente');
     $monedaId = apa_id($_POST['moneda_id'] ?? null, 'moneda');
     $almacenId = apa_id($_POST['almacen_id'] ?? null, 'almacén');
@@ -728,6 +726,12 @@ function apa_crear(PDO $conexion): void
     $referenciaAnticipo = apa_nullable($_POST['anticipo_referencia'] ?? null, 120);
 
     $conexion->beginTransaction();
+    si_idempotencia_responder_repetida(
+        $conexion,
+        si_idempotencia_reservar($conexion, 'apartados.crear', $idempotencia['clave'], $idempotencia['hash'], (int) $_SESSION['usuario_id'])
+    );
+    // Libera reservas vencidas antes de calcular disponibilidad para un apartado nuevo.
+    apa_procesar_vencidos($conexion);
 
     $detalles = [];
     $subtotal = 0.0;
@@ -757,8 +761,15 @@ function apa_crear(PDO $conexion): void
             apa_cancelar($conexion, 'La cotización no tiene productos para reservar.', 409);
         }
         foreach ($detalles as $detalleCotizacion) {
-            if (!apa_producto_activo($conexion, (int) $detalleCotizacion['producto_id'])) {
+            $productoCotizacion = apa_producto_activo($conexion, (int) $detalleCotizacion['producto_id']);
+            if (!$productoCotizacion) {
                 apa_cancelar($conexion, 'Uno de los productos de la cotización ya no está activo o no controla inventario. Revisa la cotización antes de apartar.', 409, ['producto_id' => (int) $detalleCotizacion['producto_id']]);
+            }
+            if (
+                (int) $productoCotizacion['permite_fraccion'] !== 1
+                && abs((float) $detalleCotizacion['cantidad'] - round((float) $detalleCotizacion['cantidad'])) > 0.000001
+            ) {
+                apa_cancelar($conexion, 'El producto ' . $productoCotizacion['nombre'] . ' no permite cantidades fraccionadas.', 409);
             }
         }
 
@@ -862,21 +873,28 @@ function apa_crear(PDO $conexion): void
         'renglones' => count($detalles),
     ]);
 
+    $mensaje = 'Apartado creado correctamente.';
+    $respuesta = ['apartado_id' => $apartadoId, 'folio' => $folio];
+    si_idempotencia_completar($conexion, 'apartados.crear', $idempotencia['clave'], 'apartados', $apartadoId, $mensaje, $respuesta);
     $conexion->commit();
-    si_responder_json(true, 'Apartado creado correctamente.', ['apartado_id' => $apartadoId, 'folio' => $folio], 201);
+    si_responder_json(true, $mensaje, $respuesta, 201);
 }
 
 function apa_registrar_anticipo(PDO $conexion): void
 {
-    // Un anticipo no debe reactivar de hecho una reserva cuyo plazo ya venció.
-    apa_procesar_vencidos($conexion);
-
+    $idempotencia = si_idempotencia_desde_post();
     $apartadoId = apa_id($_POST['apartado_id'] ?? null, 'apartado');
     $importe = apa_decimal($_POST['importe'] ?? null, 'importe', 0.01, 999999999999.0);
     $metodoId = apa_id($_POST['metodo_pago_id'] ?? null, 'método de pago');
     $referencia = apa_nullable($_POST['referencia'] ?? null, 120);
 
     $conexion->beginTransaction();
+    si_idempotencia_responder_repetida(
+        $conexion,
+        si_idempotencia_reservar($conexion, 'apartados.anticipo', $idempotencia['clave'], $idempotencia['hash'], (int) $_SESSION['usuario_id'])
+    );
+    // Un anticipo no debe reactivar de hecho una reserva cuyo plazo ya venció.
+    apa_procesar_vencidos($conexion);
     $apartado = apa_bloquear_apartado($conexion, $apartadoId);
     if (!$apartado) {
         apa_cancelar($conexion, 'El apartado ya no existe.', 404);
@@ -901,8 +919,11 @@ function apa_registrar_anticipo(PDO $conexion): void
         'importe_anticipado_total' => $nuevoAnticipado,
     ]);
 
+    $mensaje = 'Anticipo registrado correctamente.';
+    $respuesta = ['anticipo_id' => $anticipoId, 'importe_anticipado' => $nuevoAnticipado, 'saldo_pendiente' => round((float) $apartado['total'] - $nuevoAnticipado, 4)];
+    si_idempotencia_completar($conexion, 'apartados.anticipo', $idempotencia['clave'], 'anticipos_apartado', $anticipoId, $mensaje, $respuesta);
     $conexion->commit();
-    si_responder_json(true, 'Anticipo registrado correctamente.', ['anticipo_id' => $anticipoId, 'importe_anticipado' => $nuevoAnticipado, 'saldo_pendiente' => round((float) $apartado['total'] - $nuevoAnticipado, 4)]);
+    si_responder_json(true, $mensaje, $respuesta);
 }
 
 function apa_cancelar_anticipo(PDO $conexion): void
@@ -1227,6 +1248,8 @@ function apa_normalizar_lineas_directas(PDO $conexion, array $lineas, array $cli
     $subtotalHeader = 0.0;
     $impuestoHeader = 0.0;
     $totalHeader = 0.0;
+    si_refrescar_identidad_sesion_actual();
+    $puedePrecioManual = si_tiene_permiso('ventas.precio_manual');
 
     foreach ($lineas as $indice => $entrada) {
         if (!is_array($entrada)) {
@@ -1243,6 +1266,8 @@ function apa_normalizar_lineas_directas(PDO $conexion, array $lineas, array $cli
             apa_cancelar($conexion, $e->getMessage(), 422);
         }
 
+
+        
         $clave = $productoId . ':' . $presentacionId;
         if (isset($claves[$clave])) {
             apa_cancelar($conexion, 'No repitas el mismo producto con la misma presentación. Ajusta la cantidad del renglón existente.', 422);
@@ -1252,6 +1277,9 @@ function apa_normalizar_lineas_directas(PDO $conexion, array $lineas, array $cli
         $producto = apa_producto_activo($conexion, $productoId);
         if (!$producto) {
             apa_cancelar($conexion, 'Uno de los productos ya no está disponible.', 409);
+        }
+        if ((int) $producto['permite_fraccion'] !== 1 && abs($cantidad - round($cantidad)) > 0.000001) {
+            apa_cancelar($conexion, 'El producto ' . $producto['nombre'] . ' no permite cantidades fraccionadas.', 422);
         }
 
         if ($presentacionId > 0) {
@@ -1284,29 +1312,26 @@ function apa_normalizar_lineas_directas(PDO $conexion, array $lineas, array $cli
         $impuestoPct = (float) $producto['impuesto_pct'];
 
         if ($precioVentaId > 0) {
-            $cond = $presentacionId > 0 ? 'pv.presentacion_id = :presentacion_id' : 'pv.presentacion_id IS NULL';
-            $stmtPrecio = $conexion->prepare(
-                "SELECT pv.id, COALESCE(ti.porcentaje, tip.porcentaje, 0) AS impuesto_pct
-                 FROM precios_venta_producto pv
-                 INNER JOIN productos p ON p.id = pv.producto_id
-                 LEFT JOIN tasas_impuesto ti ON ti.id = pv.tasa_impuesto_id
-                 LEFT JOIN tasas_impuesto tip ON tip.id = p.tasa_impuesto_id
-                 WHERE pv.id = :id AND pv.producto_id = :producto_id AND {$cond}
-                   AND pv.activo = 1
-                   AND (pv.nivel_precio = 'MENUDEO' OR pv.cantidad_minima <= :cantidad)
-                   AND pv.vigente_desde <= NOW()
-                   AND (pv.vigente_hasta IS NULL OR pv.vigente_hasta >= NOW())
-                 LIMIT 1"
+            $resuelto = apa_resolver_precio($conexion, $productoId, $presentacionId, $monedaId, $cantidad);
+            $precioEsperado = $resuelto['datos']['precio'] ?? null;
+            $precioEsperadoId = (int) ($resuelto['datos']['precio_venta_id'] ?? 0);
+            if (
+                $precioEsperado !== null
+                && $precioEsperadoId === $precioVentaId
+                && abs((float) $precioEsperado - $precio) <= 0.0001
+            ) {
+                $impuestoPct = (float) ($resuelto['datos']['impuesto_pct'] ?? $impuestoPct);
+            } else {
+                $precioVentaId = 0;
+            }
+        }
+        if ($precioVentaId <= 0 && !$puedePrecioManual) {
+            apa_cancelar(
+                $conexion,
+                'No tienes permiso para modificar manualmente el precio del apartado. Usa un precio vigente o solicita autorización.',
+                403,
+                ['campo' => 'precio_unitario', 'producto_id' => $productoId]
             );
-            $params = [':id' => $precioVentaId, ':producto_id' => $productoId, ':cantidad' => $cantidad];
-            if ($presentacionId > 0) {
-                $params[':presentacion_id'] = $presentacionId;
-            }
-            $stmtPrecio->execute($params);
-            $filaPrecio = $stmtPrecio->fetch();
-            if ($filaPrecio) {
-                $impuestoPct = (float) $filaPrecio['impuesto_pct'];
-            }
         }
 
         $bruto = round($cantidad * $precio, 4);
@@ -1616,7 +1641,7 @@ function apa_cliente_activo(PDO $conexion, int $id): ?array
 function apa_producto_activo(PDO $conexion, int $id): ?array
 {
     $stmt = $conexion->prepare(
-        "SELECT p.id, p.sku, p.nombre, p.tipo, p.unidad_base_id,
+        "SELECT p.id, p.sku, p.nombre, p.tipo, p.permite_fraccion, p.unidad_base_id,
                 ub.codigo AS unidad_base_codigo, ub.nombre AS unidad_base_nombre, ub.simbolo AS unidad_base_simbolo,
                 p.tasa_impuesto_id, COALESCE(ti.porcentaje, 0) AS impuesto_pct,
                 COALESCE(ti.nombre, 'Sin impuesto') AS impuesto_nombre
@@ -1632,6 +1657,7 @@ function apa_producto_activo(PDO $conexion, int $id): ?array
         return null;
     }
     $fila['id'] = (int) $fila['id'];
+    $fila['permite_fraccion'] = (int) $fila['permite_fraccion'];
     $fila['unidad_base_id'] = (int) $fila['unidad_base_id'];
     $fila['tasa_impuesto_id'] = $fila['tasa_impuesto_id'] !== null ? (int) $fila['tasa_impuesto_id'] : null;
     $fila['impuesto_pct'] = (float) $fila['impuesto_pct'];
@@ -1799,7 +1825,7 @@ function apa_tipar_apartado(array &$a): void
     }
 }
 
-function apa_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): void
+function apa_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();
@@ -1807,7 +1833,7 @@ function apa_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $
     si_responder_json(false, $mensaje, $datos, $codigo);
 }
 
-function apa_id($valor, string $nombre): int
+function apa_id(mixed $valor, string $nombre): int
 {
     $id = filter_var($valor, FILTER_VALIDATE_INT);
     if ($id === false || $id < 1) {
@@ -1816,7 +1842,7 @@ function apa_id($valor, string $nombre): int
     return (int) $id;
 }
 
-function apa_id_local($valor, string $nombre): int
+function apa_id_local(mixed $valor, string $nombre): int
 {
     $id = filter_var($valor, FILTER_VALIDATE_INT);
     if ($id === false || $id < 1) {
@@ -1825,7 +1851,7 @@ function apa_id_local($valor, string $nombre): int
     return (int) $id;
 }
 
-function apa_entero_rango($valor, int $minimo, int $maximo, int $defecto): int
+function apa_entero_rango(mixed $valor, int $minimo, int $maximo, int $defecto): int
 {
     if ($valor === null || $valor === '') {
         return $defecto;
@@ -1837,7 +1863,7 @@ function apa_entero_rango($valor, int $minimo, int $maximo, int $defecto): int
     return max($minimo, min($maximo, (int) $entero));
 }
 
-function apa_decimal($valor, string $nombre, float $minimo, float $maximo): float
+function apa_decimal(mixed $valor, string $nombre, float $minimo, float $maximo): float
 {
     if ($valor === null || trim((string) $valor) === '') {
         si_responder_json(false, 'Captura ' . $nombre . '.', ['campo' => $nombre], 422);
@@ -1853,7 +1879,7 @@ function apa_decimal($valor, string $nombre, float $minimo, float $maximo): floa
     return $numero;
 }
 
-function apa_decimal_local($valor, string $nombre, float $minimo, float $maximo): float
+function apa_decimal_local(mixed $valor, string $nombre, float $minimo, float $maximo): float
 {
     $texto = str_replace(',', '', trim((string) $valor));
     if ($texto === '' || !is_numeric($texto)) {
@@ -1866,7 +1892,7 @@ function apa_decimal_local($valor, string $nombre, float $minimo, float $maximo)
     return $numero;
 }
 
-function apa_decimal_opcional($valor, float $minimo, float $maximo, float $defecto): float
+function apa_decimal_opcional(mixed $valor, float $minimo, float $maximo, float $defecto): float
 {
     if ($valor === null || trim((string) $valor) === '') {
         return $defecto;
@@ -1882,19 +1908,27 @@ function apa_decimal_opcional($valor, float $minimo, float $maximo, float $defec
     return $numero;
 }
 
-function apa_texto($valor, int $maximo): string
+function apa_texto(mixed $valor, int $maximo): string
 {
     $texto = trim((string) $valor);
-    return mb_strlen($texto) > $maximo ? mb_substr($texto, 0, $maximo) : $texto;
+    if (mb_strlen($texto) > $maximo) {
+        si_responder_json(
+            false,
+            'El texto indicado no puede exceder ' . $maximo . ' caracteres.',
+            ['maximo' => $maximo],
+            422
+        );
+    }
+    return $texto;
 }
 
-function apa_nullable($valor, int $maximo): ?string
+function apa_nullable(mixed $valor, int $maximo): ?string
 {
     $texto = apa_texto($valor, $maximo);
     return $texto === '' ? null : $texto;
 }
 
-function apa_fecha_opcional($valor): ?string
+function apa_fecha_opcional(mixed $valor): ?string
 {
     $texto = trim((string) $valor);
     if ($texto === '') {
@@ -1908,7 +1942,7 @@ function apa_fecha_opcional($valor): ?string
     return $d->format('Y-m-d');
 }
 
-function apa_fecha_requerida($valor, string $nombre): string
+function apa_fecha_requerida(mixed $valor, string $nombre): string
 {
     $fecha = apa_fecha_opcional($valor);
     if ($fecha === null) {
@@ -1917,7 +1951,7 @@ function apa_fecha_requerida($valor, string $nombre): string
     return $fecha;
 }
 
-function apa_json_array($valor, string $nombre): array
+function apa_json_array(mixed $valor, string $nombre): array
 {
     $decodificado = json_decode((string) $valor, true);
     if (!is_array($decodificado)) {

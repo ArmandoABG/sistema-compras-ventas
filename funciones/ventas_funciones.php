@@ -9,6 +9,7 @@ require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
 require_once __DIR__ . '/../inc/qr_core.php';
 require_once __DIR__ . '/../inc/stock_operativo.php';
+require_once __DIR__ . '/../inc/idempotencia.php';
 
 si_requerir_permiso('ventas.ver', true);
 
@@ -107,8 +108,6 @@ try {
 
 function ven_catalogos(PDO $conexion): void
 {
-    si_stock_preparar_operacion($conexion);
-
     $almacenes = $conexion->query(
         "SELECT id, codigo, nombre, ubicacion
          FROM almacenes
@@ -521,8 +520,6 @@ function ven_cotizacion_para_venta(PDO $conexion): void
 
 function ven_apartado_para_venta(PDO $conexion): void
 {
-    si_stock_preparar_operacion($conexion);
-
     $apartadoId = ven_id($_GET['apartado_id'] ?? null, 'apartado');
     $stmt = $conexion->prepare(
         "SELECT
@@ -978,8 +975,7 @@ function ven_detalle(PDO $conexion): void
 
 function ven_crear(PDO $conexion): void
 {
-    si_stock_preparar_operacion($conexion);
-
+    $idempotencia = si_idempotencia_desde_post();
     $origen = strtoupper(ven_texto($_POST['origen'] ?? 'DIRECTO', 20));
     if (!in_array($origen, ['DIRECTO','COTIZACION','APARTADO'], true)) {
         si_responder_json(false, 'El origen de la venta no es válido.', [], 422);
@@ -1009,6 +1005,17 @@ function ven_crear(PDO $conexion): void
     }
 
     $conexion->beginTransaction();
+    si_idempotencia_responder_repetida(
+        $conexion,
+        si_idempotencia_reservar(
+            $conexion,
+            'ventas.crear',
+            $idempotencia['clave'],
+            $idempotencia['hash'],
+            (int) $_SESSION['usuario_id']
+        )
+    );
+    si_stock_preparar_operacion($conexion);
 
     $cliente = null;
     $clienteId = null;
@@ -1368,11 +1375,10 @@ function ven_crear(PDO $conexion): void
         'token_qr_id' => $tokenQr !== null ? (int) $tokenQr['id'] : null,
     ]);
 
-    $conexion->commit();
-
-    si_responder_json(true, $qrHabilitado
+    $mensaje = $qrHabilitado
         ? 'Venta confirmada. La mercancía quedó reservada hasta confirmar su salida por QR.'
-        : 'Venta confirmada y salida física aplicada correctamente.', [
+        : 'Venta confirmada y salida física aplicada correctamente.';
+    $respuesta = [
         'venta_id' => $ventaId,
         'folio' => $folio,
         'movimiento_inventario_id' => $movimientoId,
@@ -1380,7 +1386,20 @@ function ven_crear(PDO $conexion): void
         'cuenta_por_cobrar_id' => $cuentaCobrarId,
         'qr_generado' => $tokenQr !== null,
         'salida_pendiente_qr' => $qrHabilitado && $tokenQr !== null,
-    ], 201);
+    ];
+
+    si_idempotencia_completar(
+        $conexion,
+        'ventas.crear',
+        $idempotencia['clave'],
+        'ventas',
+        $ventaId,
+        $mensaje,
+        $respuesta
+    );
+    $conexion->commit();
+
+    si_responder_json(true, $mensaje, $respuesta, 201);
 }
 
 /* =========================================================================
@@ -1709,6 +1728,8 @@ function ven_normalizar_lineas_directas(PDO $conexion, array $lineas, ?array $cl
     $descuentoHeader = 0.0;
     $impuestoHeader = 0.0;
     $totalHeader = 0.0;
+    si_refrescar_identidad_sesion_actual();
+    $puedePrecioManual = si_tiene_permiso('ventas.precio_manual');
 
     foreach ($lineas as $indice => $entrada) {
         if (!is_array($entrada)) {
@@ -1795,6 +1816,15 @@ function ven_normalizar_lineas_directas(PDO $conexion, array $lineas, ?array $cl
             } else {
                 $precioVentaId = 0;
             }
+        }
+
+        if ($nivelPrecio === 'MANUAL' && !$puedePrecioManual) {
+            ven_cancelar(
+                $conexion,
+                'No tienes permiso para modificar manualmente el precio de venta. Usa un precio vigente o solicita autorización.',
+                403,
+                ['campo' => 'precio_unitario', 'producto_id' => $productoId]
+            );
         }
 
         $bruto = round($cantidad * $precio, 4);
@@ -2801,7 +2831,7 @@ function ven_tipar_detalle_venta(array &$d): void
    VALIDACIÓN Y UTILIDADES
    ========================================================================= */
 
-function ven_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): void
+function ven_cancelar(PDO $conexion, string $mensaje, int $codigo = 422, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

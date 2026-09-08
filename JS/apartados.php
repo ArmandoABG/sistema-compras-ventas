@@ -20,6 +20,7 @@ si_requerir_permiso('apartados.ver', false);
 $tituloPagina = 'Apartados';
 $csrfToken = si_token_csrf();
 $puedeCrear = si_tiene_permiso('apartados.crear');
+$puedePrecioManual = si_tiene_permiso('ventas.precio_manual');
 $puedeCrearVenta = si_tiene_permiso('ventas.crear') && si_tiene_permiso('ventas.ver');
 
 $cssGlobal = __DIR__ . '/../css/style_global.css';
@@ -337,6 +338,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
 </div>
 
 <script src="../inc/tipo_cambio_ui.js?v=20260902-09"></script>
+<script src="../inc/idempotencia_cliente.js?v=20260904-01"></script>
 
 <script>
 (function () {
@@ -344,6 +346,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
 
     const csrfToken = <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
     const puedeCrear = <?= $puedeCrear ? 'true' : 'false' ?>;
+    const puedePrecioManual = <?= $puedePrecioManual ? 'true' : 'false' ?>;
     const puedeCrearVenta = <?= $puedeCrearVenta ? 'true' : 'false' ?>;
     const cotizacionInicial = <?= (int) $cotizacionInicial ?>;
     const $ = (id) => document.getElementById(id);
@@ -573,6 +576,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
             unidad_nombre: (presentaciones[0] && presentaciones[0].unidad_nombre) || r.producto.unidad_base_nombre,
             unidad_simbolo: (presentaciones[0] && (presentaciones[0].unidad_simbolo || presentaciones[0].unidad_codigo)) || r.producto.unidad_base_simbolo || r.producto.unidad_base_codigo,
             unidad_base_simbolo: r.producto.unidad_base_simbolo || r.producto.unidad_base_codigo,
+            permite_fraccion: Number(r.producto.permite_fraccion || 0),
             disponible_base: Number(producto.cantidad_disponible || 0), precio: 0, precio_venta_id: 0, nivel_precio: 'MANUAL', precio_origen: 'MANUAL', precio_manual: false,
             descuento: Number(estado.cliente ? estado.cliente.descuento_efectivo_pct : 0), impuesto: Number(r.producto.impuesto_pct || 0), impuesto_nombre: r.producto.impuesto_nombre || 'Sin impuesto'
         };
@@ -634,8 +638,8 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
             return '<tr data-key="' + l.key + '">'
                 + '<td><strong>' + escapeHtml(l.nombre) + '</strong><small class="cell-secondary">' + escapeHtml(l.sku) + '</small></td>'
                 + '<td><select class="line-input" data-line-field="presentacion" ' + (bloqueado ? 'disabled' : '') + '>' + options + '</select></td>'
-                + '<td><input class="line-input line-number" type="number" min="0.000001" step="0.001" data-line-field="cantidad" value="' + escapeHtml(l.cantidad) + '" ' + (bloqueado ? 'readonly' : '') + '><small class="cell-secondary">' + escapeHtml(l.unidad_nombre || '') + '</small></td>'
-                + '<td><input class="line-input line-number" type="number" min="0.0001" step="0.01" data-line-field="precio" value="' + escapeHtml(Number(l.precio || 0).toFixed(4)) + '" ' + (bloqueado ? 'readonly' : '') + '><small class="cell-secondary">' + escapeHtml(l.nivel_precio || 'MANUAL') + '</small></td>'
+                + '<td><input class="line-input line-number" type="number" min="' + (Number(l.permite_fraccion) === 1 ? '0.000001' : '1') + '" step="' + (Number(l.permite_fraccion) === 1 ? '0.001' : '1') + '" data-line-field="cantidad" value="' + escapeHtml(l.cantidad) + '" ' + (bloqueado ? 'readonly' : '') + '><small class="cell-secondary">' + escapeHtml(l.unidad_nombre || '') + '</small></td>'
+                + '<td><input class="line-input line-number" type="number" min="0.0001" step="0.01" data-line-field="precio" value="' + escapeHtml(Number(l.precio || 0).toFixed(4)) + '" ' + ((bloqueado || !puedePrecioManual) ? 'readonly' : '') + (!bloqueado && !puedePrecioManual ? ' title="No tienes permiso para modificar el precio manualmente."' : '') + '><small class="cell-secondary">' + escapeHtml(l.nivel_precio || 'MANUAL') + '</small></td>'
                 + '<td>' + numero(l.descuento, 2) + '%</td><td>' + numero(l.impuesto, 2) + '%</td>'
                 + '<td class="' + (excede ? 'stock-danger' : '') + '">' + disp + '<small class="cell-secondary">Requiere total: ' + numero(requeridoTotalProducto, 3) + ' ' + escapeHtml(l.unidad_base_simbolo || '') + '</small></td>'
                 + '<td><strong>' + moneda(c.total, monedaActual().codigo, monedaActual().simbolo) + '</strong></td>'
@@ -695,7 +699,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         };
         $('btnGuardarApartado').disabled = true;
         try {
-            const r = await apiPost('CREAR_APARTADO', datos); cerrarModal('modalApartado'); mostrarMensaje('mensajePagina', r.mensaje + ' ' + (r.folio || ''), 'success'); estado.pagina = 1; await cargarApartados();
+            const r = await apiPost('CREAR_APARTADO', SIIdempotencia.adjuntar('apartados.crear', datos)); SIIdempotencia.confirmar('apartados.crear'); cerrarModal('modalApartado'); mostrarMensaje('mensajePagina', r.mensaje + ' ' + (r.folio || ''), 'success'); estado.pagina = 1; await cargarApartados();
             const url = new URL(window.location.href); url.searchParams.delete('cotizacion_id'); history.replaceState({}, '', url.pathname + (url.searchParams.toString() ? '?' + url.searchParams.toString() : ''));
         } catch (e) { mostrarMensaje('mensajeApartado', e.message, 'error'); }
         finally { $('btnGuardarApartado').disabled = false; }
@@ -741,14 +745,16 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         const importe = Number($('nuevoAnticipoImporte').value || 0); if (!(importe > 0)) return mostrarMensaje('mensajeAnticipo', 'Captura un importe mayor que cero.', 'error');
         if (importe > Number(a.saldo_pendiente) + 0.0001) return mostrarMensaje('mensajeAnticipo', 'El importe supera el saldo pendiente.', 'error');
         try {
-            const r = await apiPost('REGISTRAR_ANTICIPO', { apartado_id: a.id, importe, metodo_pago_id: $('nuevoAnticipoMetodo').value, referencia: $('nuevoAnticipoReferencia').value.trim() });
+            const solicitud = SIIdempotencia.adjuntar('apartados.anticipo', { apartado_id: a.id, importe, metodo_pago_id: $('nuevoAnticipoMetodo').value, referencia: $('nuevoAnticipoReferencia').value.trim() });
+            const r = await apiPost('REGISTRAR_ANTICIPO', solicitud);
+            SIIdempotencia.confirmar('apartados.anticipo');
             cerrarModal('modalAnticipo'); await verDetalle(a.id); mostrarMensaje('mensajeDetalle', r.mensaje, 'success'); await cargarApartados();
         } catch (e) { mostrarMensaje('mensajeAnticipo', e.message, 'error'); }
     }
 
     async function cancelarAnticipo(id) {
         if (!window.confirm('Esta opción anula un anticipo capturado por corrección mientras el apartado sigue ACTIVO. Si quieres cerrar el apartado y devolver o retener el dinero, usa “Cancelar apartado”. ¿Continuar?')) return;
-        const motivo = window.prompt('Motivo de anulación/corrección del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error');
+        const motivo = window.prompt('Motivo de anulación/corrección del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error'); if (motivo.trim().length > 1000) return mostrarMensaje('mensajeDetalle', 'El motivo no puede exceder 1000 caracteres.', 'error');
         try { const r = await apiPost('CANCELAR_ANTICIPO', { anticipo_id: id, motivo: motivo.trim() }); await verDetalle(estado.detalle.apartado.id); mostrarMensaje('mensajeDetalle', r.mensaje, 'success'); await cargarApartados(); }
         catch (e) { mostrarMensaje('mensajeDetalle', e.message, 'error'); }
     }

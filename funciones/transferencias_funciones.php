@@ -20,8 +20,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -1075,7 +1073,7 @@ function tra_auditar(PDO $conexion, string $accion, int $entidadId, string $desc
     ]);
 }
 
-function tra_cancelar(PDO $conexion, string $mensaje, int $status = 409, array $datos = []): void
+function tra_cancelar(PDO $conexion, string $mensaje, int $status = 409, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/stock_operativo.php';
+require_once __DIR__ . '/../inc/idempotencia.php';
 
 /** @var PDO|null $conexion Conexión creada por inc/conexion.php. */
 require_once __DIR__ . '/../inc/tipo_cambio_banxico.php';
@@ -23,8 +24,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -799,6 +798,7 @@ function cmp_guardar_compra(PDO $conexion): void
     $idTexto = trim((string) ($_POST['compra_id'] ?? ''));
     $id = $idTexto === '' ? 0 : cmp_id($idTexto, 'compra');
     $esNueva = $id === 0;
+    $idempotencia = $esNueva ? si_idempotencia_desde_post() : ['clave' => null, 'hash' => null];
 
     $proveedorId = cmp_id($_POST['proveedor_id'] ?? null, 'proveedor');
     $fechaCompra = cmp_fecha_hora($_POST['fecha_compra'] ?? null, 'fecha de compra');
@@ -824,6 +824,18 @@ function cmp_guardar_compra(PDO $conexion): void
     }
 
     $conexion->beginTransaction();
+    if ($esNueva) {
+        si_idempotencia_responder_repetida(
+            $conexion,
+            si_idempotencia_reservar(
+                $conexion,
+                'compras.crear',
+                $idempotencia['clave'],
+                $idempotencia['hash'],
+                (int) $_SESSION['usuario_id']
+            )
+        );
+    }
 
     $proveedor = cmp_bloquear_proveedor($conexion, $proveedorId);
 
@@ -1255,14 +1267,22 @@ function cmp_guardar_compra(PDO $conexion): void
         ]
     );
 
+    $mensaje = $esNueva ? 'Compra guardada como borrador.' : 'Borrador actualizado correctamente.';
+    $respuesta = ['compra_id' => $id, 'folio' => $folio];
+    if ($esNueva) {
+        si_idempotencia_completar(
+            $conexion,
+            'compras.crear',
+            $idempotencia['clave'],
+            'compras',
+            $id,
+            $mensaje,
+            $respuesta
+        );
+    }
     $conexion->commit();
 
-    si_responder_json(
-        true,
-        $esNueva ? 'Compra guardada como borrador.' : 'Borrador actualizado correctamente.',
-        ['compra_id' => $id, 'folio' => $folio],
-        $esNueva ? 201 : 200
-    );
+    si_responder_json(true, $mensaje, $respuesta, $esNueva ? 201 : 200);
 }
 
 function cmp_confirmar_compra(PDO $conexion): void
@@ -1275,6 +1295,15 @@ function cmp_confirmar_compra(PDO $conexion): void
 
     if (!$compra) {
         cmp_cancelar($conexion, 'La compra ya no existe.', 404);
+    }
+
+    if (in_array($compra['estado'], ['PENDIENTE_RECEPCION', 'RECIBIDA_PARCIAL', 'RECIBIDA'], true)) {
+        $conexion->commit();
+        si_responder_json(true, 'La compra ya estaba confirmada.', [
+            'compra_id' => $id,
+            'estado' => $compra['estado'],
+            'idempotencia_reutilizada' => true,
+        ]);
     }
 
     if ($compra['estado'] !== 'BORRADOR') {
@@ -3661,7 +3690,7 @@ function cmp_bind(PDOStatement $stmt, array $params): void
     }
 }
 
-function cmp_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): void
+function cmp_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

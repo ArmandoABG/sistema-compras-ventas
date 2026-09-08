@@ -1509,7 +1509,7 @@ function cli_auditar(
     ]);
 }
 
-function cli_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): void
+function cli_cancelar(PDO $conexion, string $mensaje, int $codigo, array $extra = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

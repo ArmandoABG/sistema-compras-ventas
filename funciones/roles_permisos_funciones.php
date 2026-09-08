@@ -12,9 +12,6 @@ if (!($conexion instanceof PDO)) {
     si_responder_json(false, 'No fue posible conectar con la base de datos.', [], 503);
 }
 
-// Corrige roles/permisos faltantes antes de administrarlos.
-si_sincronizar_seguridad_base($conexion);
-
 $metodo = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
 $accion = strtoupper(trim((string) ($metodo === 'GET' ? ($_GET['accion'] ?? 'INICIAL') : ($_POST['accion'] ?? ''))));
 
@@ -28,6 +25,10 @@ try {
 
     si_requerir_metodo('POST');
     si_validar_csrf();
+    if ($accion === 'SINCRONIZAR_SEGURIDAD') {
+        si_sincronizar_seguridad_base($conexion);
+        si_responder_json(true, 'El catálogo oficial de roles y permisos quedó sincronizado.');
+    }
     if ($accion === 'GUARDAR_PERMISOS') rp_guardar_permisos($conexion);
     si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
 } catch (PDOException $e) {
@@ -199,7 +200,7 @@ function rp_id($valor): int
     return (int) $id;
 }
 
-function rp_cancelar(PDO $conexion, string $mensaje, int $codigo): void
+function rp_cancelar(PDO $conexion, string $mensaje, int $codigo): never
 {
     if ($conexion->inTransaction()) $conexion->rollBack();
     si_responder_json(false, $mensaje, [], $codigo);

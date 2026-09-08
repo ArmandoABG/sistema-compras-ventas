@@ -48,13 +48,6 @@ if (
 }
 
 try {
-    /*
-     * Aseguramos catálogo oficial antes de leer roles/permisos.
-     */
-    si_sincronizar_seguridad_base(
-        $conexion
-    );
-
     $stmt = $conexion->prepare(
         "SELECT
             id,

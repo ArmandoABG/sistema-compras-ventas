@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../inc/seguridad.php';
 require_once __DIR__ . '/../inc/conexion.php';
 require_once __DIR__ . '/../inc/stock_operativo.php';
+require_once __DIR__ . '/../inc/csv_seguro.php';
 require_once __DIR__ . '/../inc/xlsx_simple.php';
 
 si_requerir_permiso('inventario.ver', true);
@@ -21,8 +22,6 @@ $accion = strtoupper(trim((string) (
 )));
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     if ($metodo === 'GET') {
         si_requerir_metodo('GET');
 
@@ -1257,7 +1256,14 @@ function inv_kardex_export_headers(): array
 function inv_kardex_export_row(array $fila): array
 {
     $a = inv_kardex_export_row_assoc($fila);
-    return array_values($a);
+    $segura = [];
+    foreach (inv_kardex_xlsx_columnas() as $columna) {
+        $segura[] = si_csv_celda_segura(
+            $a[$columna['campo']] ?? null,
+            (string) ($columna['tipo'] ?? 'texto')
+        );
+    }
+    return $segura;
 }
 
 function inv_kardex_export_row_assoc(array $fila): array
@@ -1992,7 +1998,7 @@ function inv_tipo_movimiento_codigo(PDO $conexion, string $codigo): ?array
     return $fila ?: null;
 }
 
-function inv_cancelar_transaccion(PDO $conexion, string $mensaje, int $status = 409, array $datos = []): void
+function inv_cancelar_transaccion(PDO $conexion, string $mensaje, int $status = 409, array $datos = []): never
 {
     if ($conexion->inTransaction()) {
         $conexion->rollBack();

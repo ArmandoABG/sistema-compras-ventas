@@ -37,8 +37,6 @@ if ($accion !== 'RESUMEN') {
 }
 
 try {
-    si_stock_preparar_operacion($conexion);
-
     $usuarioId = (int) $_SESSION['usuario_id'];
 
     /*
