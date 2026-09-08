@@ -129,17 +129,20 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
                     <label class="field" data-filtro="producto">
                         <span>Producto</span>
-                        <select id="filtroProducto"><option value="0">Todos</option></select>
+                        <input type="search" id="filtroProducto" list="opcionesProductos" autocomplete="off" placeholder="Escribe al menos 2 caracteres">
+                        <datalist id="opcionesProductos"></datalist>
                     </label>
 
                     <label class="field" data-filtro="proveedor">
                         <span>Proveedor</span>
-                        <select id="filtroProveedor"><option value="0">Todos</option></select>
+                        <input type="search" id="filtroProveedor" list="opcionesProveedores" autocomplete="off" placeholder="Escribe al menos 2 caracteres">
+                        <datalist id="opcionesProveedores"></datalist>
                     </label>
 
                     <label class="field" data-filtro="cliente">
                         <span>Cliente</span>
-                        <select id="filtroCliente"><option value="0">Todos</option></select>
+                        <input type="search" id="filtroCliente" list="opcionesClientes" autocomplete="off" placeholder="Escribe al menos 2 caracteres">
+                        <datalist id="opcionesClientes"></datalist>
                     </label>
 
                     <label class="field" data-filtro="usuario">
@@ -223,8 +226,11 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         hasta: $('filtroHasta'),
         almacen: $('filtroAlmacen'),
         producto: $('filtroProducto'),
+        opcionesProductos: $('opcionesProductos'),
         proveedor: $('filtroProveedor'),
+        opcionesProveedores: $('opcionesProveedores'),
         cliente: $('filtroCliente'),
+        opcionesClientes: $('opcionesClientes'),
         usuario: $('filtroUsuario'),
         estado: $('filtroEstado'),
         estadoLabel: $('estadoLabel'),
@@ -240,7 +246,9 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     };
 
     const estado = {
-        catalogos: { reportes: [], almacenes: [], productos: [], proveedores: [], clientes: [], usuarios: [] },
+        catalogos: { reportes: [], almacenes: [], usuarios: [] },
+        sugerencias: { producto: [], proveedor: [], cliente: [] },
+        busquedas: { producto: 0, proveedor: 0, cliente: 0 },
         reporte: null,
         pagina: 1,
         paginas: 1,
@@ -360,17 +368,11 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
         estado.catalogos.reportes = Array.isArray(data.reportes) ? data.reportes : [];
         estado.catalogos.almacenes = Array.isArray(data.almacenes) ? data.almacenes : [];
-        estado.catalogos.productos = Array.isArray(data.productos) ? data.productos : [];
-        estado.catalogos.proveedores = Array.isArray(data.proveedores) ? data.proveedores : [];
-        estado.catalogos.clientes = Array.isArray(data.clientes) ? data.clientes : [];
         estado.catalogos.usuarios = Array.isArray(data.usuarios) ? data.usuarios : [];
         CONFIG.puedeExportar = Boolean(data.puede_exportar ?? CONFIG.puedeExportar);
         CONFIG.monedaBase = normalizarMoneda(data.moneda_base || CONFIG.monedaBase);
 
         llenarSelect(dom.almacen, estado.catalogos.almacenes, (x) => `${x.codigo || ''}${x.codigo ? ' · ' : ''}${x.nombre || ''}`);
-        llenarSelect(dom.producto, estado.catalogos.productos, (x) => `${x.sku || ''}${x.sku ? ' · ' : ''}${x.nombre || ''}`);
-        llenarSelect(dom.proveedor, estado.catalogos.proveedores, (x) => `${x.codigo || ''}${x.codigo ? ' · ' : ''}${x.nombre || ''}`);
-        llenarSelect(dom.cliente, estado.catalogos.clientes, (x) => `${x.codigo || ''}${x.codigo ? ' · ' : ''}${x.nombre || ''}`);
         llenarSelect(dom.usuario, estado.catalogos.usuarios, (x) => `${x.usuario || ''}${x.nombre ? ` · ${x.nombre}` : ''}`);
 
         renderReportes();
@@ -431,12 +433,51 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             fecha_desde: dom.desde.value,
             fecha_hasta: dom.hasta.value,
             almacen_id: dom.almacen.value || 0,
-            producto_id: dom.producto.value || 0,
-            proveedor_id: dom.proveedor.value || 0,
-            cliente_id: dom.cliente.value || 0,
+            producto_id: idCatalogoSeleccionado('producto', dom.producto),
+            proveedor_id: idCatalogoSeleccionado('proveedor', dom.proveedor),
+            cliente_id: idCatalogoSeleccionado('cliente', dom.cliente),
             usuario_id: dom.usuario.value || 0,
             estado: dom.estado.value,
         };
+    }
+
+    function etiquetaCatalogo(fila) {
+        const codigo = String(fila?.codigo || '').trim();
+        const nombre = String(fila?.nombre || '').trim();
+        return `${codigo}${codigo && nombre ? ' · ' : ''}${nombre}${etiquetaHistorica(fila)}`;
+    }
+
+    function idCatalogoSeleccionado(tipo, control) {
+        const valor = control?.value?.trim() || '';
+        const fila = estado.sugerencias[tipo].find((item) => etiquetaCatalogo(item) === valor);
+        return fila ? Number(fila.id) : 0;
+    }
+
+    async function buscarCatalogo(tipo, control, lista) {
+        const solicitud = ++estado.busquedas[tipo];
+        const q = control.value.trim();
+        const seleccionada = idCatalogoSeleccionado(tipo, control);
+        if (seleccionada > 0) {
+            control.dataset.selectedId = String(seleccionada);
+            return;
+        }
+
+        control.dataset.selectedId = '0';
+        if (q.length < 2) {
+            estado.sugerencias[tipo] = [];
+            lista.innerHTML = '';
+            return;
+        }
+
+        const data = await apiGet('BUSCAR_CATALOGO', { tipo, q });
+        if (!data || solicitud !== estado.busquedas[tipo]) return;
+        estado.sugerencias[tipo] = Array.isArray(data.resultados) ? data.resultados : [];
+        lista.innerHTML = '';
+        estado.sugerencias[tipo].forEach((fila) => {
+            const option = document.createElement('option');
+            option.value = etiquetaCatalogo(fila);
+            lista.appendChild(option);
+        });
     }
 
     function formatNumero(valor, decimales = 6) {
@@ -506,6 +547,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     async function cargarReporte() {
         if (!estado.reporte) return;
+        if (!catalogosValidos()) return;
         const solicitud = ++estado.solicitud;
         estado.cargando = true;
         dom.btnConsultar.disabled = true;
@@ -536,14 +578,36 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         }
     }
 
+    function catalogosValidos() {
+        const filtros = [
+            ['producto', 'producto', dom.producto],
+            ['proveedor', 'proveedor', dom.proveedor],
+            ['cliente', 'cliente', dom.cliente],
+        ];
+        for (const [tipo, nombre, control] of filtros) {
+            if (control.value.trim() !== '' && idCatalogoSeleccionado(tipo, control) === 0) {
+                mostrarMensaje(`Selecciona un ${nombre} de las coincidencias mostradas.`);
+                return false;
+            }
+        }
+        return true;
+    }
+
     function limpiarFiltros(recargar = true) {
         dom.buscar.value = '';
         dom.desde.value = '';
         dom.hasta.value = '';
         dom.almacen.value = '0';
-        dom.producto.value = '0';
-        dom.proveedor.value = '0';
-        dom.cliente.value = '0';
+        [
+            ['producto', dom.producto, dom.opcionesProductos],
+            ['proveedor', dom.proveedor, dom.opcionesProveedores],
+            ['cliente', dom.cliente, dom.opcionesClientes],
+        ].forEach(([tipo, control, lista]) => {
+            control.value = '';
+            control.dataset.selectedId = '0';
+            estado.sugerencias[tipo] = [];
+            lista.innerHTML = '';
+        });
         dom.usuario.value = '0';
         dom.estado.value = '';
         dom.porPagina.value = '20';
@@ -552,7 +616,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     }
 
     function exportar(formato) {
-        if (!estado.reporte || !CONFIG.puedeExportar) return;
+        if (!estado.reporte || !CONFIG.puedeExportar || !catalogosValidos()) return;
         const accion = formato === 'xlsx' ? 'EXPORTAR_XLSX' : 'EXPORTAR_CSV';
         const url = new URL(CONFIG.endpoint, window.location.href);
         url.searchParams.set('accion', accion);
@@ -650,8 +714,25 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     if (dom.btnExportarContable) dom.btnExportarContable.addEventListener('click', exportarContable);
 
     dom.porPagina.addEventListener('change', () => { estado.pagina = 1; cargarReporte(); });
-    [dom.desde, dom.hasta, dom.almacen, dom.producto, dom.proveedor, dom.cliente, dom.usuario, dom.estado].forEach((control) => {
+    [dom.desde, dom.hasta, dom.almacen, dom.usuario, dom.estado].forEach((control) => {
         control.addEventListener('change', () => { if (estado.reporte) { estado.pagina = 1; cargarReporte(); } });
+    });
+    [
+        ['producto', dom.producto, dom.opcionesProductos],
+        ['proveedor', dom.proveedor, dom.opcionesProveedores],
+        ['cliente', dom.cliente, dom.opcionesClientes],
+    ].forEach(([tipo, control, lista]) => {
+        control.addEventListener('input', debounce(() => {
+            buscarCatalogo(tipo, control, lista).catch((error) => mostrarMensaje(error.message));
+        }, 300));
+        control.addEventListener('change', () => {
+            const id = idCatalogoSeleccionado(tipo, control);
+            control.dataset.selectedId = String(id);
+            if (estado.reporte) {
+                estado.pagina = 1;
+                cargarReporte();
+            }
+        });
     });
     dom.buscar.addEventListener('input', debounce(() => { if (estado.reporte) { estado.pagina = 1; cargarReporte(); } }, 450));
 

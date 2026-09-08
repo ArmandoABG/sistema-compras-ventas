@@ -796,48 +796,11 @@ function prov_listar_relaciones(PDO $conexion): void
             pp.dias_entrega,
             pp.compra_minima,
             pp.activo,
-            (
-                SELECT hp.id
-                FROM historial_precios_proveedor hp
-                WHERE hp.proveedor_producto_id = pp.id
-                  AND hp.activo = 1
-                ORDER BY hp.fecha_precio DESC, hp.id DESC
-                LIMIT 1
-            ) AS ultimo_precio_id,
-            (
-                SELECT hp.precio_unitario
-                FROM historial_precios_proveedor hp
-                WHERE hp.proveedor_producto_id = pp.id
-                  AND hp.activo = 1
-                ORDER BY hp.fecha_precio DESC, hp.id DESC
-                LIMIT 1
-            ) AS ultimo_precio,
-            (
-                SELECT m.codigo
-                FROM historial_precios_proveedor hp
-                INNER JOIN monedas m
-                    ON m.id = hp.moneda_id
-                WHERE hp.proveedor_producto_id = pp.id
-                  AND hp.activo = 1
-                ORDER BY hp.fecha_precio DESC, hp.id DESC
-                LIMIT 1
-            ) AS ultimo_precio_moneda,
-            (
-                SELECT hp.precio_normalizado_base
-                FROM historial_precios_proveedor hp
-                WHERE hp.proveedor_producto_id = pp.id
-                  AND hp.activo = 1
-                ORDER BY hp.fecha_precio DESC, hp.id DESC
-                LIMIT 1
-            ) AS ultimo_precio_normalizado,
-            (
-                SELECT hp.fecha_precio
-                FROM historial_precios_proveedor hp
-                WHERE hp.proveedor_producto_id = pp.id
-                  AND hp.activo = 1
-                ORDER BY hp.fecha_precio DESC, hp.id DESC
-                LIMIT 1
-            ) AS ultimo_precio_fecha
+            hp_ultimo.id AS ultimo_precio_id,
+            hp_ultimo.precio_unitario AS ultimo_precio,
+            m_ultimo.codigo AS ultimo_precio_moneda,
+            hp_ultimo.precio_normalizado_base AS ultimo_precio_normalizado,
+            hp_ultimo.fecha_precio AS ultimo_precio_fecha
          FROM proveedores_productos pp
          INNER JOIN productos p
             ON p.id = pp.producto_id
@@ -847,6 +810,17 @@ function prov_listar_relaciones(PDO $conexion): void
             ON pres.id = pp.presentacion_id
          LEFT JOIN unidades_medida up
             ON up.id = pres.unidad_id
+         LEFT JOIN historial_precios_proveedor hp_ultimo
+            ON hp_ultimo.id = (
+                SELECT hp.id
+                FROM historial_precios_proveedor hp
+                WHERE hp.proveedor_producto_id = pp.id
+                  AND hp.activo = 1
+                ORDER BY hp.fecha_precio DESC, hp.id DESC
+                LIMIT 1
+            )
+         LEFT JOIN monedas m_ultimo
+            ON m_ultimo.id = hp_ultimo.moneda_id
          WHERE {$whereSql}
          ORDER BY
             pp.activo DESC,

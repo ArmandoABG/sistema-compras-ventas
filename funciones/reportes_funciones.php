@@ -36,6 +36,10 @@ try {
             rep_catalogos($conexion);
             break;
 
+        case 'BUSCAR_CATALOGO':
+            rep_buscar_catalogo($conexion);
+            break;
+
         case 'LISTAR':
             rep_listar($conexion);
             break;
@@ -372,15 +376,6 @@ function rep_catalogos(PDO $conexion): void
     $almacenes = isset($filtrosNecesarios['almacen'])
         ? $conexion->query("SELECT id, codigo, nombre, activo FROM almacenes ORDER BY nombre ASC, id ASC")->fetchAll()
         : [];
-    $productos = isset($filtrosNecesarios['producto'])
-        ? $conexion->query("SELECT id, sku, nombre, tipo, activo FROM productos ORDER BY nombre ASC, id ASC")->fetchAll()
-        : [];
-    $proveedores = isset($filtrosNecesarios['proveedor'])
-        ? $conexion->query("SELECT id, codigo, razon_social AS nombre, activo FROM proveedores ORDER BY razon_social ASC, id ASC")->fetchAll()
-        : [];
-    $clientes = isset($filtrosNecesarios['cliente'])
-        ? $conexion->query("SELECT id, codigo, nombre_razon_social AS nombre, activo FROM clientes ORDER BY nombre_razon_social ASC, id ASC")->fetchAll()
-        : [];
     $usuarios = isset($filtrosNecesarios['usuario'])
         ? $conexion->query(
             "SELECT id, usuario, TRIM(CONCAT_WS(' ', nombres, apellido_paterno, apellido_materno)) AS nombre, activo
@@ -402,22 +397,72 @@ function rep_catalogos(PDO $conexion): void
     }
 
     foreach ($almacenes as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
-    foreach ($productos as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
-    foreach ($proveedores as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
-    foreach ($clientes as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
     foreach ($usuarios as &$fila) { $fila['id'] = (int) $fila['id']; } unset($fila);
 
     si_responder_json(true, 'Catálogos de reportes cargados.', [
         'reportes' => array_values($definiciones),
         'almacenes' => $almacenes,
-        'productos' => $productos,
-        'proveedores' => $proveedores,
-        'clientes' => $clientes,
         'usuarios' => $usuarios,
         'moneda_base' => strtoupper($monedaBase),
         'puede_exportar' => si_tiene_permiso('reportes.ver'),
         'puede_exportar_contable' => si_tiene_permiso('contabilidad.exportar'),
     ]);
+}
+
+function rep_buscar_catalogo(PDO $conexion): void
+{
+    $tipo = strtolower(rep_texto($_GET['tipo'] ?? '', 20));
+    $buscar = rep_texto($_GET['q'] ?? '', 120);
+    $catalogos = [
+        'producto' => ['tabla' => 'productos', 'codigo' => 'sku', 'nombre' => 'nombre'],
+        'proveedor' => ['tabla' => 'proveedores', 'codigo' => 'codigo', 'nombre' => 'razon_social'],
+        'cliente' => ['tabla' => 'clientes', 'codigo' => 'codigo', 'nombre' => 'nombre_razon_social'],
+    ];
+
+    if (!isset($catalogos[$tipo])) {
+        si_responder_json(false, 'El catálogo solicitado no es válido.', [], 400);
+    }
+    if (mb_strlen($buscar) < 2) {
+        si_responder_json(true, 'Escribe al menos dos caracteres.', ['resultados' => []]);
+    }
+
+    $def = $catalogos[$tipo];
+    $tabla = $def['tabla'];
+    $codigo = $def['codigo'];
+    $nombre = $def['nombre'];
+    $stmt = $conexion->prepare(
+        "SELECT id, codigo, nombre, activo
+         FROM (
+            (SELECT id, {$codigo} AS codigo, {$nombre} AS nombre, activo
+             FROM {$tabla}
+             WHERE {$codigo} LIKE :codigo
+             LIMIT 20)
+            UNION
+            (SELECT id, {$codigo} AS codigo, {$nombre} AS nombre, activo
+             FROM {$tabla}
+             WHERE {$nombre} LIKE :nombre
+             LIMIT 20)
+         ) catalogo
+         ORDER BY
+            CASE WHEN UPPER(codigo) = :exacto THEN 0 ELSE 1 END,
+            activo DESC,
+            nombre ASC,
+            id ASC
+         LIMIT 20"
+    );
+    $stmt->execute([
+        ':codigo' => strtoupper($buscar) . '%',
+        ':nombre' => $buscar . '%',
+        ':exacto' => strtoupper($buscar),
+    ]);
+    $filas = $stmt->fetchAll();
+    foreach ($filas as &$fila) {
+        $fila['id'] = (int) $fila['id'];
+        $fila['activo'] = (int) $fila['activo'];
+    }
+    unset($fila);
+
+    si_responder_json(true, 'Coincidencias cargadas.', ['resultados' => $filas]);
 }
 
 function rep_listar(PDO $conexion): void
@@ -565,6 +610,12 @@ function rep_exportar_contable_xlsx(PDO $conexion): void
 
     $params = ['desde' => $desde, 'hasta' => $hasta];
 
+    $totalFilas = rep_total_filas($conexion, rep_contable_sql_ventas(true), $params)
+        + rep_total_filas($conexion, rep_contable_sql_compras(true), $params)
+        + rep_total_filas($conexion, rep_contable_sql_devoluciones_venta(), $params)
+        + rep_total_filas($conexion, rep_contable_sql_devoluciones_compra(), $params);
+    rep_validar_limite_exportacion($totalFilas, 100000);
+
     $ventas = rep_consultar_todo($conexion, rep_contable_sql_ventas(false), $params);
     $ventasDetalle = rep_consultar_todo($conexion, rep_contable_sql_ventas(true), $params);
     $compras = rep_consultar_todo($conexion, rep_contable_sql_compras(false), $params);
@@ -572,9 +623,6 @@ function rep_exportar_contable_xlsx(PDO $conexion): void
     $devVentas = rep_consultar_todo($conexion, rep_contable_sql_devoluciones_venta(), $params);
     $devCompras = rep_consultar_todo($conexion, rep_contable_sql_devoluciones_compra(), $params);
     $impuestos = rep_contable_resumen_impuestos($conexion, $params);
-
-    $totalFilas = count($ventasDetalle) + count($comprasDetalle) + count($devVentas) + count($devCompras);
-    rep_validar_limite_exportacion($totalFilas, 100000);
 
     $totales = rep_contable_totales($ventas, $compras, $devVentas, $devCompras);
     $devVentasOps = rep_contar_distintos($devVentas, 'devolucion');
