@@ -25,7 +25,35 @@ $csrfTopbar = si_token_csrf();
 ?>
 <header class="topbar">
     <div class="topbar-title">
+        <span>Vista actual</span>
         <strong><?= si_escapar($tituloPagina ?? 'Sistema Integral') ?></strong>
+    </div>
+
+    <div class="topbar-search" id="topbarSearch">
+        <label class="sr-only" for="topbarSearchInput">Buscar en el sistema</label>
+        <div class="topbar-search__control">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+                <circle cx="11" cy="11" r="7"></circle>
+                <path d="m20 20-4-4"></path>
+            </svg>
+            <input
+                type="search"
+                id="topbarSearchInput"
+                placeholder="Buscar en el sistema..."
+                autocomplete="off"
+                aria-haspopup="listbox"
+                aria-expanded="false"
+                aria-controls="topbarSearchPanel"
+            >
+            <kbd aria-hidden="true">/</kbd>
+        </div>
+        <section class="topbar-search__panel" id="topbarSearchPanel" aria-label="Accesos disponibles" hidden>
+            <header>
+                <span>Accesos disponibles</span>
+                <small>Solo se muestran módulos autorizados</small>
+            </header>
+            <div class="topbar-search__results" id="topbarSearchResults" role="listbox"></div>
+        </section>
     </div>
 
     <div class="topbar-user">
@@ -39,7 +67,12 @@ $csrfTopbar = si_token_csrf();
                 aria-expanded="false"
                 aria-controls="topbarAlertsPanel"
             >
-                <span class="topbar-alerts__icon" aria-hidden="true">!</span>
+                <span class="topbar-alerts__icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path>
+                        <path d="M10 21h4"></path>
+                    </svg>
+                </span>
                 <span class="topbar-alerts__label">Alertas</span>
                 <span class="topbar-alerts__badge" id="topbarAlertsBadge" hidden>0</span>
             </button>
@@ -91,7 +124,9 @@ $csrfTopbar = si_token_csrf();
                     <strong id="topbarAccountName"><?= si_escapar($nombreUsuario) ?></strong>
                     <small><?= si_escapar($rolUsuario) ?></small>
                 </span>
-                <span class="topbar-account__chevron" aria-hidden="true">⌄</span>
+                <span class="topbar-account__chevron" aria-hidden="true">
+                    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m6.5 8 3.5 3.5L13.5 8"></path></svg>
+                </span>
             </button>
 
             <section class="topbar-account__menu" id="topbarAccountMenu" hidden>
@@ -171,6 +206,136 @@ $csrfTopbar = si_token_csrf();
         </div>
     </section>
 </div>
+
+<script>
+(function () {
+    'use strict';
+
+    const root = document.getElementById('topbarSearch');
+    const input = document.getElementById('topbarSearchInput');
+    const panel = document.getElementById('topbarSearchPanel');
+    const results = document.getElementById('topbarSearchResults');
+    if (!root || !input || !panel || !results) return;
+
+    const accesos = Array.from(document.querySelectorAll('.sidebar-link[data-nav-label]')).map(function (link) {
+        return {
+            titulo: String(link.dataset.navLabel || link.textContent || '').trim(),
+            grupo: String(link.dataset.navGroup || 'Sistema').trim(),
+            href: link.href,
+        };
+    });
+    let indiceActivo = -1;
+    let cerrarTimer = 0;
+
+    function normalizar(valor) {
+        return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function abrir() {
+        window.clearTimeout(cerrarTimer);
+        panel.hidden = false;
+        input.setAttribute('aria-expanded', 'true');
+        window.requestAnimationFrame(function () { panel.classList.add('is-open'); });
+    }
+
+    function cerrar() {
+        panel.classList.remove('is-open');
+        input.setAttribute('aria-expanded', 'false');
+        indiceActivo = -1;
+        window.clearTimeout(cerrarTimer);
+        cerrarTimer = window.setTimeout(function () { panel.hidden = true; }, 160);
+    }
+
+    function activar(indice) {
+        const enlaces = Array.from(results.querySelectorAll('a'));
+        if (!enlaces.length) {
+            indiceActivo = -1;
+            return;
+        }
+        indiceActivo = Math.max(0, Math.min(indice, enlaces.length - 1));
+        enlaces.forEach(function (enlace, i) {
+            enlace.classList.toggle('is-active', i === indiceActivo);
+            enlace.setAttribute('aria-selected', i === indiceActivo ? 'true' : 'false');
+        });
+        enlaces[indiceActivo].scrollIntoView({ block: 'nearest' });
+    }
+
+    function render() {
+        const termino = normalizar(input.value.trim());
+        const coincidencias = accesos.filter(function (acceso) {
+            return termino === '' || normalizar(acceso.titulo + ' ' + acceso.grupo).includes(termino);
+        }).slice(0, 8);
+
+        results.replaceChildren();
+        if (!coincidencias.length) {
+            const vacio = document.createElement('p');
+            vacio.className = 'topbar-search__empty';
+            vacio.textContent = 'No hay accesos disponibles con ese nombre.';
+            results.appendChild(vacio);
+            abrir();
+            return;
+        }
+
+        coincidencias.forEach(function (acceso) {
+            const enlace = document.createElement('a');
+            enlace.href = acceso.href;
+            enlace.setAttribute('role', 'option');
+            enlace.setAttribute('aria-selected', 'false');
+
+            const marca = document.createElement('span');
+            marca.className = 'topbar-search__result-icon';
+            marca.textContent = acceso.titulo.slice(0, 1).toUpperCase();
+
+            const texto = document.createElement('span');
+            const titulo = document.createElement('strong');
+            const grupo = document.createElement('small');
+            titulo.textContent = acceso.titulo;
+            grupo.textContent = acceso.grupo;
+            texto.append(titulo, grupo);
+            enlace.append(marca, texto);
+            enlace.addEventListener('mouseenter', function () {
+                activar(Array.from(results.querySelectorAll('a')).indexOf(enlace));
+            });
+            enlace.addEventListener('click', cerrar);
+            results.appendChild(enlace);
+        });
+        indiceActivo = -1;
+        abrir();
+    }
+
+    input.addEventListener('focus', render);
+    input.addEventListener('input', render);
+    input.addEventListener('keydown', function (event) {
+        const enlaces = Array.from(results.querySelectorAll('a'));
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            activar(indiceActivo + 1);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            activar(indiceActivo <= 0 ? enlaces.length - 1 : indiceActivo - 1);
+        } else if (event.key === 'Enter' && indiceActivo >= 0 && enlaces[indiceActivo]) {
+            event.preventDefault();
+            enlaces[indiceActivo].click();
+        } else if (event.key === 'Escape') {
+            cerrar();
+            input.blur();
+        }
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!root.contains(event.target)) cerrar();
+    });
+    document.addEventListener('keydown', function (event) {
+        const objetivo = event.target;
+        const escribiendo = objetivo instanceof HTMLElement
+            && (objetivo.matches('input, textarea, select') || objetivo.isContentEditable);
+        if (event.key === '/' && !escribiendo) {
+            event.preventDefault();
+            input.focus();
+        }
+    });
+})();
+</script>
 
 <script>
 (function () {

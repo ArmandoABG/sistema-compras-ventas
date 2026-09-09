@@ -66,6 +66,10 @@ $cssPath = __DIR__ . '/css/style_login.css';
 $cssVersion = is_file($cssPath)
     ? (string) filemtime($cssPath)
     : (string) time();
+$globalCssPath = __DIR__ . '/css/style_global.css';
+$globalCssVersion = is_file($globalCssPath)
+    ? (string) filemtime($globalCssPath)
+    : '1';
 ?>
 <!DOCTYPE html>
 <html lang="es">
@@ -81,113 +85,116 @@ $cssVersion = is_file($cssPath)
 
     <link
         rel="stylesheet"
+        href="css/style_global.css?v=<?= si_escapar($globalCssVersion) ?>"
+    >
+    <link
+        rel="stylesheet"
         href="css/style_login.css?v=<?= si_escapar($cssVersion) ?>"
     >
 </head>
 <body>
 
 <main class="login-page">
-    <section class="login-card">
-        <header class="login-heading">
-            <div class="login-logo">SI</div>
+    <section class="login-shell" aria-label="Acceso a Sistema Integral">
+        <aside class="login-brand-panel">
+            <div class="login-brand-panel__glow" aria-hidden="true"></div>
 
-            <div>
-                <small>SISTEMA INTEGRAL</small>
-                <h1>Iniciar sesión</h1>
-            </div>
-        </header>
+            <header class="login-brand">
+                <div class="login-logo">SI</div>
+                <div>
+                    <strong>Sistema Integral</strong>
+                    <small>ERP · Gestión empresarial</small>
+                </div>
+            </header>
 
-        <p class="login-description">
-            Compras, ventas, inventario y control empresarial.
-        </p>
-
-        <?php if ($mensajeInicial !== ''): ?>
-            <div
-                class="login-message login-message--<?= si_escapar($tipoMensajeInicial) ?>"
-            >
-                <?= si_escapar($mensajeInicial) ?>
-            </div>
-        <?php endif; ?>
-
-        <?php if (!($conexion instanceof PDO)): ?>
-            <div class="login-message login-message--error">
-                No fue posible conectar con la base de datos.
-                Revisa <strong>inc/conexion.php</strong>.
-            </div>
-        <?php endif; ?>
-
-        <?php if (!$hayUsuarios && $conexion instanceof PDO): ?>
-            <div class="login-message login-message--warning">
-                Todavía no existe ningún usuario.
-                <a href="JS/crear_admin_inicial.php">
-                    Crear administrador inicial
-                </a>
-            </div>
-        <?php endif; ?>
-
-        <div
-            id="mensajeLogin"
-            class="login-message login-message--error"
-            role="alert"
-            hidden
-        ></div>
-
-        <form
-            id="formLogin"
-            action="funciones/login_funciones.php"
-            method="post"
-            autocomplete="on"
-        >
-            <input
-                type="hidden"
-                name="csrf_token"
-                value="<?= si_escapar($csrfLogin) ?>"
-            >
-
-            <label for="usuario">Usuario</label>
-
-            <input
-                id="usuario"
-                type="text"
-                name="usuario"
-                maxlength="60"
-                autocomplete="username"
-                required
-                autofocus
-            >
-
-            <label for="password">Contraseña</label>
-
-            <div class="password-field">
-                <input
-                    id="password"
-                    type="password"
-                    name="password"
-                    maxlength="255"
-                    autocomplete="current-password"
-                    required
-                >
-
-                <button
-                    id="btnMostrarPassword"
-                    class="password-field__toggle"
-                    type="button"
-                >
-                    Mostrar
-                </button>
+            <div class="login-brand-copy">
+                <span class="login-brand-copy__eyebrow">TU OPERACIÓN, EN UN SOLO LUGAR</span>
+                <h1>Control claro para decisiones más inteligentes.</h1>
+                <p>Administra las áreas clave de tu empresa desde una plataforma segura, ordenada y fácil de consultar.</p>
             </div>
 
-            <button
-                id="btnLogin"
-                class="btn-primary"
-                type="submit"
-                <?= (!$hayUsuarios || !($conexion instanceof PDO))
-                    ? 'disabled'
-                    : '' ?>
-            >
-                Iniciar sesión
-            </button>
-        </form>
+            <ul class="login-benefits" aria-label="Ventajas del sistema">
+                <li><span aria-hidden="true">✓</span><strong>Ventas y compras</strong><small>Operación comercial conectada</small></li>
+                <li><span aria-hidden="true">✓</span><strong>Inventario</strong><small>Existencias y movimientos trazables</small></li>
+                <li><span aria-hidden="true">✓</span><strong>Clientes y proveedores</strong><small>Información centralizada</small></li>
+                <li><span aria-hidden="true">✓</span><strong>Reportes</strong><small>Visibilidad para tomar decisiones</small></li>
+                <li><span aria-hidden="true">✓</span><strong>Seguridad</strong><small>Accesos definidos por permisos</small></li>
+            </ul>
+
+            <footer class="login-brand-footer">
+                <span></span>
+                Plataforma empresarial disponible
+            </footer>
+        </aside>
+
+        <section class="login-form-panel">
+            <div class="login-mobile-brand">
+                <div class="login-logo">SI</div>
+                <div><strong>Sistema Integral</strong><small>Gestión empresarial</small></div>
+            </div>
+
+            <div class="login-form-wrap">
+                <header class="login-heading">
+                    <span class="login-heading__eyebrow">ACCESO SEGURO</span>
+                    <h2>Bienvenido</h2>
+                    <p class="login-description">Ingresa tus credenciales para continuar al sistema.</p>
+                </header>
+
+                <?php if ($mensajeInicial !== ''): ?>
+                    <div class="login-message login-message--<?= si_escapar($tipoMensajeInicial) ?>">
+                        <?= si_escapar($mensajeInicial) ?>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!($conexion instanceof PDO)): ?>
+                    <div class="login-message login-message--error">
+                        No fue posible conectar con la base de datos. Revisa <strong>inc/conexion.php</strong>.
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!$hayUsuarios && $conexion instanceof PDO): ?>
+                    <div class="login-message login-message--warning">
+                        Todavía no existe ningún usuario.
+                        <a href="JS/crear_admin_inicial.php">Crear administrador inicial</a>
+                    </div>
+                <?php endif; ?>
+
+                <div id="mensajeLogin" class="login-message login-message--error" role="alert" hidden></div>
+
+                <form id="formLogin" action="funciones/login_funciones.php" method="post" autocomplete="on">
+                    <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfLogin) ?>">
+
+                    <label for="usuario">Usuario</label>
+                    <div class="login-input-wrap">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <circle cx="12" cy="8" r="4"></circle><path d="M4 21a8 8 0 0 1 16 0"></path>
+                        </svg>
+                        <input id="usuario" type="text" name="usuario" maxlength="60" autocomplete="username" placeholder="Escribe tu usuario" required autofocus>
+                    </div>
+
+                    <label for="password">Contraseña</label>
+                    <div class="password-field login-input-wrap">
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                        </svg>
+                        <input id="password" type="password" name="password" maxlength="255" autocomplete="current-password" placeholder="Escribe tu contraseña" required>
+                        <button id="btnMostrarPassword" class="password-field__toggle" type="button">Mostrar</button>
+                    </div>
+
+                    <button
+                        id="btnLogin"
+                        class="btn-primary login-submit"
+                        type="submit"
+                        <?= (!$hayUsuarios || !($conexion instanceof PDO)) ? 'disabled' : '' ?>
+                    >
+                        <span>Iniciar sesión</span>
+                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"></path><path d="m14 7 5 5-5 5"></path></svg>
+                    </button>
+                </form>
+
+                <p class="login-support">Acceso exclusivo para personal autorizado.</p>
+            </div>
+        </section>
     </section>
 </main>
 
@@ -223,7 +230,7 @@ $cssVersion = is_file($cssPath)
         mensaje.hidden = true;
         boton.disabled = true;
 
-        const textoOriginal = boton.textContent;
+        const contenidoOriginal = boton.innerHTML;
         boton.textContent = 'Validando...';
 
         try {
@@ -268,7 +275,7 @@ $cssVersion = is_file($cssPath)
             mensaje.hidden = false;
 
             boton.disabled = false;
-            boton.textContent = textoOriginal;
+            boton.innerHTML = contenidoOriginal;
         }
     });
 })();

@@ -71,6 +71,38 @@ $nombreUsuario = trim((string) (
     ?? 'Usuario'
 ));
 
+$fechaActual = new DateTimeImmutable('now');
+$diasDashboard = [
+    'domingo',
+    'lunes',
+    'martes',
+    'miércoles',
+    'jueves',
+    'viernes',
+    'sábado',
+];
+$mesesDashboard = [
+    1 => 'enero',
+    2 => 'febrero',
+    3 => 'marzo',
+    4 => 'abril',
+    5 => 'mayo',
+    6 => 'junio',
+    7 => 'julio',
+    8 => 'agosto',
+    9 => 'septiembre',
+    10 => 'octubre',
+    11 => 'noviembre',
+    12 => 'diciembre',
+];
+$fechaDashboard = sprintf(
+    '%s, %d de %s de %s',
+    $diasDashboard[(int) $fechaActual->format('w')],
+    (int) $fechaActual->format('j'),
+    $mesesDashboard[(int) $fechaActual->format('n')],
+    $fechaActual->format('Y')
+);
+
 $cssGeneral =
     __DIR__
     . '/../css/style_global.css';
@@ -126,7 +158,7 @@ $versionModulo = is_file($cssModulo)
         <main class="page-content">
 
             <header class="dashboard-heading">
-                <div>
+                <div class="dashboard-heading__copy">
                     <p class="dashboard-eyebrow">
                         RESUMEN OPERATIVO
                     </p>
@@ -140,10 +172,20 @@ $versionModulo = is_file($cssModulo)
                         ) ?>
                     </h1>
 
-                    <p>
+                    <p class="dashboard-heading__description">
                         Información rápida de ventas,
                         compras, inventario y cuentas.
                     </p>
+
+                    <div class="dashboard-heading__meta">
+                        <span>
+                            <?= si_escapar(ucfirst($fechaDashboard)) ?>
+                        </span>
+                        <span class="dashboard-heading__status">
+                            <i aria-hidden="true"></i>
+                            Panel operativo
+                        </span>
+                    </div>
                 </div>
 
                 <div class="dashboard-actions">
@@ -180,46 +222,67 @@ $versionModulo = is_file($cssModulo)
 
             <section class="kpi-grid">
 
-                <article class="kpi-card"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
-                    <span>Ventas de hoy</span>
+                <article class="kpi-card kpi-card--blue"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Ventas de hoy</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"></path></svg></span>
+                    </div>
                     <strong id="kpiVentasHoy">0</strong>
                     <small id="detalleVentasHoy">
                         Sin ventas confirmadas
                     </small>
                 </article>
 
-                <article class="kpi-card"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
-                    <span>Compras por recibir</span>
+                <article class="kpi-card kpi-card--violet"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Compras por recibir</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 9H6L3 3H1m6 16a1 1 0 1 0 0 .01M18 19a1 1 0 1 0 0 .01"></path></svg></span>
+                    </div>
                     <strong id="kpiCompras">0</strong>
                     <small>Pendientes o parciales</small>
                 </article>
 
-                <article class="kpi-card"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
-                    <span>Inventario crítico</span>
+                <article class="kpi-card kpi-card--amber"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Inventario crítico</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm9 10-9 5-9-5m18 5-9 5-9-5"></path></svg></span>
+                    </div>
                     <strong id="kpiInventario">0</strong>
                     <small>En mínimo o por debajo</small>
                 </article>
 
-                <article class="kpi-card"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
-                    <span>Cobros vencidos</span>
+                <article class="kpi-card kpi-card--rose"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Cobros vencidos</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                    </div>
                     <strong id="kpiCobros">0</strong>
                     <small>Cuentas de clientes</small>
                 </article>
 
-                <article class="kpi-card"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
-                    <span>Pagos vencidos</span>
+                <article class="kpi-card kpi-card--orange"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Pagos vencidos</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18m-5 5h2"></path></svg></span>
+                    </div>
                     <strong id="kpiPagos">0</strong>
                     <small>Cuentas a proveedores</small>
                 </article>
 
-                <article class="kpi-card kpi-card--alerts">
-                    <span>Alertas sin leer</span>
+                <article class="kpi-card kpi-card--alerts kpi-card--cyan">
+                    <div class="kpi-card__top">
+                        <span>Alertas sin leer</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg></span>
+                    </div>
                     <strong id="kpiNotificaciones">0</strong>
                     <small id="detalleAlertasKpi">Sin pendientes críticos</small>
                 </article>
 
-                <article class="kpi-card"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
-                    <span>Índice de merma</span>
+                <article class="kpi-card kpi-card--emerald"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
+                    <div class="kpi-card__top">
+                        <span>Índice de merma</span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c4 4 7 7 7 11a7 7 0 0 1-14 0c0-4 3-7 7-11Z"></path><path d="M9 16c1 1 2 1 3 1"></path></svg></span>
+                    </div>
                     <strong id="kpiMerma">0.00%</strong>
                     <small id="detalleMerma">Costo de merma del mes</small>
                 </article>
@@ -799,11 +862,29 @@ $versionModulo = is_file($cssModulo)
             }).join(' ');
         };
 
+        const area = function (campo) {
+            const base = (pad.top + plotH).toFixed(2);
+            return x(0).toFixed(2) + ',' + base
+                + ' ' + puntos(campo)
+                + ' ' + x(datos.length - 1).toFixed(2) + ',' + base;
+        };
+
         let svg = '';
+        const idGraficaSeguro = String(id).replace(/[^a-zA-Z0-9_-]/g, '');
         const etiquetaGrafica = mostrarVentas && mostrarCompras
             ? 'Ventas y compras del periodo'
             : (mostrarVentas ? 'Ventas del periodo' : 'Compras del periodo');
         svg += '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + etiquetaGrafica + '">';
+        svg += '<defs>'
+            + '<linearGradient id="' + idGraficaSeguro + '-sales-area" x1="0" y1="0" x2="0" y2="1">'
+            + '<stop offset="0%" stop-color="#2563eb" stop-opacity=".22"></stop>'
+            + '<stop offset="100%" stop-color="#2563eb" stop-opacity=".015"></stop>'
+            + '</linearGradient>'
+            + '<linearGradient id="' + idGraficaSeguro + '-purchases-area" x1="0" y1="0" x2="0" y2="1">'
+            + '<stop offset="0%" stop-color="#7c3aed" stop-opacity=".16"></stop>'
+            + '<stop offset="100%" stop-color="#7c3aed" stop-opacity=".01"></stop>'
+            + '</linearGradient>'
+            + '</defs>';
 
         for (let i = 0; i <= 4; i += 1) {
             const valor = maximo * (4 - i) / 4;
@@ -817,9 +898,11 @@ $versionModulo = is_file($cssModulo)
         });
 
         if (mostrarVentas) {
+            svg += '<polygon class="dashboard-chart-area" points="' + area('ventas') + '" fill="url(#' + idGraficaSeguro + '-sales-area)"></polygon>';
             svg += '<polyline class="dashboard-chart-line dashboard-chart-line--sales" points="' + puntos('ventas') + '"></polyline>';
         }
         if (mostrarCompras) {
+            svg += '<polygon class="dashboard-chart-area" points="' + area('compras') + '" fill="url(#' + idGraficaSeguro + '-purchases-area)"></polygon>';
             svg += '<polyline class="dashboard-chart-line dashboard-chart-line--purchases" points="' + puntos('compras') + '"></polyline>';
         }
 
@@ -830,18 +913,58 @@ $versionModulo = is_file($cssModulo)
             if (mostrarVentas) {
                 const ventasY = y(item.ventas).toFixed(2);
                 const ventaTexto = escapeHtml(dinero(item.ventas || 0, moneda));
-                svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2"><title>' + etiqueta + ' · Ventas: ' + ventaTexto + '</title></circle>';
+                const tooltipVentas = etiqueta + ' · Ventas: ' + ventaTexto;
+                svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2" tabindex="0" aria-label="' + tooltipVentas + '" data-chart-tooltip="' + tooltipVentas + '"><title>' + tooltipVentas + '</title></circle>';
             }
 
             if (mostrarCompras) {
                 const comprasY = y(item.compras).toFixed(2);
                 const compraTexto = escapeHtml(dinero(item.compras || 0, moneda));
-                svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2"><title>' + etiqueta + ' · Compras: ' + compraTexto + '</title></circle>';
+                const tooltipCompras = etiqueta + ' · Compras: ' + compraTexto;
+                svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2" tabindex="0" aria-label="' + tooltipCompras + '" data-chart-tooltip="' + tooltipCompras + '"><title>' + tooltipCompras + '</title></circle>';
             }
         });
 
         svg += '</svg>';
-        contenedor.innerHTML = svg;
+        contenedor.innerHTML = svg
+            + '<div class="dashboard-chart-tooltip" role="status" hidden></div>';
+
+        const tooltip = contenedor.querySelector('.dashboard-chart-tooltip');
+        const ocultarTooltip = function () {
+            if (tooltip) tooltip.hidden = true;
+        };
+        const mostrarTooltip = function (event) {
+            if (!tooltip) return;
+
+            const punto = event.currentTarget;
+            const contenedorRect = contenedor.getBoundingClientRect();
+            const puntoRect = punto.getBoundingClientRect();
+            const centroX = puntoRect.left - contenedorRect.left + (puntoRect.width / 2);
+            const centroY = puntoRect.top - contenedorRect.top;
+
+            tooltip.textContent = punto.dataset.chartTooltip || '';
+            tooltip.hidden = false;
+
+            const anchoTooltip = tooltip.offsetWidth;
+            const altoTooltip = tooltip.offsetHeight;
+            const izquierda = Math.max(
+                8,
+                Math.min(
+                    centroX - (anchoTooltip / 2),
+                    contenedor.clientWidth - anchoTooltip - 8
+                )
+            );
+
+            tooltip.style.left = izquierda + 'px';
+            tooltip.style.top = Math.max(8, centroY - altoTooltip - 12) + 'px';
+        };
+
+        contenedor.querySelectorAll('[data-chart-tooltip]').forEach(function (punto) {
+            punto.addEventListener('pointerenter', mostrarTooltip);
+            punto.addEventListener('focus', mostrarTooltip);
+            punto.addEventListener('pointerleave', ocultarTooltip);
+            punto.addEventListener('blur', ocultarTooltip);
+        });
     }
 
     function renderGraficas(datos) {
