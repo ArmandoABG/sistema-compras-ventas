@@ -145,7 +145,7 @@ $versionModulo = is_file($cssModulo)
         href="../css/style_dashboard.css?v=<?= si_escapar($versionModulo) ?>"
     >
 </head>
-<body>
+<body class="dashboard-page">
 
 <div class="app-shell">
 
@@ -155,7 +155,7 @@ $versionModulo = is_file($cssModulo)
 
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content">
+        <main class="page-content dashboard-page-content">
 
             <header class="dashboard-heading">
                 <div class="dashboard-heading__copy">
@@ -192,8 +192,15 @@ $versionModulo = is_file($cssModulo)
                     <button
                         type="button"
                         id="btnActualizar"
+                        class="dashboard-refresh-button"
                     >
-                        Actualizar
+                        <svg class="dashboard-refresh-button__icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M20 6v5h-5"></path>
+                            <path d="M4 18v-5h5"></path>
+                            <path d="M6.1 9a7 7 0 0 1 11.5-2.6L20 11"></path>
+                            <path d="m4 13 2.4 4.6A7 7 0 0 0 17.9 15"></path>
+                        </svg>
+                        <span id="btnActualizarTexto">Actualizar</span>
                     </button>
 
                     <small id="ultimaActualizacion">
@@ -222,7 +229,7 @@ $versionModulo = is_file($cssModulo)
 
             <section class="kpi-grid">
 
-                <article class="kpi-card kpi-card--blue"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--primary"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Ventas de hoy</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"></path></svg></span>
@@ -233,7 +240,7 @@ $versionModulo = is_file($cssModulo)
                     </small>
                 </article>
 
-                <article class="kpi-card kpi-card--violet"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--medium"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Compras por recibir</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 9H6L3 3H1m6 16a1 1 0 1 0 0 .01M18 19a1 1 0 1 0 0 .01"></path></svg></span>
@@ -242,7 +249,7 @@ $versionModulo = is_file($cssModulo)
                     <small>Pendientes o parciales</small>
                 </article>
 
-                <article class="kpi-card kpi-card--amber"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--soft"<?= $puedeDashboardInventario ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Inventario crítico</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m12 3 9 5-9 5-9-5 9-5Zm9 10-9 5-9-5m18 5-9 5-9-5"></path></svg></span>
@@ -251,7 +258,7 @@ $versionModulo = is_file($cssModulo)
                     <small>En mínimo o por debajo</small>
                 </article>
 
-                <article class="kpi-card kpi-card--rose"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--primary"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Cobros vencidos</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
@@ -260,7 +267,7 @@ $versionModulo = is_file($cssModulo)
                     <small>Cuentas de clientes</small>
                 </article>
 
-                <article class="kpi-card kpi-card--orange"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--medium"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Pagos vencidos</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18m-5 5h2"></path></svg></span>
@@ -269,16 +276,7 @@ $versionModulo = is_file($cssModulo)
                     <small>Cuentas a proveedores</small>
                 </article>
 
-                <article class="kpi-card kpi-card--alerts kpi-card--cyan">
-                    <div class="kpi-card__top">
-                        <span>Alertas sin leer</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg></span>
-                    </div>
-                    <strong id="kpiNotificaciones">0</strong>
-                    <small id="detalleAlertasKpi">Sin pendientes críticos</small>
-                </article>
-
-                <article class="kpi-card kpi-card--emerald"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
+                <article class="kpi-card kpi-card--soft"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Índice de merma</span>
                         <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c4 4 7 7 7 11a7 7 0 0 1-14 0c0-4 3-7 7-11Z"></path><path d="M9 16c1 1 2 1 3 1"></path></svg></span>
@@ -311,73 +309,98 @@ $versionModulo = is_file($cssModulo)
             </section>
 
             <section class="dashboard-chart-grid" aria-label="Tendencias comerciales"<?= $puedeDashboardTendencias ? '' : ' hidden' ?>>
-                <article class="dashboard-chart-card">
+                <article class="dashboard-chart-card dashboard-chart-card--sales"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                     <header class="dashboard-chart-card__head">
-                        <div>
-                            <span class="dashboard-chart-card__kicker">SEMANA</span>
-                            <h3>Últimos 7 días</h3>
-                            <p id="rangoGraficaSemanal">Cargando periodo...</p>
+                        <div class="dashboard-chart-card__copy">
+                            <span class="dashboard-chart-card__kicker">VENTAS</span>
+                            <h3 id="tituloGraficaVentas">Ventas · Últimos 7 días</h3>
+                            <p id="rangoGraficaVentas">Cargando periodo...</p>
                         </div>
-                        <span class="dashboard-chart-card__currency" id="monedaGraficaSemanal">MXN</span>
+
+                        <div class="dashboard-chart-card__controls">
+                            <span class="dashboard-chart-card__currency" id="monedaGraficaVentas">MXN</span>
+                            <div class="dashboard-chart-period-switch" role="group" aria-label="Periodo de la gráfica de ventas">
+                                <button type="button" class="is-active" data-chart-kind="ventas" data-chart-period="7d" aria-pressed="true">7 días</button>
+                                <button type="button" data-chart-kind="ventas" data-chart-period="6m" aria-pressed="false">6 meses</button>
+                            </div>
+                        </div>
                     </header>
 
-                    <div class="dashboard-chart-metrics">
-                        <div<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
-                            <span>Ventas</span>
-                            <strong id="totalVentasSemana">$0.00</strong>
-                            <small id="variacionVentasSemana">Sin comparación</small>
+                    <div class="dashboard-chart-overview">
+                        <div class="dashboard-chart-overview__primary">
+                            <span>Total del periodo</span>
+                            <strong id="totalGraficaVentas">$0.00</strong>
+                            <small id="variacionGraficaVentas">Sin comparación</small>
                         </div>
-                        <div<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
-                            <span>Compras</span>
-                            <strong id="totalComprasSemana">$0.00</strong>
-                            <small id="variacionComprasSemana">Sin comparación</small>
+                        <div class="dashboard-chart-overview__stat">
+                            <span>Operaciones</span>
+                            <strong id="operacionesGraficaVentas">0</strong>
+                            <small id="operacionesTextoGraficaVentas">En el periodo visible</small>
+                        </div>
+                        <div class="dashboard-chart-overview__stat">
+                            <span>Pico del periodo</span>
+                            <strong id="picoGraficaVentas">$0.00</strong>
+                            <small id="picoEtiquetaGraficaVentas">Sin datos</small>
                         </div>
                     </div>
 
-                    <div class="dashboard-chart-legend" aria-hidden="true">
-                        <span<?= $puedeDashboardVentas ? '' : ' hidden' ?>><i class="is-sales"></i>Ventas</span>
-                        <span<?= $puedeDashboardCompras ? '' : ' hidden' ?>><i class="is-purchases"></i>Compras</span>
+                    <div class="dashboard-chart-shell" id="graficaVentas">
+                        <div class="dashboard-chart-empty">Cargando ventas...</div>
                     </div>
 
-                    <div class="dashboard-chart-shell" id="graficaSemanal">
-                        <div class="dashboard-chart-empty">Cargando gráfica semanal...</div>
+                    <div class="dashboard-chart-color-guide" aria-label="Guía de color de la gráfica">
+                        <span><i class="is-rise"></i>Sube</span>
+                        <span><i class="is-peak"></i>Pico</span>
+                        <span><i class="is-down"></i>Baja</span>
                     </div>
                 </article>
 
-                <article class="dashboard-chart-card">
+                <article class="dashboard-chart-card dashboard-chart-card--purchases"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                     <header class="dashboard-chart-card__head">
-                        <div>
-                            <span class="dashboard-chart-card__kicker">MENSUAL</span>
-                            <h3>Últimos 6 meses</h3>
-                            <p id="rangoGraficaMensual">Cargando periodo...</p>
+                        <div class="dashboard-chart-card__copy">
+                            <span class="dashboard-chart-card__kicker">COMPRAS</span>
+                            <h3 id="tituloGraficaCompras">Compras · Últimos 7 días</h3>
+                            <p id="rangoGraficaCompras">Cargando periodo...</p>
                         </div>
-                        <span class="dashboard-chart-card__currency" id="monedaGraficaMensual">MXN</span>
+
+                        <div class="dashboard-chart-card__controls">
+                            <span class="dashboard-chart-card__currency" id="monedaGraficaCompras">MXN</span>
+                            <div class="dashboard-chart-period-switch" role="group" aria-label="Periodo de la gráfica de compras">
+                                <button type="button" class="is-active" data-chart-kind="compras" data-chart-period="7d" aria-pressed="true">7 días</button>
+                                <button type="button" data-chart-kind="compras" data-chart-period="6m" aria-pressed="false">6 meses</button>
+                            </div>
+                        </div>
                     </header>
 
-                    <div class="dashboard-chart-metrics">
-                        <div<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
-                            <span>Ventas del mes</span>
-                            <strong id="totalVentasMes">$0.00</strong>
-                            <small id="variacionVentasMes">Sin comparación</small>
+                    <div class="dashboard-chart-overview">
+                        <div class="dashboard-chart-overview__primary">
+                            <span>Total del periodo</span>
+                            <strong id="totalGraficaCompras">$0.00</strong>
+                            <small id="variacionGraficaCompras">Sin comparación</small>
                         </div>
-                        <div<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
-                            <span>Compras del mes</span>
-                            <strong id="totalComprasMes">$0.00</strong>
-                            <small id="variacionComprasMes">Sin comparación</small>
+                        <div class="dashboard-chart-overview__stat">
+                            <span>Operaciones</span>
+                            <strong id="operacionesGraficaCompras">0</strong>
+                            <small id="operacionesTextoGraficaCompras">En el periodo visible</small>
+                        </div>
+                        <div class="dashboard-chart-overview__stat">
+                            <span>Pico del periodo</span>
+                            <strong id="picoGraficaCompras">$0.00</strong>
+                            <small id="picoEtiquetaGraficaCompras">Sin datos</small>
                         </div>
                     </div>
 
-                    <div class="dashboard-chart-legend" aria-hidden="true">
-                        <span<?= $puedeDashboardVentas ? '' : ' hidden' ?>><i class="is-sales"></i>Ventas</span>
-                        <span<?= $puedeDashboardCompras ? '' : ' hidden' ?>><i class="is-purchases"></i>Compras</span>
+                    <div class="dashboard-chart-shell" id="graficaCompras">
+                        <div class="dashboard-chart-empty">Cargando compras...</div>
                     </div>
 
-                    <div class="dashboard-chart-shell" id="graficaMensual">
-                        <div class="dashboard-chart-empty">Cargando gráfica mensual...</div>
+                    <div class="dashboard-chart-color-guide" aria-label="Guía de color de la gráfica">
+                        <span><i class="is-rise"></i>Sube</span>
+                        <span><i class="is-peak"></i>Pico</span>
+                        <span><i class="is-down"></i>Baja</span>
                     </div>
                 </article>
             </section>
-
 
             <section class="dashboard-alert-center" id="centroAlertas">
                 <header class="dashboard-alert-center__head">
@@ -647,6 +670,30 @@ $versionModulo = is_file($cssModulo)
     </div>
 </div>
 
+<div class="dashboard-toast-region" id="dashboardToastRegion" aria-live="polite" aria-atomic="false"></div>
+
+<div class="dashboard-confirm" id="dashboardConfirm" hidden>
+    <div class="dashboard-confirm__backdrop" data-dashboard-confirm-close></div>
+    <section class="dashboard-confirm__dialog" role="dialog" aria-modal="true" aria-labelledby="dashboardConfirmTitle" aria-describedby="dashboardConfirmMessage">
+        <div class="dashboard-confirm__icon" id="dashboardConfirmIcon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 9v4"></path>
+                <path d="M12 17h.01"></path>
+                <path d="M10.3 3.7 2.8 17a2 2 0 0 0 1.7 3h15a2 2 0 0 0 1.7-3L13.7 3.7a2 2 0 0 0-3.4 0Z"></path>
+            </svg>
+        </div>
+        <div class="dashboard-confirm__copy">
+            <span class="dashboard-confirm__eyebrow">CONFIRMACIÓN</span>
+            <h2 id="dashboardConfirmTitle">Confirmar acción</h2>
+            <p id="dashboardConfirmMessage">Confirma que deseas continuar.</p>
+        </div>
+        <div class="dashboard-confirm__actions">
+            <button type="button" class="dashboard-confirm__cancel" id="dashboardConfirmCancel">Cancelar</button>
+            <button type="button" class="dashboard-confirm__accept" id="dashboardConfirmAccept">Confirmar</button>
+        </div>
+    </section>
+</div>
+
 <script>
 (function () {
     'use strict';
@@ -669,6 +716,8 @@ $versionModulo = is_file($cssModulo)
     const csrfAlertas = <?= json_encode(si_token_csrf(), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
     let estadoAlertas = { alertas: [], total: 0, total_sin_leer: 0, prioridades: {}, prioridades_sin_leer: {} };
     let filtroAlertas = 'NO_LEIDAS';
+    let datosGraficasDashboard = null;
+    const periodosGraficas = { ventas: '7d', compras: '7d' };
 
     const AUTO_REFRESH_MS = 30000;
     let cargaDashboardEnCurso = false;
@@ -683,6 +732,160 @@ $versionModulo = is_file($cssModulo)
 
     const ultimaActualizacion =
         document.getElementById('ultimaActualizacion');
+
+    const botonActualizarTexto =
+        document.getElementById('btnActualizarTexto');
+
+    const toastRegion =
+        document.getElementById('dashboardToastRegion');
+
+    const confirmRoot =
+        document.getElementById('dashboardConfirm');
+
+    const confirmTitle =
+        document.getElementById('dashboardConfirmTitle');
+
+    const confirmMessage =
+        document.getElementById('dashboardConfirmMessage');
+
+    const confirmCancel =
+        document.getElementById('dashboardConfirmCancel');
+
+    const confirmAccept =
+        document.getElementById('dashboardConfirmAccept');
+
+    let resolverConfirmacion = null;
+    let ultimoFocoConfirmacion = null;
+
+    function mostrarToast(tipo, titulo, detalle) {
+        if (!toastRegion) return;
+
+        const variante = ['success', 'error', 'warning', 'info'].includes(tipo)
+            ? tipo
+            : 'info';
+
+        const toast = document.createElement('article');
+        toast.className = 'dashboard-toast dashboard-toast--' + variante;
+        toast.setAttribute('role', variante === 'error' ? 'alert' : 'status');
+
+        const icono = document.createElement('span');
+        icono.className = 'dashboard-toast__icon';
+        icono.setAttribute('aria-hidden', 'true');
+        icono.textContent = variante === 'success'
+            ? '✓'
+            : variante === 'error'
+                ? '!'
+                : variante === 'warning'
+                    ? '!'
+                    : 'i';
+
+        const contenido = document.createElement('div');
+        contenido.className = 'dashboard-toast__content';
+
+        const encabezado = document.createElement('strong');
+        encabezado.textContent = titulo || 'Aviso';
+        contenido.appendChild(encabezado);
+
+        if (detalle) {
+            const texto = document.createElement('span');
+            texto.textContent = detalle;
+            contenido.appendChild(texto);
+        }
+
+        const cerrar = document.createElement('button');
+        cerrar.type = 'button';
+        cerrar.className = 'dashboard-toast__close';
+        cerrar.setAttribute('aria-label', 'Cerrar aviso');
+        cerrar.textContent = '×';
+
+        toast.append(icono, contenido, cerrar);
+        toastRegion.appendChild(toast);
+
+        let temporizador = window.setTimeout(function () {
+            retirar();
+        }, 5200);
+
+        function retirar() {
+            if (!toast.isConnected) return;
+            window.clearTimeout(temporizador);
+            toast.classList.add('is-leaving');
+            window.setTimeout(function () {
+                toast.remove();
+            }, 190);
+        }
+
+        cerrar.addEventListener('click', retirar);
+    }
+
+    function cerrarConfirmacion(resultado) {
+        if (!confirmRoot || confirmRoot.hidden) return;
+
+        confirmRoot.classList.remove('is-open');
+        document.body.classList.remove('dashboard-confirm-open');
+
+        window.setTimeout(function () {
+            confirmRoot.hidden = true;
+        }, 180);
+
+        const resolver = resolverConfirmacion;
+        resolverConfirmacion = null;
+
+        if (ultimoFocoConfirmacion instanceof HTMLElement) {
+            ultimoFocoConfirmacion.focus({ preventScroll: true });
+        }
+        ultimoFocoConfirmacion = null;
+
+        if (resolver) resolver(Boolean(resultado));
+    }
+
+    function confirmarAccion(configuracion) {
+        if (!confirmRoot || !confirmTitle || !confirmMessage || !confirmAccept) {
+            return Promise.resolve(true);
+        }
+
+        const config = configuracion || {};
+        confirmTitle.textContent = config.titulo || 'Confirmar acción';
+        confirmMessage.textContent = config.mensaje || 'Confirma que deseas continuar.';
+        confirmAccept.textContent = config.aceptar || 'Confirmar';
+
+        ultimoFocoConfirmacion = document.activeElement instanceof HTMLElement
+            ? document.activeElement
+            : null;
+
+        confirmRoot.hidden = false;
+        document.body.classList.add('dashboard-confirm-open');
+
+        window.requestAnimationFrame(function () {
+            confirmRoot.classList.add('is-open');
+            confirmAccept.focus({ preventScroll: true });
+        });
+
+        return new Promise(function (resolve) {
+            resolverConfirmacion = resolve;
+        });
+    }
+
+    confirmCancel?.addEventListener('click', function () {
+        cerrarConfirmacion(false);
+    });
+
+    confirmAccept?.addEventListener('click', function () {
+        cerrarConfirmacion(true);
+    });
+
+    confirmRoot?.addEventListener('click', function (event) {
+        const objetivo = event.target;
+        if (objetivo instanceof Element && objetivo.closest('[data-dashboard-confirm-close]')) {
+            cerrarConfirmacion(false);
+        }
+    });
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && confirmRoot && !confirmRoot.hidden) {
+            event.preventDefault();
+            cerrarConfirmacion(false);
+        }
+    });
 
     function numero(valor, decimales) {
         const cantidadDecimales =
@@ -810,7 +1013,43 @@ $versionModulo = is_file($cssModulo)
         }
     }
 
-    function renderGraficaLineas(id, filas, moneda) {
+    function resumenSerieGrafica(serie, campo, campoOperaciones) {
+        const filas = Array.isArray(serie) ? serie : [];
+        let total = 0;
+        let operaciones = 0;
+        let pico = 0;
+        let etiquetaPico = 'Sin datos';
+
+        filas.forEach(function (item) {
+            const valor = Number(item[campo] || 0);
+            const cantidad = Number(item[campoOperaciones] || 0);
+
+            if (Number.isFinite(valor)) total += valor;
+            if (Number.isFinite(cantidad)) operaciones += cantidad;
+
+            if (Number.isFinite(valor) && valor >= pico) {
+                pico = valor;
+                etiquetaPico = item.etiqueta || item.periodo || 'Periodo';
+            }
+        });
+
+        return {
+            total: total,
+            operaciones: operaciones,
+            pico: pico,
+            etiquetaPico: etiquetaPico
+        };
+    }
+
+    function claseTendenciaBarra(valor, anterior, esPico) {
+        if (esPico && Number(valor) > 0) return 'is-peak';
+        if (anterior === null || !Number.isFinite(anterior)) return 'is-neutral';
+        if (Number(valor) > anterior) return 'is-rise';
+        if (Number(valor) < anterior) return 'is-down';
+        return 'is-neutral';
+    }
+
+    function renderGraficaBarras(id, filas, campo, moneda, tipo) {
         const contenedor = document.getElementById(id);
         if (!contenedor) return;
 
@@ -820,114 +1059,60 @@ $versionModulo = is_file($cssModulo)
             return;
         }
 
+        const valores = datos.map(function (item) {
+            const valor = Number(item[campo] || 0);
+            return Number.isFinite(valor) ? Math.max(0, valor) : 0;
+        });
+
+        const maximoReal = Math.max.apply(null, valores.concat([0]));
+        const indicePico = maximoReal > 0 ? valores.lastIndexOf(maximoReal) : -1;
+        const maximoEscala = maximoReal > 0 ? maximoReal * 1.18 : 1;
+
         const width = 760;
-        const height = 270;
-        const pad = { top: 18, right: 20, bottom: 46, left: 72 };
+        const height = 285;
+        const pad = { top: 20, right: 18, bottom: 48, left: 70 };
         const plotW = width - pad.left - pad.right;
         const plotH = height - pad.top - pad.bottom;
+        const slotW = plotW / Math.max(datos.length, 1);
+        const barW = Math.max(24, Math.min(58, slotW * .48));
+        const baseY = pad.top + plotH;
+        const tipoTexto = tipo === 'compras' ? 'Compras' : 'Ventas';
 
-        const mostrarVentas = permisosDashboard.ventas === true;
-        const mostrarCompras = permisosDashboard.compras === true;
-
-        if (!mostrarVentas && !mostrarCompras) {
-            contenedor.innerHTML = '<div class="dashboard-chart-empty">Sin información autorizada para este periodo.</div>';
-            return;
-        }
-
-        const valores = [];
-        datos.forEach(function (item) {
-            if (mostrarVentas) valores.push(Number(item.ventas || 0));
-            if (mostrarCompras) valores.push(Number(item.compras || 0));
-        });
-
-        let maximo = Math.max.apply(null, valores.concat([0]));
-        if (!Number.isFinite(maximo) || maximo <= 0) {
-            maximo = 1;
-        }
-        maximo *= 1.12;
-
-        const x = function (indice) {
-            if (datos.length <= 1) return pad.left + (plotW / 2);
-            return pad.left + (indice * plotW / (datos.length - 1));
-        };
-
-        const y = function (valor) {
-            const n = Math.max(0, Number(valor || 0));
-            return pad.top + plotH - (n / maximo * plotH);
-        };
-
-        const puntos = function (campo) {
-            return datos.map(function (item, indice) {
-                return x(indice).toFixed(2) + ',' + y(item[campo]).toFixed(2);
-            }).join(' ');
-        };
-
-        const area = function (campo) {
-            const base = (pad.top + plotH).toFixed(2);
-            return x(0).toFixed(2) + ',' + base
-                + ' ' + puntos(campo)
-                + ' ' + x(datos.length - 1).toFixed(2) + ',' + base;
-        };
-
-        let svg = '';
-        const idGraficaSeguro = String(id).replace(/[^a-zA-Z0-9_-]/g, '');
-        const etiquetaGrafica = mostrarVentas && mostrarCompras
-            ? 'Ventas y compras del periodo'
-            : (mostrarVentas ? 'Ventas del periodo' : 'Compras del periodo');
-        svg += '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + etiquetaGrafica + '">';
-        svg += '<defs>'
-            + '<linearGradient id="' + idGraficaSeguro + '-sales-area" x1="0" y1="0" x2="0" y2="1">'
-            + '<stop offset="0%" stop-color="#2563eb" stop-opacity=".22"></stop>'
-            + '<stop offset="100%" stop-color="#2563eb" stop-opacity=".015"></stop>'
-            + '</linearGradient>'
-            + '<linearGradient id="' + idGraficaSeguro + '-purchases-area" x1="0" y1="0" x2="0" y2="1">'
-            + '<stop offset="0%" stop-color="#7c3aed" stop-opacity=".16"></stop>'
-            + '<stop offset="100%" stop-color="#7c3aed" stop-opacity=".01"></stop>'
-            + '</linearGradient>'
-            + '</defs>';
+        let svg = '<svg class="dashboard-chart-svg" viewBox="0 0 ' + width + ' ' + height + '" role="img" aria-label="' + tipoTexto + ' del periodo">';
 
         for (let i = 0; i <= 4; i += 1) {
-            const valor = maximo * (4 - i) / 4;
+            const valorEscala = maximoEscala * (4 - i) / 4;
             const gy = pad.top + (plotH * i / 4);
             svg += '<line class="dashboard-chart-gridline" x1="' + pad.left + '" y1="' + gy.toFixed(2) + '" x2="' + (width - pad.right) + '" y2="' + gy.toFixed(2) + '"></line>';
-            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--y" x="' + (pad.left - 10) + '" y="' + (gy + 4).toFixed(2) + '">' + escapeHtml(dineroCompacto(valor, moneda)) + '</text>';
+            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--y" x="' + (pad.left - 10) + '" y="' + (gy + 4).toFixed(2) + '">' + escapeHtml(dineroCompacto(valorEscala, moneda)) + '</text>';
         }
 
         datos.forEach(function (item, indice) {
-            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--x" x="' + x(indice).toFixed(2) + '" y="' + (height - 15) + '">' + escapeHtml(item.etiqueta || '') + '</text>';
-        });
+            const valor = valores[indice];
+            const xCentro = pad.left + (slotW * indice) + (slotW / 2);
+            const altura = maximoReal <= 0 ? 0 : Math.max(valor > 0 ? 5 : 0, valor / maximoEscala * plotH);
+            const yBarra = baseY - altura;
+            const anterior = indice > 0 ? valores[indice - 1] : null;
+            const clase = claseTendenciaBarra(valor, anterior, indice === indicePico);
+            const etiqueta = escapeHtml(item.etiqueta || item.periodo || '');
+            const valorTexto = escapeHtml(dinero(valor, moneda));
+            let comparacion = 'Sin periodo anterior';
 
-        if (mostrarVentas) {
-            svg += '<polygon class="dashboard-chart-area" points="' + area('ventas') + '" fill="url(#' + idGraficaSeguro + '-sales-area)"></polygon>';
-            svg += '<polyline class="dashboard-chart-line dashboard-chart-line--sales" points="' + puntos('ventas') + '"></polyline>';
-        }
-        if (mostrarCompras) {
-            svg += '<polygon class="dashboard-chart-area" points="' + area('compras') + '" fill="url(#' + idGraficaSeguro + '-purchases-area)"></polygon>';
-            svg += '<polyline class="dashboard-chart-line dashboard-chart-line--purchases" points="' + puntos('compras') + '"></polyline>';
-        }
-
-        datos.forEach(function (item, indice) {
-            const px = x(indice).toFixed(2);
-            const etiqueta = escapeHtml(item.etiqueta || '');
-
-            if (mostrarVentas) {
-                const ventasY = y(item.ventas).toFixed(2);
-                const ventaTexto = escapeHtml(dinero(item.ventas || 0, moneda));
-                const tooltipVentas = etiqueta + ' · Ventas: ' + ventaTexto;
-                svg += '<circle class="dashboard-chart-point dashboard-chart-point--sales" cx="' + px + '" cy="' + ventasY + '" r="4.2" tabindex="0" aria-label="' + tooltipVentas + '" data-chart-tooltip="' + tooltipVentas + '"><title>' + tooltipVentas + '</title></circle>';
+            if (anterior !== null) {
+                if (valor > anterior) comparacion = 'Sube respecto al periodo anterior';
+                else if (valor < anterior) comparacion = 'Baja respecto al periodo anterior';
+                else comparacion = 'Sin cambio respecto al periodo anterior';
             }
 
-            if (mostrarCompras) {
-                const comprasY = y(item.compras).toFixed(2);
-                const compraTexto = escapeHtml(dinero(item.compras || 0, moneda));
-                const tooltipCompras = etiqueta + ' · Compras: ' + compraTexto;
-                svg += '<circle class="dashboard-chart-point dashboard-chart-point--purchases" cx="' + px + '" cy="' + comprasY + '" r="4.2" tabindex="0" aria-label="' + tooltipCompras + '" data-chart-tooltip="' + tooltipCompras + '"><title>' + tooltipCompras + '</title></circle>';
-            }
+            const tooltip = etiqueta + ' · ' + tipoTexto + ': ' + valorTexto + ' · ' + comparacion;
+            const rx = (barW / 2).toFixed(2);
+
+            svg += '<rect class="dashboard-chart-bar dashboard-chart-bar--' + tipo + ' ' + clase + '" x="' + (xCentro - barW / 2).toFixed(2) + '" y="' + yBarra.toFixed(2) + '" width="' + barW.toFixed(2) + '" height="' + altura.toFixed(2) + '" rx="' + rx + '" tabindex="0" aria-label="' + tooltip + '" data-chart-tooltip="' + tooltip + '"><title>' + tooltip + '</title></rect>';
+            svg += '<text class="dashboard-chart-axis-label dashboard-chart-axis-label--x" x="' + xCentro.toFixed(2) + '" y="' + (height - 17) + '">' + etiqueta + '</text>';
         });
 
         svg += '</svg>';
-        contenedor.innerHTML = svg
-            + '<div class="dashboard-chart-tooltip" role="status" hidden></div>';
+        contenedor.innerHTML = svg + '<div class="dashboard-chart-tooltip" role="status" hidden></div>';
 
         const tooltip = contenedor.querySelector('.dashboard-chart-tooltip');
         const ocultarTooltip = function () {
@@ -936,13 +1121,13 @@ $versionModulo = is_file($cssModulo)
         const mostrarTooltip = function (event) {
             if (!tooltip) return;
 
-            const punto = event.currentTarget;
+            const barra = event.currentTarget;
             const contenedorRect = contenedor.getBoundingClientRect();
-            const puntoRect = punto.getBoundingClientRect();
-            const centroX = puntoRect.left - contenedorRect.left + (puntoRect.width / 2);
-            const centroY = puntoRect.top - contenedorRect.top;
+            const barraRect = barra.getBoundingClientRect();
+            const centroX = barraRect.left - contenedorRect.left + (barraRect.width / 2);
+            const centroY = barraRect.top - contenedorRect.top;
 
-            tooltip.textContent = punto.dataset.chartTooltip || '';
+            tooltip.textContent = barra.dataset.chartTooltip || '';
             tooltip.hidden = false;
 
             const anchoTooltip = tooltip.offsetWidth;
@@ -959,40 +1144,106 @@ $versionModulo = is_file($cssModulo)
             tooltip.style.top = Math.max(8, centroY - altoTooltip - 12) + 'px';
         };
 
-        contenedor.querySelectorAll('[data-chart-tooltip]').forEach(function (punto) {
-            punto.addEventListener('pointerenter', mostrarTooltip);
-            punto.addEventListener('focus', mostrarTooltip);
-            punto.addEventListener('pointerleave', ocultarTooltip);
-            punto.addEventListener('blur', ocultarTooltip);
+        contenedor.querySelectorAll('[data-chart-tooltip]').forEach(function (barra) {
+            barra.addEventListener('pointerenter', mostrarTooltip);
+            barra.addEventListener('focus', mostrarTooltip);
+            barra.addEventListener('pointerleave', ocultarTooltip);
+            barra.addEventListener('blur', ocultarTooltip);
         });
     }
 
-    function renderGraficas(datos) {
+    function variacionGrafica(datos, tipo, periodo) {
         const semanal = datos.grafica_semanal || {};
         const mensual = datos.grafica_mensual || {};
-        const monedaSemana = semanal.moneda_base || 'MXN';
-        const monedaMes = mensual.moneda_base || monedaSemana;
         const totalesSemana = semanal.totales || {};
         const totalesMes = mensual.totales || {};
 
-        document.getElementById('monedaGraficaSemanal').textContent = monedaSemana;
-        document.getElementById('monedaGraficaMensual').textContent = monedaMes;
-        document.getElementById('rangoGraficaSemanal').textContent = semanal.periodo || 'Últimos 7 días';
-        document.getElementById('rangoGraficaMensual').textContent = mensual.periodo || 'Últimos 6 meses';
+        if (periodo === '6m') {
+            return {
+                valor: totalesMes['variacion_' + tipo + '_pct'],
+                etiqueta: 'mes anterior',
+                prefijo: 'Mes actual · '
+            };
+        }
 
-        document.getElementById('totalVentasSemana').textContent = dinero(totalesSemana.ventas || 0, monedaSemana);
-        document.getElementById('totalComprasSemana').textContent = dinero(totalesSemana.compras || 0, monedaSemana);
-        document.getElementById('totalVentasMes').textContent = dinero(totalesMes.ventas_actual || 0, monedaMes);
-        document.getElementById('totalComprasMes').textContent = dinero(totalesMes.compras_actual || 0, monedaMes);
-
-        renderVariacion('variacionVentasSemana', totalesSemana.variacion_ventas_pct, '7 días anteriores');
-        renderVariacion('variacionComprasSemana', totalesSemana.variacion_compras_pct, '7 días anteriores');
-        renderVariacion('variacionVentasMes', totalesMes.variacion_ventas_pct, 'mes anterior');
-        renderVariacion('variacionComprasMes', totalesMes.variacion_compras_pct, 'mes anterior');
-
-        renderGraficaLineas('graficaSemanal', semanal.serie || [], monedaSemana);
-        renderGraficaLineas('graficaMensual', mensual.serie || [], monedaMes);
+        return {
+            valor: totalesSemana['variacion_' + tipo + '_pct'],
+            etiqueta: '7 días anteriores',
+            prefijo: ''
+        };
     }
+
+    function actualizarBotonesPeriodo(tipo, periodo) {
+        document.querySelectorAll('[data-chart-kind="' + tipo + '"]').forEach(function (boton) {
+            const activo = boton.dataset.chartPeriod === periodo;
+            boton.classList.toggle('is-active', activo);
+            boton.setAttribute('aria-pressed', activo ? 'true' : 'false');
+        });
+    }
+
+    function renderGraficaComercial(tipo) {
+        if (!datosGraficasDashboard) return;
+
+        const esVentas = tipo === 'ventas';
+        const capitalizado = esVentas ? 'Ventas' : 'Compras';
+        const campoOperaciones = tipo + '_operaciones';
+        const periodo = periodosGraficas[tipo] || '7d';
+        const fuente = periodo === '6m'
+            ? (datosGraficasDashboard.grafica_mensual || {})
+            : (datosGraficasDashboard.grafica_semanal || {});
+        const serie = Array.isArray(fuente.serie) ? fuente.serie : [];
+        const moneda = fuente.moneda_base || 'MXN';
+        const resumen = resumenSerieGrafica(serie, tipo, campoOperaciones);
+        const variacion = variacionGrafica(datosGraficasDashboard, tipo, periodo);
+        const sufijoTitulo = periodo === '6m' ? 'Últimos 6 meses' : 'Últimos 7 días';
+        const comparacion = document.getElementById('variacionGrafica' + capitalizado);
+
+        document.getElementById('tituloGrafica' + capitalizado).textContent = capitalizado + ' · ' + sufijoTitulo;
+        document.getElementById('rangoGrafica' + capitalizado).textContent = fuente.periodo || sufijoTitulo;
+        document.getElementById('monedaGrafica' + capitalizado).textContent = moneda;
+        document.getElementById('totalGrafica' + capitalizado).textContent = dinero(resumen.total, moneda);
+        document.getElementById('operacionesGrafica' + capitalizado).textContent = numero(resumen.operaciones);
+        document.getElementById('picoGrafica' + capitalizado).textContent = dinero(resumen.pico, moneda);
+        document.getElementById('picoEtiquetaGrafica' + capitalizado).textContent = resumen.etiquetaPico;
+        document.getElementById('operacionesTextoGrafica' + capitalizado).textContent = periodo === '6m'
+            ? 'Acumuladas en seis meses'
+            : 'Acumuladas en siete días';
+
+        if (comparacion) {
+            renderVariacion('variacionGrafica' + capitalizado, variacion.valor, variacion.etiqueta);
+            comparacion.textContent = variacion.prefijo + comparacion.textContent;
+        }
+
+        actualizarBotonesPeriodo(tipo, periodo);
+        renderGraficaBarras('grafica' + capitalizado, serie, tipo, moneda, tipo);
+    }
+
+    function renderGraficas(datos) {
+        datosGraficasDashboard = datos;
+
+        if (permisosDashboard.ventas === true) {
+            renderGraficaComercial('ventas');
+        }
+
+        if (permisosDashboard.compras === true) {
+            renderGraficaComercial('compras');
+        }
+    }
+
+    document.addEventListener('click', function (event) {
+        const botonPeriodo = event.target.closest('[data-chart-kind][data-chart-period]');
+        if (!botonPeriodo) return;
+
+        const tipo = botonPeriodo.dataset.chartKind;
+        const periodo = botonPeriodo.dataset.chartPeriod;
+
+        if (!Object.prototype.hasOwnProperty.call(periodosGraficas, tipo)) return;
+        if (periodo !== '7d' && periodo !== '6m') return;
+        if (periodosGraficas[tipo] === periodo) return;
+
+        periodosGraficas[tipo] = periodo;
+        renderGraficaComercial(tipo);
+    });
 
     function renderKpis(datos) {
         const kpis = datos.kpis || {};
@@ -1021,20 +1272,6 @@ $versionModulo = is_file($cssModulo)
             'kpiPagos'
         ).textContent =
             numero(kpis.pagos_vencidos);
-
-        document.getElementById(
-            'kpiNotificaciones'
-        ).textContent =
-            numero(kpis.alertas_activas);
-
-        const detalleAlertas = document.getElementById('detalleAlertasKpi');
-        const criticas = Number(kpis.alertas_criticas || 0);
-        const altas = Number(kpis.alertas_altas || 0);
-        detalleAlertas.textContent = criticas > 0
-            ? numero(criticas) + (criticas === 1 ? ' crítica' : ' críticas')
-            : (altas > 0
-                ? numero(altas) + (altas === 1 ? ' prioridad alta' : ' prioridades altas')
-                : 'Sin pendientes críticos');
 
         const merma = datos.merma_mes || {};
         document.getElementById('kpiMerma').textContent =
@@ -1285,6 +1522,13 @@ $versionModulo = is_file($cssModulo)
                     + (fuente ? ' · ' + fuente : '')
                 : 'Tipo de cambio actualizado correctamente.';
             mensaje.hidden = false;
+            mostrarToast(
+                'success',
+                'Tipo de cambio actualizado',
+                valor > 0
+                    ? '1 USD = $' + numero(valor, 4) + ' MXN' + (fecha ? ' · FIX ' + fecha : '')
+                    : 'La actualización se completó correctamente.'
+            );
 
             renderAlertas(data.alertas_operativas || {});
             window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
@@ -1292,6 +1536,7 @@ $versionModulo = is_file($cssModulo)
             mensaje.className = 'dashboard-message dashboard-message--error';
             mensaje.textContent = error.message || 'No fue posible actualizar el tipo de cambio.';
             mensaje.hidden = false;
+            mostrarToast('error', 'No se pudo actualizar el tipo de cambio', mensaje.textContent);
         } finally {
             button.disabled = false;
             button.textContent = textoOriginal;
@@ -1314,28 +1559,41 @@ $versionModulo = is_file($cssModulo)
         button.textContent = 'Marcando...';
         try {
             await actualizarLecturaAlertas('MARCAR_LEIDA', String(button.dataset.alertRead || ''));
+            mostrarToast('success', 'Alerta actualizada', 'La alerta se marcó como leída.');
         } catch (error) {
             button.disabled = false;
             button.textContent = textoOriginal;
             mensaje.textContent = error.message || 'No fue posible actualizar la alerta.';
             mensaje.hidden = false;
+            mostrarToast('error', 'No se pudo actualizar la alerta', mensaje.textContent);
         }
     });
 
     document.getElementById('btnMarcarTodasAlertas')?.addEventListener('click', async function () {
         const button = this;
         if (button.disabled) return;
+
+        const confirmado = await confirmarAccion({
+            titulo: 'Marcar todas como leídas',
+            mensaje: 'Las alertas activas permanecerán disponibles, pero dejarán de mostrarse como pendientes de lectura.',
+            aceptar: 'Sí, marcar todas'
+        });
+
+        if (!confirmado) return;
+
         button.disabled = true;
         const textoOriginal = button.textContent;
         button.textContent = 'Marcando...';
         try {
             await actualizarLecturaAlertas('MARCAR_TODAS_LEIDAS');
             button.textContent = textoOriginal;
+            mostrarToast('success', 'Alertas revisadas', 'Todas las alertas pendientes se marcaron como leídas.');
         } catch (error) {
             button.disabled = false;
             button.textContent = textoOriginal;
             mensaje.textContent = error.message || 'No fue posible actualizar la alerta.';
             mensaje.hidden = false;
+            mostrarToast('error', 'No se pudieron actualizar las alertas', mensaje.textContent);
         }
     });
 
@@ -1568,11 +1826,13 @@ $versionModulo = is_file($cssModulo)
         }
 
         cargaDashboardEnCurso = true;
+        const eraCargaInicial = !cargaInicialCompleta;
 
         if (!silencioso) {
             mensaje.hidden = true;
             botonActualizar.disabled = true;
-            botonActualizar.textContent = 'Actualizando...';
+            botonActualizar.classList.add('is-loading');
+            if (botonActualizarTexto) botonActualizarTexto.textContent = 'Actualizando...';
         }
 
         try {
@@ -1632,6 +1892,8 @@ $versionModulo = is_file($cssModulo)
 
             if (silencioso) {
                 mensaje.hidden = true;
+            } else if (!eraCargaInicial) {
+                mostrarToast('success', 'Dashboard actualizado', 'La información visible se sincronizó correctamente.');
             }
 
             window.dispatchEvent(new CustomEvent('si:alertas-actualizadas'));
@@ -1642,6 +1904,9 @@ $versionModulo = is_file($cssModulo)
             if (!silencioso || !cargaInicialCompleta) {
                 mensaje.textContent = textoError;
                 mensaje.hidden = false;
+                if (!silencioso) {
+                    mostrarToast('error', 'No se pudo actualizar el dashboard', textoError);
+                }
             }
 
             const estadoAuto = document.getElementById('estadoAutoActualizacion');
@@ -1659,7 +1924,8 @@ $versionModulo = is_file($cssModulo)
 
             if (!silencioso) {
                 botonActualizar.disabled = false;
-                botonActualizar.textContent = 'Actualizar';
+                botonActualizar.classList.remove('is-loading');
+                if (botonActualizarTexto) botonActualizarTexto.textContent = 'Actualizar';
             }
         }
     }
