@@ -209,6 +209,8 @@ $versionModulo = is_file($cssModulo)
                 </div>
             </header>
 
+            <div class="dashboard-workspace">
+
             <?php if (
                 isset($_GET['acceso'])
                 && (string) $_GET['acceso'] === 'denegado'
@@ -665,6 +667,8 @@ $versionModulo = is_file($cssModulo)
                     </table>
                 </div>
             </section>
+
+            </div>
 
         </main>
     </div>
