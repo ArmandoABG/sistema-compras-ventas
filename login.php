@@ -136,7 +136,7 @@ $globalCssVersion = is_file($globalCssPath)
             <div class="login-form-wrap">
                 <header class="login-heading">
                     <span class="login-heading__eyebrow">ACCESO SEGURO</span>
-                    <h2>Bienvenido</h2>
+                    <h2>Iniciar sesión</h2>
                     <p class="login-description">Ingresa tus credenciales para continuar al sistema.</p>
                 </header>
 
@@ -178,7 +178,21 @@ $globalCssVersion = is_file($globalCssPath)
                             <rect x="4" y="10" width="16" height="11" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
                         </svg>
                         <input id="password" type="password" name="password" maxlength="255" autocomplete="current-password" placeholder="Escribe tu contraseña" required>
-                        <button id="btnMostrarPassword" class="password-field__toggle" type="button">Mostrar</button>
+                        <button
+                            id="btnMostrarPassword"
+                            class="password-field__toggle"
+                            type="button"
+                            aria-controls="password"
+                            aria-pressed="false"
+                            aria-label="Mostrar contraseña"
+                        >
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                                <circle cx="12" cy="12" r="2.7"></circle>
+                                <path class="password-field__slash" d="m4 4 16 16"></path>
+                            </svg>
+                            <span class="password-field__toggle-text">Mostrar</span>
+                        </button>
                     </div>
 
                     <button
@@ -207,6 +221,7 @@ $globalCssVersion = is_file($globalCssPath)
     const boton = document.getElementById('btnLogin');
     const password = document.getElementById('password');
     const btnMostrar = document.getElementById('btnMostrarPassword');
+    const textoMostrar = btnMostrar.querySelector('.password-field__toggle-text');
 
     if (!form) {
         return;
@@ -219,9 +234,25 @@ $globalCssVersion = is_file($globalCssPath)
             ? 'password'
             : 'text';
 
-        btnMostrar.textContent = visible
+        const mostrar = visible;
+
+        textoMostrar.textContent = mostrar
             ? 'Mostrar'
             : 'Ocultar';
+
+        btnMostrar.setAttribute(
+            'aria-pressed',
+            mostrar ? 'false' : 'true'
+        );
+
+        btnMostrar.setAttribute(
+            'aria-label',
+            mostrar
+                ? 'Mostrar contraseña'
+                : 'Ocultar contraseña'
+        );
+
+        password.focus({ preventScroll: true });
     });
 
     form.addEventListener('submit', async function (event) {
