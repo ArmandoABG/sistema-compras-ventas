@@ -32,14 +32,16 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Auditoría | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_auditoria.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content audit-page">
+        <main class="page-content audit-page si-module-page">
             <header class="audit-heading">
                 <div>
                     <p class="module-eyebrow">SEGURIDAD · TRAZABILIDAD · SOLO LECTURA</p>

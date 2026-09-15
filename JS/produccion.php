@@ -35,15 +35,17 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Producción | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_produccion.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content prod-page">
+        <main class="page-content prod-page si-module-page">
             <header class="module-heading prod-heading">
                 <div>
                     <p class="module-eyebrow">ALMACÉN · PRODUCCIÓN SIMPLE</p>
@@ -746,7 +748,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     async function guardar(confirmar) {
         const error = validarEditor();
         if (error) { mensaje(error, 'error'); return; }
-        if (confirmar && !window.confirm('Al confirmar se descontarán las materias primas y se dará entrada al producto terminado. ¿Deseas continuar?')) return;
+        if (confirmar && !(await siConfirmar('Al confirmar se descontarán las materias primas y se dará entrada al producto terminado. ¿Deseas continuar?', { titulo: 'Confirmar producción', aceptar: 'Confirmar' }))) return;
 
         const btn1 = $('btnGuardarBorrador');
         const btn2 = $('btnGuardarConfirmar');
@@ -880,7 +882,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     async function confirmarDetalle() {
         if (!estado.detalleId) return;
-        if (!window.confirm('Se aplicarán las salidas de materias primas y la entrada del producto terminado. ¿Confirmar producción?')) return;
+        if (!(await siConfirmar('Se aplicarán las salidas de materias primas y la entrada del producto terminado. ¿Confirmar producción?', { titulo: 'Confirmar producción', aceptar: 'Confirmar' }))) return;
         try {
             const r = await apiPost('CONFIRMAR', { produccion_id: estado.detalleId });
             cerrarDetalle();
@@ -1208,7 +1210,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     async function eliminarReceta(id) {
         if (!(Number(id) > 0)) return;
-        const confirmar = window.confirm('¿Eliminar definitivamente esta receta? Solo se permite cuando nunca ha sido utilizada en una producción. Esta acción no se puede deshacer.');
+        const confirmar = await siConfirmar('¿Eliminar definitivamente esta receta? Solo se permite cuando nunca ha sido utilizada en una producción. Esta acción no se puede deshacer.', { titulo: 'Eliminar receta', aceptar: 'Eliminar', peligro: true });
         if (!confirmar) return;
         try {
             const r = await apiPost('RECETA_ELIMINAR', { id });

@@ -42,28 +42,25 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_ventas.css?v=<?= si_escapar($versionModulo) ?>">
 </head>
-<body>
+<body class="ventas-body">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
         <main class="page-content ventas-page">
-            <header class="module-heading">
-                <div>
-                    <p class="module-eyebrow">GESTIÓN COMERCIAL · SALIDA DE MERCANCÍA</p>
-                    <h1>Ventas / Punto de venta</h1>
-                    <p>Confirma ventas directas o provenientes de cotización/apartado, compromete inventario y registra en Kardex la salida física cuando realmente ocurre.</p>
-                </div>
-                <?php if ($puedeCrear): ?>
-                    <button type="button" class="btn-primary" id="btnNuevaVenta">Nueva venta</button>
-                <?php endif; ?>
-            </header>
+            <section class="ventas-workspace">
+                <header class="ventas-workspace__header">
+                    <div>
+                        <span>GESTIÓN COMERCIAL</span>
+                        <h1>Ventas</h1>
+                        <p>Consulta y administra las operaciones de venta.</p>
+                    </div>
+                    <?php if ($puedeCrear): ?>
+                        <button type="button" class="btn-primary" id="btnNuevaVenta">Nueva venta</button>
+                    <?php endif; ?>
+                </header>
 
-            <div class="info-banner">
-                <strong>Flujo:</strong> la venta se valida nuevamente al confirmar. Con validación QR activa, el inventario queda reservado hasta confirmar la salida física; sin QR, la salida se aplica de inmediato. Una venta CONTADO queda liquidada en el momento y una venta CRÉDITO genera automáticamente su Cuenta por Cobrar.
-            </div>
-
-            <div id="mensajePagina" class="module-message" hidden></div>
+            <div id="mensajePagina" class="ventas-toast" role="status" aria-live="polite" hidden></div>
 
             <section class="stats-grid stats-grid--6">
                 <article><span>Total</span><strong id="kpiTotal">0</strong></article>
@@ -75,6 +72,14 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             </section>
 
             <section class="module-card">
+                <header class="ventas-list-heading">
+                    <div>
+                        <span>HISTORIAL COMERCIAL</span>
+                        <h2>Operaciones registradas</h2>
+                    </div>
+                    <p>Filtra y gestiona el historial.</p>
+                </header>
+
                 <div class="filters-grid filters-grid--ventas">
                     <label class="field field--search">
                         <span>Buscar</span>
@@ -118,14 +123,11 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                                 <th>Cliente</th>
                                 <th>Fecha</th>
                                 <th>Estado</th>
-                                <th>Pago</th>
-                                <th>Productos</th>
                                 <th>Total</th>
-                                <th>Origen</th>
                                 <th class="text-right">Acciones</th>
                             </tr>
                         </thead>
-                        <tbody id="tablaVentas"><tr><td colspan="9" class="empty-cell">Cargando...</td></tr></tbody>
+                        <tbody id="tablaVentas"><tr><td colspan="6" class="empty-cell">Cargando...</td></tr></tbody>
                     </table>
                 </div>
 
@@ -138,6 +140,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                     </div>
                 </footer>
             </section>
+            </section>
         </main>
     </div>
 </div>
@@ -148,12 +151,12 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         <header class="modal-header">
             <div>
                 <h2 id="tituloModalVenta">Nueva venta</h2>
-                <p id="subtituloModalVenta">Al confirmar se compromete inventario. Con QR queda reservado hasta la salida física; sin QR, la salida se aplica de inmediato.</p>
+                <p id="subtituloModalVenta">El inventario se reserva o descuenta según la validación QR.</p>
             </div>
             <button type="button" class="modal-close" data-cerrar-modal="modalVenta" aria-label="Cerrar">×</button>
         </header>
 
-        <form id="formVenta" autocomplete="off">
+        <form id="formVenta" class="venta-form" autocomplete="off">
             <div id="mensajeVenta" class="module-message" hidden></div>
             <div id="bannerOrigen" class="conversion-banner" hidden></div>
 
@@ -201,7 +204,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 <div class="venta-products__heading">
                     <div>
                         <h3>Productos</h3>
-                        <p id="textoOrigenLineasVenta">Agrega los productos de la venta. El stock mostrado es el disponible, no solamente el físico.</p>
+                        <p id="textoOrigenLineasVenta">Agrega productos y verifica su disponibilidad.</p>
                     </div>
                     <label class="field product-search-field" id="contenedorBuscarProductoVenta">
                         <span>Agregar producto</span>
@@ -283,24 +286,49 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         </header>
         <div class="detail-body">
             <div id="mensajeDetalleVenta" class="module-message" hidden></div>
+            <div class="detail-section-heading detail-section-heading--overview"><h3>Información general</h3></div>
             <section class="detail-summary-grid" id="resumenDetalleVenta"></section>
 
-            <div class="detail-section-heading"><h3>Productos vendidos</h3></div>
-            <div class="table-wrap">
-                <table class="module-table detail-table detail-table--products">
-                    <thead><tr><th>Producto</th><th>Almacén</th><th>Cantidad</th><th>Base</th><th>Precio</th><th>Nivel</th><th>Desc.</th><th>Impuesto</th><th>Total</th></tr></thead>
-                    <tbody id="tablaDetalleVentaProductos"></tbody>
-                </table>
-            </div>
+            <section class="detail-section-grid">
+                <article class="detail-panel">
+                    <div class="detail-section-heading"><h3>Cliente</h3></div>
+                    <div id="detalleClienteVenta" class="detail-data-grid"></div>
+                </article>
+                <article class="detail-panel">
+                    <div class="detail-section-heading"><h3>Origen e inventario</h3></div>
+                    <div id="detalleOrigenVenta" class="detail-data-grid"></div>
+                </article>
+            </section>
 
-            <div class="detail-section-heading"><h3>Pagos / condición financiera</h3></div>
-            <div id="detalleFinanciero" class="financial-summary"></div>
-            <div class="table-wrap">
-                <table class="module-table detail-table">
-                    <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Importe</th><th>Estado</th><th>Usuario</th></tr></thead>
-                    <tbody id="tablaPagosVenta"></tbody>
-                </table>
-            </div>
+            <section class="detail-panel detail-panel--wide">
+                <div class="detail-section-heading"><h3>Datos financieros</h3></div>
+                <div id="detalleFinanciero" class="financial-summary detail-data-grid detail-data-grid--financial"></div>
+            </section>
+
+            <section class="detail-panel detail-panel--wide">
+                <div class="detail-section-heading"><h3>Productos</h3><p>Condiciones aplicadas al confirmar.</p></div>
+                <div class="table-wrap">
+                    <table class="module-table detail-table detail-table--products">
+                        <thead><tr><th>Producto</th><th>Almacén</th><th>Cantidad</th><th>Precio</th><th>Desc.</th><th>Impuesto</th><th>Total</th></tr></thead>
+                        <tbody id="tablaDetalleVentaProductos"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="detail-panel detail-panel--wide">
+                <div class="detail-section-heading"><h3>Pagos aplicados</h3></div>
+                <div class="table-wrap">
+                    <table class="module-table detail-table detail-table--payments">
+                        <thead><tr><th>Fecha</th><th>Método</th><th>Referencia</th><th>Importe</th><th>Estado</th><th>Usuario</th></tr></thead>
+                        <tbody id="tablaPagosVenta"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section class="detail-panel detail-panel--wide" id="detalleNotasSection">
+                <div class="detail-section-heading"><h3>Notas y seguimiento</h3></div>
+                <div id="detalleNotasVenta" class="detail-note"></div>
+            </section>
         </div>
         <footer class="modal-footer modal-footer--spread">
             <div>
@@ -310,6 +338,33 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 <?php if ($puedeCancelar): ?><button type="button" class="btn-danger" id="btnCancelarVenta">Cancelar venta</button><?php endif; ?>
                 <button type="button" class="btn-secondary" data-cerrar-modal="modalDetalleVenta">Cerrar</button>
             </div>
+        </footer>
+    </section>
+</div>
+
+<!-- Confirmaciones de Ventas -->
+<div class="modal-backdrop modal-backdrop--confirm" id="modalConfirmacionVentas" data-modal-static hidden>
+    <section class="modal-card modal-card--confirm" role="alertdialog" aria-modal="true" aria-labelledby="tituloConfirmacionVentas" aria-describedby="textoConfirmacionVentas">
+        <header class="modal-header">
+            <div>
+                <span class="confirm-dialog__eyebrow">CONFIRMACIÓN</span>
+                <h2 id="tituloConfirmacionVentas">Confirmar operación</h2>
+            </div>
+            <button type="button" class="modal-close" id="btnCerrarConfirmacionVentas" aria-label="Cerrar">×</button>
+        </header>
+        <div class="confirm-dialog__body">
+            <span class="confirm-dialog__icon" id="iconoConfirmacionVentas" aria-hidden="true">✓</span>
+            <p id="textoConfirmacionVentas"></p>
+            <label class="field confirm-dialog__reason" id="grupoMotivoConfirmacionVentas" hidden>
+                <span>Motivo de cancelación *</span>
+                <textarea id="motivoConfirmacionVentas" rows="4" maxlength="3000" placeholder="Describe brevemente el motivo"></textarea>
+                <small>Captura al menos 5 caracteres.</small>
+            </label>
+            <div id="mensajeConfirmacionVentas" class="module-message" hidden></div>
+        </div>
+        <footer class="modal-footer">
+            <button type="button" class="btn-secondary" id="btnCancelarConfirmacionVentas">Volver</button>
+            <button type="button" class="btn-primary" id="btnAceptarConfirmacionVentas">Confirmar</button>
         </footer>
     </section>
 </div>
@@ -337,6 +392,11 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         timerBusqueda: null, timerCliente: null, timerProducto: null,
         timersPrecio: {}, solicitudPrecio: {}, cargandoOrigen: false,
     };
+    const temporizadoresMensajes = new Map();
+    let confirmacionPendiente = null;
+    let configuracionConfirmacion = null;
+    let selectVentasActivo = null;
+    let menuSelectVentas = null;
 
     function escapeHtml(valor) {
         return String(valor ?? '').replace(/[&<>'"]/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));
@@ -374,6 +434,11 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     function badge(valor) {
         const e = estadoVisual(valor);
         return '<span class="status-badge status-badge--' + e[1] + '">' + escapeHtml(e[0]) + '</span>';
+    }
+
+    function datoDetalle(etiqueta, valorHtml, ayuda = '') {
+        return '<div><span>' + escapeHtml(etiqueta) + '</span><strong>' + valorHtml + '</strong>'
+            + (ayuda ? '<small>' + ayuda + '</small>' : '') + '</div>';
     }
 
     function almacenActual() {
@@ -490,13 +555,41 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         renderLineas();
     }
 
+    function ocultarMensaje(id, animar = true) {
+        const el = $(id);
+        if (!el) return;
+        window.clearTimeout(temporizadoresMensajes.get(id));
+        temporizadoresMensajes.delete(id);
+        const finalizar = () => {
+            el.hidden = true;
+            el.classList.remove('is-leaving');
+            el.replaceChildren();
+        };
+        if (!animar || el.hidden) return finalizar();
+        el.classList.add('is-leaving');
+        const cierreId = window.setTimeout(() => {
+            temporizadoresMensajes.delete(id);
+            finalizar();
+        }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
+        temporizadoresMensajes.set(id, cierreId);
+    }
+
     function mostrarMensaje(id, texto, tipo) {
         const el = $(id);
         if (!el) return;
-        if (!texto) { el.hidden = true; el.textContent = ''; el.className = 'module-message'; return; }
+        if (!texto) return ocultarMensaje(id, false);
+        const claseBase = id === 'mensajePagina' ? 'ventas-toast' : 'module-message';
+        const tipoSeguro = ['success', 'warning', 'info', 'error'].includes(tipo) ? tipo : 'error';
+        window.clearTimeout(temporizadoresMensajes.get(id));
+        temporizadoresMensajes.delete(id);
+        el.className = claseBase + ' ' + claseBase + '--' + tipoSeguro;
+        el.innerHTML = '<span class="module-message__text">' + escapeHtml(texto) + '</span>'
+            + '<button type="button" class="module-message__close" aria-label="Cerrar mensaje">×</button>';
         el.hidden = false;
-        el.textContent = texto;
-        el.className = 'module-message module-message--' + (tipo || 'error');
+        el.querySelector('.module-message__close')?.addEventListener('click', () => ocultarMensaje(id));
+        if (tipoSeguro === 'success') {
+            temporizadoresMensajes.set(id, window.setTimeout(() => ocultarMensaje(id), 4400));
+        }
     }
 
     async function apiGet(accion, params = {}) {
@@ -539,6 +632,193 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     function cerrarModal(id) {
         $(id).hidden = true;
         if (!document.querySelector('.modal-backdrop:not([hidden])')) document.body.classList.remove('modal-open');
+    }
+
+    function resolverConfirmacion(resultado) {
+        const resolver = confirmacionPendiente;
+        confirmacionPendiente = null;
+        configuracionConfirmacion = null;
+        cerrarModal('modalConfirmacionVentas');
+        if (resolver) resolver(resultado);
+    }
+
+    function solicitarConfirmacion({ titulo, mensaje, textoAceptar, peligro = false, requiereMotivo = false }) {
+        if (confirmacionPendiente) resolverConfirmacion(null);
+        $('tituloConfirmacionVentas').textContent = titulo;
+        $('textoConfirmacionVentas').textContent = mensaje;
+        $('grupoMotivoConfirmacionVentas').hidden = !requiereMotivo;
+        $('motivoConfirmacionVentas').value = '';
+        $('iconoConfirmacionVentas').textContent = peligro ? '!' : '✓';
+        $('iconoConfirmacionVentas').className = 'confirm-dialog__icon' + (peligro ? ' confirm-dialog__icon--danger' : '');
+        $('btnAceptarConfirmacionVentas').textContent = textoAceptar;
+        $('btnAceptarConfirmacionVentas').className = peligro ? 'btn-danger' : 'btn-primary';
+        configuracionConfirmacion = { requiereMotivo };
+        mostrarMensaje('mensajeConfirmacionVentas', '');
+        abrirModal('modalConfirmacionVentas');
+
+        return new Promise((resolve) => {
+            confirmacionPendiente = resolve;
+            window.requestAnimationFrame(() => {
+                (requiereMotivo ? $('motivoConfirmacionVentas') : $('btnAceptarConfirmacionVentas')).focus();
+            });
+        });
+    }
+
+    function aceptarConfirmacion() {
+        if (!confirmacionPendiente || !configuracionConfirmacion) return;
+        if (!configuracionConfirmacion.requiereMotivo) return resolverConfirmacion(true);
+        const motivo = $('motivoConfirmacionVentas').value.trim();
+        if (motivo.length < 5) {
+            mostrarMensaje('mensajeConfirmacionVentas', 'El motivo debe tener al menos 5 caracteres.', 'error');
+            $('motivoConfirmacionVentas').focus();
+            return;
+        }
+        resolverConfirmacion(motivo);
+    }
+
+    function actualizarSelectVentas(select) {
+        const control = select.closest('.ventas-select');
+        if (!control) return;
+        const trigger = control.querySelector('.ventas-select__trigger');
+        const opcion = select.options[select.selectedIndex];
+        trigger.querySelector('.ventas-select__value').textContent = opcion ? opcion.textContent.trim() : 'Seleccionar';
+        trigger.disabled = select.disabled;
+        trigger.setAttribute('aria-disabled', select.disabled ? 'true' : 'false');
+    }
+
+    function cerrarSelectVentas(restaurarFoco = false) {
+        if (!selectVentasActivo || !menuSelectVentas) return;
+        const trigger = selectVentasActivo.trigger;
+        menuSelectVentas.hidden = true;
+        menuSelectVentas.classList.remove('is-open');
+        trigger.setAttribute('aria-expanded', 'false');
+        selectVentasActivo = null;
+        if (restaurarFoco) trigger.focus();
+    }
+
+    function posicionarMenuSelectVentas() {
+        if (!selectVentasActivo || !menuSelectVentas || menuSelectVentas.hidden) return;
+        const rect = selectVentasActivo.trigger.getBoundingClientRect();
+        const margen = 8;
+        const ancho = Math.max(190, rect.width);
+        menuSelectVentas.style.width = Math.min(ancho, window.innerWidth - (margen * 2)) + 'px';
+        menuSelectVentas.style.left = Math.max(margen, Math.min(rect.left, window.innerWidth - menuSelectVentas.offsetWidth - margen)) + 'px';
+        const espacioAbajo = window.innerHeight - rect.bottom - margen;
+        const alto = Math.min(menuSelectVentas.scrollHeight, 280);
+        menuSelectVentas.style.maxHeight = alto + 'px';
+        menuSelectVentas.style.top = (espacioAbajo >= Math.min(alto, 180)
+            ? rect.bottom + 7
+            : Math.max(margen, rect.top - alto - 7)) + 'px';
+    }
+
+    function abrirSelectVentas(select, trigger) {
+        if (select.disabled) return;
+        if (selectVentasActivo?.select === select) return cerrarSelectVentas(true);
+        cerrarSelectVentas();
+        actualizarSelectVentas(select);
+        menuSelectVentas.replaceChildren();
+        Array.from(select.options).forEach((opcion, indice) => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'ventas-select__option' + (indice === select.selectedIndex ? ' is-selected' : '');
+            item.dataset.optionIndex = String(indice);
+            item.setAttribute('role', 'option');
+            item.setAttribute('aria-selected', indice === select.selectedIndex ? 'true' : 'false');
+            item.disabled = opcion.disabled;
+            item.textContent = opcion.textContent;
+            menuSelectVentas.appendChild(item);
+        });
+        selectVentasActivo = { select, trigger };
+        trigger.setAttribute('aria-expanded', 'true');
+        menuSelectVentas.hidden = false;
+        menuSelectVentas.classList.add('is-open');
+        posicionarMenuSelectVentas();
+        window.requestAnimationFrame(() => menuSelectVentas.querySelector('.is-selected:not(:disabled), .ventas-select__option:not(:disabled)')?.focus());
+    }
+
+    function inicializarSelectVentas(select) {
+        if (!(select instanceof HTMLSelectElement) || select.classList.contains('ventas-select__native')) return;
+        const control = document.createElement('div');
+        control.className = 'ventas-select';
+        select.parentNode.insertBefore(control, select);
+        control.appendChild(select);
+        select.classList.add('ventas-select__native');
+        select.tabIndex = -1;
+
+        const trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'ventas-select__trigger';
+        trigger.setAttribute('aria-haspopup', 'listbox');
+        trigger.setAttribute('aria-expanded', 'false');
+        trigger.innerHTML = '<span class="ventas-select__value"></span><span class="ventas-select__chevron" aria-hidden="true"></span>';
+        control.appendChild(trigger);
+        actualizarSelectVentas(select);
+
+        trigger.addEventListener('click', () => abrirSelectVentas(select, trigger));
+        trigger.addEventListener('keydown', (e) => {
+            if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+                e.preventDefault();
+                abrirSelectVentas(select, trigger);
+            }
+        });
+        select.addEventListener('change', () => actualizarSelectVentas(select));
+        new MutationObserver(() => actualizarSelectVentas(select)).observe(select, {
+            attributes: true,
+            childList: true,
+            subtree: true,
+            attributeFilter: ['disabled', 'selected', 'label']
+        });
+    }
+
+    function inicializarSelectsVentas(root = document) {
+        if (root instanceof HTMLSelectElement) inicializarSelectVentas(root);
+        root.querySelectorAll?.('select').forEach(inicializarSelectVentas);
+    }
+
+    function sincronizarSelectsVentas() {
+        document.querySelectorAll('select.ventas-select__native').forEach(actualizarSelectVentas);
+    }
+
+    function prepararSelectsVentas() {
+        menuSelectVentas = document.createElement('div');
+        menuSelectVentas.className = 'ventas-select__menu';
+        menuSelectVentas.id = 'menuSelectVentas';
+        menuSelectVentas.setAttribute('role', 'listbox');
+        menuSelectVentas.hidden = true;
+        document.body.appendChild(menuSelectVentas);
+        inicializarSelectsVentas();
+
+        menuSelectVentas.addEventListener('click', (e) => {
+            const item = e.target.closest('[data-option-index]');
+            if (!item || !selectVentasActivo || item.disabled) return;
+            const opcion = selectVentasActivo.select.options[Number(item.dataset.optionIndex)];
+            if (!opcion) return;
+            selectVentasActivo.select.value = opcion.value;
+            selectVentasActivo.select.dispatchEvent(new Event('change', { bubbles: true }));
+            actualizarSelectVentas(selectVentasActivo.select);
+            cerrarSelectVentas(true);
+        });
+        menuSelectVentas.addEventListener('keydown', (e) => {
+            const opciones = Array.from(menuSelectVentas.querySelectorAll('.ventas-select__option:not(:disabled)'));
+            const actual = opciones.indexOf(document.activeElement);
+            if (e.key === 'Escape') { e.preventDefault(); cerrarSelectVentas(true); return; }
+            if (e.key === 'Tab') { cerrarSelectVentas(); return; }
+            if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+            e.preventDefault();
+            const indice = e.key === 'Home' ? 0 : (e.key === 'End' ? opciones.length - 1 : (actual + (e.key === 'ArrowDown' ? 1 : -1) + opciones.length) % opciones.length);
+            opciones[indice]?.focus();
+        });
+        document.addEventListener('pointerdown', (e) => {
+            if (!selectVentasActivo || menuSelectVentas.contains(e.target) || selectVentasActivo.trigger.contains(e.target)) return;
+            cerrarSelectVentas();
+        });
+        document.addEventListener('scroll', (e) => {
+            if (e.target !== menuSelectVentas) cerrarSelectVentas();
+        }, true);
+        window.addEventListener('resize', () => cerrarSelectVentas());
+        new MutationObserver((cambios) => cambios.forEach((cambio) => cambio.addedNodes.forEach((nodo) => {
+            if (nodo.nodeType === Node.ELEMENT_NODE) inicializarSelectsVentas(nodo);
+        }))).observe(document.body, { childList: true, subtree: true });
     }
 
     function opciones(items, valor, texto) {
@@ -671,6 +951,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('ventaAlmacen').innerHTML = opciones(estado.catalogos.almacenes, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMoneda').innerHTML = opciones(estado.catalogos.monedas, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMetodoPago').innerHTML = '<option value="0">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
+        sincronizarSelectsVentas();
     }
 
     async function cargarVentas() {
@@ -709,23 +990,16 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
 
     function renderVentas() {
         if (!estado.ventas.length) {
-            $('tablaVentas').innerHTML = '<tr><td colspan="9" class="empty-cell">No hay ventas con esos filtros.</td></tr>';
+            $('tablaVentas').innerHTML = '<tr><td colspan="6" class="empty-cell">No hay ventas con esos filtros.</td></tr>';
             return;
         }
         $('tablaVentas').innerHTML = estado.ventas.map((v) => {
-            const origen = v.apartado_folio ? 'Apartado ' + escapeHtml(v.apartado_folio)
-                : (v.cotizacion_folio ? 'Cotización ' + escapeHtml(v.cotizacion_folio) : 'Directa');
-            let financiero = badge(v.condicion_pago) + '<small class="cell-secondary">' + badge(v.estado_pago) + '</small>';
-            if (v.cxc_folio) financiero += '<small class="cell-secondary">' + escapeHtml(v.cxc_folio) + '</small>';
             return '<tr>'
-                + '<td><strong>' + escapeHtml(v.folio) + '</strong><small class="cell-secondary">' + escapeHtml(v.moneda_codigo) + '</small></td>'
+                + '<td><strong>' + escapeHtml(v.folio) + '</strong></td>'
                 + '<td><strong>' + escapeHtml(v.cliente_nombre_snapshot || 'Público general') + '</strong><small class="cell-secondary">' + escapeHtml(v.cliente_codigo || '') + '</small></td>'
                 + '<td>' + fechaHora(v.fecha_venta) + '</td>'
-                + '<td>' + badge(v.estado_operativo || v.estado) + ((v.estado_operativo === 'PENDIENTE_SALIDA') ? '<small class="cell-secondary">Venta confirmada · inventario reservado</small>' : '') + '</td>'
-                + '<td>' + financiero + '</td>'
-                + '<td>' + Number(v.renglones || 0) + '</td>'
+                + '<td>' + badge(v.estado_operativo || v.estado) + '</td>'
                 + '<td><strong>' + moneda(v.total, v.moneda_codigo, v.moneda_simbolo) + '</strong></td>'
-                + '<td>' + origen + '</td>'
                 + '<td class="text-right actions-cell"><button type="button" class="table-action" data-action="ver" data-id="' + v.id + '">Ver</button>'
                 + '<a class="table-action table-action--link" target="_blank" href="venta_imprimir.php?id=' + v.id + '">Imprimir</a></td>'
                 + '</tr>';
@@ -744,14 +1018,14 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         $('contenedorBuscarProductoVenta').hidden = false;
         $('bannerOrigen').hidden = true;
         $('tituloModalVenta').textContent = 'Nueva venta';
-        $('subtituloModalVenta').textContent = 'Al confirmar se compromete inventario. Con QR queda reservado hasta la salida física; sin QR, la salida se aplica de inmediato.';
-        $('textoOrigenLineasVenta').textContent = 'Agrega los productos de la venta. El stock mostrado es el disponible, no solamente el físico.';
+        $('subtituloModalVenta').textContent = 'El inventario se reserva o descuenta según la validación QR.';
+        $('textoOrigenLineasVenta').textContent = 'Agrega productos y verifica su disponibilidad.';
         $('ventaAlmacen').innerHTML = opciones(estado.catalogos.almacenes, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMoneda').innerHTML = opciones(estado.catalogos.monedas, 'id', (x) => x.codigo + ' · ' + x.nombre);
         $('ventaMetodoPago').innerHTML = '<option value="0">Seleccionar</option>' + opciones(estado.catalogos.metodos, 'id', (x) => x.nombre);
         $('ventaCondicion').value = 'CONTADO';
         ocultarAlertaStock();
-        mostrarMensaje('mensajeVenta', ''); renderCliente(); renderLineas(); renderTotales();
+        mostrarMensaje('mensajeVenta', ''); renderCliente(); renderLineas(); renderTotales(); sincronizarSelectsVentas();
     }
 
     function construirClienteFuente(f) {
@@ -809,10 +1083,10 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             $('ventaMoneda').disabled = true;
             $('contenedorBuscarProductoVenta').hidden = true;
             $('bannerOrigen').hidden = false;
-            $('bannerOrigen').innerHTML = '<strong>Origen:</strong> Cotización ' + escapeHtml(r.cotizacion.folio) + '. Precios, descuentos e impuestos se conservan exactamente como fueron aceptados.';
+            $('bannerOrigen').innerHTML = '<strong>Origen:</strong> Cotización ' + escapeHtml(r.cotizacion.folio) + '. Se conservan sus condiciones aceptadas.';
             $('tituloModalVenta').textContent = 'Venta desde ' + r.cotizacion.folio;
-            $('textoOrigenLineasVenta').textContent = 'Los productos y condiciones comerciales están bloqueados por la cotización aceptada. Puedes seleccionar el almacén que surtirá la venta.';
-            renderCliente(); renderLineas(); renderTotales();
+            $('textoOrigenLineasVenta').textContent = 'Productos y condiciones tomados de la cotización aceptada.';
+            renderCliente(); renderLineas(); renderTotales(); sincronizarSelectsVentas();
         } finally { estado.cargandoOrigen = false; }
     }
 
@@ -834,11 +1108,10 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
             $('contenedorBuscarProductoVenta').hidden = true;
             $('bannerOrigen').hidden = false;
             $('bannerOrigen').innerHTML = '<strong>Origen:</strong> Apartado ' + escapeHtml(r.apartado.folio)
-                + '. Se aplicarán ' + moneda(r.apartado.importe_anticipado || 0, r.apartado.moneda_codigo, r.apartado.moneda_simbolo)
-                + ' de anticipos y se consumirá exactamente la mercancía reservada.';
+                + '. Anticipo aplicado: ' + moneda(r.apartado.importe_anticipado || 0, r.apartado.moneda_codigo, r.apartado.moneda_simbolo) + '.';
             $('tituloModalVenta').textContent = 'Venta desde ' + r.apartado.folio;
-            $('textoOrigenLineasVenta').textContent = 'Productos, almacén y condiciones comerciales provienen de la reserva y no se modifican desde esta pantalla.';
-            renderCliente(); renderLineas(); renderTotales();
+            $('textoOrigenLineasVenta').textContent = 'Productos y almacén tomados de la reserva.';
+            renderCliente(); renderLineas(); renderTotales(); sincronizarSelectsVentas();
         } finally { estado.cargandoOrigen = false; }
     }
 
@@ -1016,7 +1289,12 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
                 }
             }
         }
-        if (!window.confirm('Al confirmar se comprometerá el inventario. Con validación QR, la mercancía quedará reservada hasta su salida física; sin QR, la salida se aplicará de inmediato. ¿Deseas continuar?')) return;
+        const confirmado = await solicitarConfirmacion({
+            titulo: 'Confirmar venta',
+            mensaje: 'Se registrará la venta y se comprometerá el inventario. Con QR activo, la mercancía permanecerá reservada hasta confirmar su salida.',
+            textoAceptar: 'Confirmar venta'
+        });
+        if (!confirmado) return;
 
         const lineas = estado.origen === 'DIRECTO' ? estado.lineas.map((l) => ({
             producto_id: l.producto_id,
@@ -1073,9 +1351,11 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         const r = await apiGet('DETALLE_VENTA', { venta_id: id });
         estado.detalle = r;
         const v = r.venta;
+        const detalles = r.detalles || [];
         $('tituloDetalleVenta').textContent = v.folio;
         $('subtituloDetalleVenta').textContent = (v.cliente_nombre_snapshot || 'Público general') + ' · ' + fechaHora(v.fecha_venta);
         const origen = v.apartado_folio ? 'Apartado ' + v.apartado_folio : (v.cotizacion_folio ? 'Cotización ' + v.cotizacion_folio : 'Venta directa');
+        const referenciaOrigen = v.apartado_folio || v.cotizacion_folio || 'Sin documento previo';
         const estadoOperativo = v.estado_operativo || v.estado;
         const detalleEstado = estadoOperativo === 'PENDIENTE_SALIDA'
             ? 'Venta confirmada · mercancía reservada'
@@ -1083,18 +1363,44 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         const textoInventario = estadoOperativo === 'PENDIENTE_SALIDA'
             ? 'Salida física pendiente · aún no corresponde movimiento en Kardex'
             : (r.movimiento ? 'Kardex ' + escapeHtml(r.movimiento.folio) : 'Sin movimiento físico de inventario');
-        $('resumenDetalleVenta').innerHTML = '<div><span>Estado</span><strong>' + badge(estadoOperativo) + '</strong><small>' + detalleEstado + '</small></div>'
-            + '<div><span>Total</span><strong>' + moneda(v.total, v.moneda_codigo, v.moneda_simbolo) + '</strong><small>Descuento ' + moneda(v.descuento_total, v.moneda_codigo, v.moneda_simbolo) + '</small></div>'
-            + '<div><span>Pagado / aplicado</span><strong>' + moneda(v.pagado_total, v.moneda_codigo, v.moneda_simbolo) + '</strong><small>Anticipos ' + moneda(v.importe_anticipado, v.moneda_codigo, v.moneda_simbolo) + '</small></div>'
-            + '<div><span>Origen</span><strong>' + escapeHtml(origen) + '</strong><small>' + textoInventario + '</small></div>';
+        $('resumenDetalleVenta').innerHTML = datoDetalle('Estado', badge(estadoOperativo), detalleEstado)
+            + datoDetalle('Fecha de venta', fechaHora(v.fecha_venta), escapeHtml(v.moneda_codigo || ''))
+            + datoDetalle('Productos', Number(detalles.length).toLocaleString('es-MX'), detalles.length === 1 ? '1 partida' : detalles.length + ' partidas')
+            + datoDetalle('Total', moneda(v.total, v.moneda_codigo, v.moneda_simbolo), escapeHtml(v.condicion_pago));
 
-        $('tablaDetalleVentaProductos').innerHTML = (r.detalles || []).map((d) => '<tr>'
-            + '<td><strong>' + escapeHtml(d.producto_nombre_snapshot) + '</strong><small class="cell-secondary">' + escapeHtml(d.sku_snapshot) + '</small></td>'
+        $('detalleClienteVenta').innerHTML = datoDetalle('Cliente', escapeHtml(v.cliente_nombre_snapshot || 'Público general'), v.cliente_id ? 'Cliente registrado' : 'Venta al público')
+            + datoDetalle('Código', escapeHtml(v.cliente_codigo || '—'))
+            + datoDetalle('RFC', escapeHtml(v.cliente_rfc_snapshot || '—'))
+            + datoDetalle('Descuento comercial', numero(v.descuento_cliente_pct_snapshot || 0, 2) + '%');
+
+        $('detalleOrigenVenta').innerHTML = datoDetalle('Origen', escapeHtml(origen), escapeHtml(referenciaOrigen))
+            + datoDetalle('Inventario', textoInventario)
+            + datoDetalle('Registró', escapeHtml(v.creado_por || '—'), fechaHora(v.created_at || v.fecha_venta))
+            + datoDetalle('Referencia interna', escapeHtml(r.movimiento?.folio || v.folio));
+
+        let financiero = datoDetalle('Condición', badge(v.condicion_pago))
+            + datoDetalle('Moneda', escapeHtml((v.moneda_codigo || '') + (v.moneda_nombre ? ' · ' + v.moneda_nombre : '')), 'Tipo de cambio: ' + numero(v.tipo_cambio_a_base || 1, 4))
+            + datoDetalle('Subtotal', moneda(v.subtotal, v.moneda_codigo, v.moneda_simbolo))
+            + datoDetalle('Descuento', moneda(v.descuento_total, v.moneda_codigo, v.moneda_simbolo))
+            + datoDetalle('Impuestos', moneda(v.impuesto_total, v.moneda_codigo, v.moneda_simbolo))
+            + datoDetalle('Total', moneda(v.total, v.moneda_codigo, v.moneda_simbolo))
+            + datoDetalle('Pagado / aplicado', moneda(v.pagado_total, v.moneda_codigo, v.moneda_simbolo), 'Anticipos: ' + moneda(v.importe_anticipado, v.moneda_codigo, v.moneda_simbolo))
+            + datoDetalle('Saldo comercial', moneda(v.saldo_comercial, v.moneda_codigo, v.moneda_simbolo));
+        if (v.condicion_pago === 'CREDITO') {
+            financiero += datoDetalle('Cuenta por cobrar', escapeHtml(v.cxc_folio || 'Pendiente de generar'), badge(v.cxc_estado || 'PENDIENTE'))
+                + datoDetalle('Importe financiado', moneda(v.cxc_importe_original || 0, v.moneda_codigo, v.moneda_simbolo))
+                + datoDetalle('Saldo de la cuenta', moneda(v.cxc_saldo_pendiente || 0, v.moneda_codigo, v.moneda_simbolo))
+                + datoDetalle('Vencimiento', fechaCorta(v.cxc_fecha_vencimiento));
+        } else {
+            financiero += datoDetalle('Cobro directo', moneda(v.pagado_directo || 0, v.moneda_codigo, v.moneda_simbolo));
+        }
+        $('detalleFinanciero').innerHTML = financiero;
+
+        $('tablaDetalleVentaProductos').innerHTML = detalles.map((d) => '<tr>'
+            + '<td><strong>' + escapeHtml(d.producto_nombre_snapshot) + '</strong><small class="cell-secondary">' + escapeHtml(d.sku_snapshot) + ' · Base ' + numero(d.cantidad_base, 3) + ' ' + escapeHtml(d.unidad_base_simbolo || d.unidad_base_codigo) + ' · ' + escapeHtml(d.nivel_precio_snapshot || 'Sin nivel') + '</small></td>'
             + '<td>' + escapeHtml(d.almacen_nombre) + '</td>'
             + '<td>' + numero(d.cantidad, 3) + ' ' + escapeHtml(d.unidad_nombre_snapshot) + '</td>'
-            + '<td>' + numero(d.cantidad_base, 3) + ' ' + escapeHtml(d.unidad_base_simbolo || d.unidad_base_codigo) + '</td>'
             + '<td>' + moneda(d.precio_unitario, v.moneda_codigo, v.moneda_simbolo) + '</td>'
-            + '<td>' + escapeHtml(d.nivel_precio_snapshot) + '</td>'
             + '<td>' + numero(d.descuento_pct, 2) + '%</td>'
             + '<td>' + numero(d.impuesto_pct_snapshot, 2) + '%</td>'
             + '<td><strong>' + moneda(d.total, v.moneda_codigo, v.moneda_simbolo) + '</strong></td></tr>').join('');
@@ -1102,17 +1408,12 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         const pagos = r.pagos || [];
         $('tablaPagosVenta').innerHTML = pagos.length ? pagos.map((p) => '<tr><td>' + fechaHora(p.fecha_pago) + '</td><td>' + escapeHtml(p.metodo_nombre) + '</td><td>' + escapeHtml(p.referencia || '—') + '</td><td><strong>' + moneda(p.importe, p.moneda_codigo, p.moneda_simbolo) + '</strong></td><td>' + badge(p.estado) + '</td><td>' + escapeHtml(p.registrado_por || '—') + '</td></tr>').join('') : '<tr><td colspan="6" class="empty-cell">No hay cobros directos registrados en esta venta.</td></tr>';
 
-        if (v.condicion_pago === 'CREDITO') {
-            $('detalleFinanciero').innerHTML = '<div><span>Cuenta por cobrar</span><strong>' + escapeHtml(v.cxc_folio || 'Pendiente de generar') + '</strong></div>'
-                + '<div><span>Importe financiado</span><strong>' + moneda(v.cxc_importe_original || 0, v.moneda_codigo, v.moneda_simbolo) + '</strong></div>'
-                + '<div><span>Saldo</span><strong>' + moneda(v.cxc_saldo_pendiente || 0, v.moneda_codigo, v.moneda_simbolo) + '</strong></div>'
-                + '<div><span>Vencimiento</span><strong>' + fechaCorta(v.cxc_fecha_vencimiento) + '</strong><small>' + badge(v.cxc_estado || 'PENDIENTE') + '</small></div>';
-        } else {
-            $('detalleFinanciero').innerHTML = '<div><span>Condición</span><strong>Contado</strong></div>'
-                + '<div><span>Anticipos aplicados</span><strong>' + moneda(v.importe_anticipado || 0, v.moneda_codigo, v.moneda_simbolo) + '</strong></div>'
-                + '<div><span>Cobro en venta</span><strong>' + moneda(v.pagado_directo || 0, v.moneda_codigo, v.moneda_simbolo) + '</strong></div>'
-                + '<div><span>Total cubierto</span><strong>' + moneda(v.pagado_total || 0, v.moneda_codigo, v.moneda_simbolo) + '</strong></div>';
+        const notas = [];
+        if (v.observaciones) notas.push('<div class="detail-note__item"><span>Observaciones</span><p>' + escapeHtml(v.observaciones) + '</p></div>');
+        if (v.estado === 'CANCELADA') {
+            notas.push('<div class="detail-note__item detail-note__item--danger"><span>Cancelación</span><p>' + escapeHtml(v.motivo_cancelacion || 'Sin motivo registrado.') + '</p><small>' + fechaHora(v.cancelada_at) + ' · ' + escapeHtml(v.cancelado_por || 'Usuario no disponible') + '</small></div>');
         }
+        $('detalleNotasVenta').innerHTML = notas.length ? notas.join('') : '<p class="detail-note__empty">Sin notas adicionales.</p>';
 
         $('btnImprimirVenta').href = 'venta_imprimir.php?id=' + v.id;
         if ($('btnCancelarVenta')) $('btnCancelarVenta').hidden = !puedeCancelar || v.estado !== 'CONFIRMADA' || Boolean(v.salida_confirmada_qr);
@@ -1122,21 +1423,25 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     async function cancelarVenta() {
         const v = estado.detalle && estado.detalle.venta;
         if (!v) return;
-        const motivo = window.prompt('Motivo de cancelación de la venta ' + v.folio + ':');
-        if (motivo === null) return;
-        if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalleVenta', 'El motivo debe tener al menos 5 caracteres.', 'error');
         const avisoCancelacion = v.salida_pendiente_qr
-            ? 'La cancelación liberará la reserva pendiente. Como la mercancía todavía no salió físicamente, no se generará un reverso de salida. Todo el historial se conservará. ¿Confirmas?'
+            ? 'Se liberará la reserva pendiente y se conservará el historial. No se generará un reverso porque la mercancía aún no salió.'
             : (v.salida_fisica_aplicada
-                ? 'La cancelación revertirá la salida física de inventario y conservará todo el historial. ¿Confirmas?'
-                : 'La cancelación conservará todo el historial de la venta. ¿Confirmas?');
-        if (!window.confirm(avisoCancelacion)) return;
+                ? 'Se revertirá la salida física de inventario y se conservará todo el historial.'
+                : 'La venta se cancelará y su historial permanecerá disponible.');
+        const motivo = await solicitarConfirmacion({
+            titulo: 'Cancelar ' + v.folio,
+            mensaje: avisoCancelacion,
+            textoAceptar: 'Cancelar venta',
+            peligro: true,
+            requiereMotivo: true
+        });
+        if (typeof motivo !== 'string') return;
         $('btnCancelarVenta').disabled = true;
         try {
-            const r = await apiPost('CANCELAR_VENTA', { venta_id: v.id, motivo: motivo.trim() });
-            mostrarMensaje('mensajeDetalleVenta', r.mensaje, 'success');
+            const r = await apiPost('CANCELAR_VENTA', { venta_id: v.id, motivo });
             await cargarVentas();
             await verDetalle(v.id);
+            mostrarMensaje('mensajePagina', r.mensaje, 'success');
         } catch (e) {
             mostrarMensaje('mensajeDetalleVenta', e.message, 'error');
         } finally {
@@ -1145,7 +1450,15 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     }
 
     document.querySelectorAll('[data-cerrar-modal]').forEach((b) => b.addEventListener('click', () => cerrarModal(b.dataset.cerrarModal)));
-    document.querySelectorAll('.modal-backdrop').forEach((m) => m.addEventListener('mousedown', (e) => { if (e.target === m) cerrarModal(m.id); }));
+    document.querySelectorAll('.modal-backdrop').forEach((m) => m.addEventListener('mousedown', (e) => {
+        if (e.target === m && !m.hasAttribute('data-modal-static')) cerrarModal(m.id);
+    }));
+    $('btnAceptarConfirmacionVentas').addEventListener('click', aceptarConfirmacion);
+    $('btnCancelarConfirmacionVentas').addEventListener('click', () => resolverConfirmacion(null));
+    $('btnCerrarConfirmacionVentas').addEventListener('click', () => resolverConfirmacion(null));
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !$('modalConfirmacionVentas').hidden) resolverConfirmacion(null);
+    });
 
     if ($('btnNuevaVenta')) $('btnNuevaVenta').addEventListener('click', () => { resetVentaDirecta(); abrirModal('modalVenta'); });
     if ($('btnConfirmarVenta')) $('btnConfirmarVenta').addEventListener('click', confirmarVenta);
@@ -1295,6 +1608,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
         }
     }
 
+    prepararSelectsVentas();
     iniciar();
 })();
 </script>

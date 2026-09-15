@@ -45,15 +45,17 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Cotizaciones | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_cotizaciones.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content cotizaciones-page">
+        <main class="page-content cotizaciones-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">GESTIÓN COMERCIAL · PROPUESTAS</p>
@@ -1351,7 +1353,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     }
 
     async function cambiarEstadoCotizacion(id, accion, mensajeConfirmacion) {
-        if (!window.confirm(mensajeConfirmacion)) {
+        if (!(await siConfirmar(mensajeConfirmacion, { titulo: 'Confirmar cotización', aceptar: 'Continuar' }))) {
             return;
         }
 
@@ -1430,6 +1432,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 + '<div><span>Moneda</span><strong>' + escapeHtml(c.moneda_codigo) + '</strong>'
                 + '<small>TC a base: ' + numero(c.tipo_cambio_a_base, 8) + '</small></div>'
                 + '<div><span>Vigencia</span><strong>' + fechaCorta(c.vigencia_hasta) + '</strong></div>'
+                + '<div><span>Creada por</span><strong>' + escapeHtml(c.creado_por || '—') + '</strong></div>'
                 + '</section>'
                 + conversion
                 + '<div class="table-wrap"><table class="module-table detail-lines-table">'

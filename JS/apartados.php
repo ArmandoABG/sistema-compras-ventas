@@ -38,13 +38,15 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     <title>Apartados | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_apartados.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
-        <main class="page-content apartados-page">
+        <main class="page-content apartados-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">GESTIÓN COMERCIAL · RESERVAS</p>
@@ -753,7 +755,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     }
 
     async function cancelarAnticipo(id) {
-        if (!window.confirm('Esta opción anula un anticipo capturado por corrección mientras el apartado sigue ACTIVO. Si quieres cerrar el apartado y devolver o retener el dinero, usa “Cancelar apartado”. ¿Continuar?')) return;
+        if (!(await siConfirmar('Esta opción anula un anticipo capturado por corrección mientras el apartado sigue ACTIVO. Si quieres cerrar el apartado y devolver o retener el dinero, usa “Cancelar apartado”. ¿Continuar?', { titulo: 'Anular anticipo', aceptar: 'Continuar', peligro: true }))) return;
         const motivo = window.prompt('Motivo de anulación/corrección del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error'); if (motivo.trim().length > 1000) return mostrarMensaje('mensajeDetalle', 'El motivo no puede exceder 1000 caracteres.', 'error');
         try { const r = await apiPost('CANCELAR_ANTICIPO', { anticipo_id: id, motivo: motivo.trim() }); await verDetalle(estado.detalle.apartado.id); mostrarMensaje('mensajeDetalle', r.mensaje, 'success'); await cargarApartados(); }
         catch (e) { mostrarMensaje('mensajeDetalle', e.message, 'error'); }
@@ -774,7 +776,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         const a = estado.detalle && estado.detalle.apartado; if (!a) return;
         const fecha = $('reactivarReservadoHasta').value;
         if (!fecha) return mostrarMensaje('mensajeReactivarApartado', 'Selecciona la nueva fecha límite.', 'error');
-        if (!window.confirm('Se volverá a reservar la mercancía del apartado si existe disponibilidad suficiente. ¿Deseas continuar?')) return;
+        if (!(await siConfirmar('Se volverá a reservar la mercancía del apartado si existe disponibilidad suficiente. ¿Deseas continuar?', { titulo: 'Reactivar apartado', aceptar: 'Reactivar' }))) return;
         $('btnConfirmarReactivar').disabled = true;
         try {
             const r = await apiPost('REACTIVAR_APARTADO', { apartado_id: a.id, reservado_hasta: fecha });
@@ -835,7 +837,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
         const resumen = calculo.anticipo > 0.0001
             ? 'Se reembolsarán ' + moneda(calculo.reembolso, a.moneda_codigo, a.moneda_simbolo) + ' y se retendrán ' + moneda(calculo.retenido, a.moneda_codigo, a.moneda_simbolo) + '. '
             : 'El apartado no tiene anticipo aplicado. ';
-        if (!window.confirm(resumen + 'La cancelación será definitiva. ¿Confirmas?')) return;
+        if (!(await siConfirmar(resumen + 'La cancelación será definitiva. ¿Confirmas?', { titulo: 'Cancelar apartado', aceptar: 'Cancelar apartado', peligro: true }))) return;
 
         const ventanaTicket = window.open('about:blank', '_blank');
         $('btnConfirmarCancelarApartado').disabled = true;
@@ -921,11 +923,11 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
             mostrarMensaje('mensajeApartado', error.message || 'Se actualizó el FIX, pero no fue posible refrescar todos los precios sugeridos.', 'error');
         }
     });
-    $('apartadoAlmacen').addEventListener('change', function () {
+    $('apartadoAlmacen').addEventListener('change', async function () {
         const nuevo = Number(this.value || 0);
         if (estado.cotizacion) { estado.almacenSeleccionado = nuevo; estado.lineas.forEach((l) => l.disponible_base = null); renderLineas(); return; }
         if (estado.lineas.length) {
-            if (!window.confirm('Cambiar de almacén requiere volver a seleccionar los productos para usar la disponibilidad correcta. ¿Limpiar los renglones?')) {
+            if (!(await siConfirmar('Cambiar de almacén requiere volver a seleccionar los productos para usar la disponibilidad correcta. ¿Limpiar los renglones?', { titulo: 'Cambiar almacén', aceptar: 'Limpiar y cambiar', peligro: true }))) {
                 this.value = String(estado.almacenSeleccionado || '');
                 return;
             }

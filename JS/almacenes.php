@@ -35,14 +35,16 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Almacenes | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_almacenes.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content warehouse-page">
+        <main class="page-content warehouse-page si-module-page">
             <header class="warehouse-heading">
                 <div>
                     <p class="module-eyebrow">INVENTARIO · UBICACIONES · TRAZABILIDAD</p>
@@ -390,7 +392,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     async function cambiarEstado(id, activoActual){
         if(!CONFIG.puedeAdministrar)return; const activar=Number(activoActual)!==1;
         const texto=activar?'¿Activar este almacén? Volverá a estar disponible en operaciones nuevas.':'¿Desactivar este almacén? Solo podrá hacerse si está vacío, sin reservas y sin operaciones pendientes.';
-        if(!confirm(texto))return;
+        if (!(await siConfirmar(texto, { titulo: 'Confirmar estado', aceptar: activar ? 'Activar' : 'Desactivar', peligro: !activar }))) return;
         try{const d=await post('CAMBIAR_ESTADO_ALMACEN',{almacen_id:id,activo:activar?1:0});mostrar(dom.mensaje,d.mensaje||'Estado actualizado.','success');cerrar(dom.modalDetalle);await cargar();}catch(e){mostrar(dom.mensajeDetalle&&!dom.modalDetalle.hidden?dom.mensajeDetalle:dom.mensaje,e.message);}
     }
 

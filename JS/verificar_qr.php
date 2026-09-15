@@ -38,13 +38,15 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     <title>Verificar QR | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_qr.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
-        <main class="page-content qr-page">
+        <main class="page-content qr-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">TRAZABILIDAD · CONTROL DE SALIDA</p>
@@ -287,7 +289,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         const aviso = habilitar
             ? '¿Habilitar la validación QR? Las nuevas ventas confirmadas quedarán reservadas hasta que su salida física sea autorizada en este módulo.'
             : '¿Deshabilitar la validación QR? IMPORTANTE: todas las ventas que hoy estén pendientes de QR aplicarán su salida física inmediatamente, sus reservas se consumirán y sus QR pendientes quedarán revocados. Las nuevas ventas también descontarán inventario al confirmarse.';
-        if (!window.confirm(aviso)) return;
+        if (!(await siConfirmar(aviso, { titulo: 'Cambiar validación QR', aceptar: habilitar ? 'Habilitar' : 'Deshabilitar', peligro: !habilitar }))) return;
 
         const btn = $('btnCambiarValidacionQr');
         btn.disabled = true;
@@ -396,7 +398,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
 
     async function confirmarSalida() {
         if (!estado.codigoActual || !estado.puedeConfirmar) return;
-        if (!window.confirm('¿Confirmar la salida física de esta venta? Se consumirá la reserva correspondiente y se registrará la salida en Kardex. Después, el QR no podrá utilizarse para otra salida.')) return;
+        if (!(await siConfirmar('¿Confirmar la salida física de esta venta? Se consumirá la reserva correspondiente y se registrará la salida en Kardex. Después, el QR no podrá utilizarse para otra salida.', { titulo: 'Confirmar salida', aceptar: 'Confirmar' }))) return;
         $('btnConfirmarSalida').disabled = true;
         $('btnMostrarRechazo').disabled = true;
         try {
@@ -431,7 +433,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
         if (!estado.codigoActual || !estado.puedeRehabilitar) return;
         const motivo = $('motivoRehabilitar').value.trim();
         if (motivo.length < 5) return mostrarMensaje('mensajePagina', 'Escribe un motivo de rehabilitación de al menos 5 caracteres.', 'error');
-        if (!window.confirm('¿Rehabilitar este QR? Se revertirá la salida física anterior, la mercancía volverá a quedar reservada y la confirmación anterior quedará cancelada en el historial. Después la venta podrá confirmarse físicamente otra vez. Esta corrección quedará registrada en Auditoría.')) return;
+        if (!(await siConfirmar('¿Rehabilitar este QR? Se revertirá la salida física anterior, la mercancía volverá a quedar reservada y la confirmación anterior quedará cancelada en el historial. Después la venta podrá confirmarse físicamente otra vez. Esta corrección quedará registrada en Auditoría.', { titulo: 'Rehabilitar QR', aceptar: 'Rehabilitar', peligro: true }))) return;
         $('btnRehabilitarQr').disabled = true;
         try {
             const r = await apiPost('REHABILITAR_QR', { codigo: estado.codigoActual, motivo });

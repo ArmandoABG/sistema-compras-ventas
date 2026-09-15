@@ -42,13 +42,15 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Usuarios | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_usuarios.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
-        <main class="page-content usuarios-page">
+        <main class="page-content usuarios-page si-module-page">
             <header class="usuarios-heading">
                 <div>
                     <p class="usuarios-eyebrow">SEGURIDAD Y CONTROL</p>
@@ -413,7 +415,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     }
 
     async function cambiarEstado(id, activo) {
-        if (!window.confirm(activo === 1 ? '¿Activar esta cuenta?' : '¿Desactivar esta cuenta? Sus sesiones activas serán cerradas.')) return;
+        if (!(await siConfirmar(activo === 1 ? '¿Activar esta cuenta?' : '¿Desactivar esta cuenta? Sus sesiones activas serán cerradas.', { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) return;
         const form = new FormData(); form.append('csrf_token', '<?= si_escapar($csrfToken) ?>'); form.append('accion', 'CAMBIAR_ESTADO'); form.append('usuario_id', String(id)); form.append('activo', String(activo));
         try { const datos = await api('?usuarios_api=1', {method: 'POST', body: form}); mostrarMensaje(mensajePagina, datos.mensaje, 'success'); await cargarUsuarios(); }
         catch (error) { mostrarMensaje(mensajePagina, error.message, 'error'); }
@@ -723,7 +725,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         const textoConfirmacion = esPrueba
             ? 'Se enviará un correo de prueba a ' + estado.destinatariosEmailGuardados.size + ' destinatario(s) guardado(s). ¿Continuar?'
             : 'Se revisará el inventario ahora y se enviarán únicamente las alertas pendientes. Los episodios ya notificados no se duplicarán. ¿Continuar?';
-        if (!window.confirm(textoConfirmacion)) return;
+        if (!(await siConfirmar(textoConfirmacion, { titulo: esPrueba ? 'Enviar correo de prueba' : 'Procesar alertas', aceptar: 'Continuar' }))) return;
 
         const formData = new FormData();
         formData.append('csrf_token', <?= json_encode($csrfToken, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>);

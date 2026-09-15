@@ -33,13 +33,15 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Roles y permisos | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_roles_permisos.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
-        <main class="page-content roles-page">
+        <main class="page-content roles-page si-module-page">
             <header class="roles-heading">
                 <div>
                     <p class="roles-eyebrow">SEGURIDAD</p>
@@ -177,7 +179,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     });
 
     $('btnSincronizarSeguridad').addEventListener('click', async function () {
-        if (!window.confirm('¿Sincronizar el catálogo oficial de roles y permisos? Se conservarán las asignaciones personalizadas de los roles configurados.')) return;
+        if (!(await siConfirmar('¿Sincronizar el catálogo oficial de roles y permisos? Se conservarán las asignaciones personalizadas de los roles configurados.', { titulo: 'Sincronizar seguridad', aceptar: 'Sincronizar' }))) return;
         const form = new FormData();
         form.append('csrf_token', '<?= si_escapar($csrfToken) ?>');
         form.append('accion', 'SINCRONIZAR_SEGURIDAD');
@@ -197,7 +199,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if (!estado.rolActual) return;
         const ids = Array.from(document.querySelectorAll('#gruposPermisos input[type="checkbox"]:checked')).map(i => i.value);
         if (!ids.length) { mostrarMensaje('Selecciona al menos un permiso.', 'error'); return; }
-        if (!window.confirm('¿Guardar los permisos de ' + estado.rolActual.nombre + '?')) return;
+        if (!(await siConfirmar('¿Guardar los permisos de ' + estado.rolActual.nombre + '?', { titulo: 'Guardar permisos', aceptar: 'Guardar cambios' }))) return;
 
         const rolId = estado.rolActual.id;
         const form = new FormData();

@@ -46,15 +46,17 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
     <title>Cuentas por cobrar | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_cuentas_cobrar.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content cxc-page">
+        <main class="page-content cxc-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">GESTIÓN FINANCIERA · CARTERA</p>

@@ -40,15 +40,17 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     <title>Compras | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_compras.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content compras-page">
+        <main class="page-content compras-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">COMPRAS Y RECEPCIÓN</p>
@@ -912,7 +914,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     }
 
     async function confirmarCompra(id) {
-        if (!confirm('¿Confirmar esta compra? Después ya no podrá editarse y quedará pendiente de recepción física.')) return;
+        if (!(await siConfirmar('¿Confirmar esta compra? Después ya no podrá editarse y quedará pendiente de recepción física.', { titulo: 'Confirmar compra', aceptar: 'Confirmar' }))) return;
         const form = new FormData();
         form.append('csrf_token', csrfToken);
         form.append('accion', 'CONFIRMAR_COMPRA');
@@ -958,7 +960,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
         const p = d.proveedor;
 
         if (estado.proveedorSeleccionado && estado.proveedorSeleccionado.id !== p.id && estado.lineasCompra.length) {
-            if (!confirm('Cambiar de proveedor eliminará los productos ya agregados. ¿Continuar?')) return;
+            if (!(await siConfirmar('Cambiar de proveedor eliminará los productos ya agregados. ¿Continuar?', { titulo: 'Cambiar proveedor', aceptar: 'Cambiar', peligro: true }))) return;
             estado.lineasCompra = [];
             renderLineasCompra();
         }
@@ -1434,7 +1436,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     }
 
     async function confirmarRecepcion(id) {
-        if (!confirm('¿Confirmar esta recepción? Esta acción incrementará inventario y generará el movimiento Kardex.')) return;
+        if (!(await siConfirmar('¿Confirmar esta recepción? Esta acción incrementará inventario y generará el movimiento Kardex.', { titulo: 'Confirmar recepción', aceptar: 'Confirmar' }))) return;
         const form = new FormData();
         form.append('csrf_token', csrfToken);
         form.append('accion', 'CONFIRMAR_RECEPCION');
@@ -1451,7 +1453,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
             mostrarMensaje($('mensajePagina'), 'Debes indicar el motivo de cancelación.', 'error');
             return;
         }
-        if (!confirm('Si la recepción ya está confirmada, el sistema intentará revertir su entrada de inventario y dejará evidencia en Kardex. ¿Continuar?')) return;
+        if (!(await siConfirmar('Si la recepción ya está confirmada, el sistema intentará revertir su entrada de inventario y dejará evidencia en Kardex. ¿Continuar?', { titulo: 'Cancelar recepción', aceptar: 'Continuar', peligro: true }))) return;
         const form = new FormData();
         form.append('csrf_token', csrfToken);
         form.append('accion', 'CANCELAR_RECEPCION');

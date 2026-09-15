@@ -46,15 +46,17 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
     <title>Clientes | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_clientes.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content clientes-page">
+        <main class="page-content clientes-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">GESTIÓN COMERCIAL · CLIENTES</p>
@@ -921,7 +923,7 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
     }
 
     async function cambiarEstadoCliente(id, activo) {
-        if (!window.confirm(activo === 1 ? '¿Activar este cliente?' : '¿Desactivar este cliente?')) {
+        if (!(await siConfirmar(activo === 1 ? '¿Activar este cliente?' : '¿Desactivar este cliente?', { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 

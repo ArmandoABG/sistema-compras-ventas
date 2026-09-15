@@ -60,15 +60,17 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     <title>Inventario | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_inventario.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
 
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content inv-page">
+        <main class="page-content inv-page si-module-page">
             <header class="module-heading">
                 <div>
                     <p class="module-eyebrow">ALMACÉN · EXISTENCIAS Y TRAZABILIDAD</p>
@@ -1693,7 +1695,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
             mostrarMensaje('La salida supera la existencia disponible y afectaría mercancía reservada.'); return;
         }
         const accion = esMerma ? 'REGISTRAR_MERMA' : 'REGISTRAR_AJUSTE';
-        const confirmar = window.confirm(`${esMerma ? 'Registrar merma' : 'Aplicar ajuste'} de ${numero(cantidad)} ${p.unidad_simbolo || p.unidad_base || ''} en ${p.nombre}?`);
+        const confirmar = await siConfirmar(`${esMerma ? 'Registrar merma' : 'Aplicar ajuste'} de ${numero(cantidad)} ${p.unidad_simbolo || p.unidad_base || ''} en ${p.nombre}?`, { titulo: esMerma ? 'Registrar merma' : 'Aplicar ajuste', aceptar: 'Confirmar', peligro: esMerma });
         if (!confirmar) return;
         dom.btnGuardarOperacion.disabled = true;
         try {
@@ -1773,7 +1775,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         const motivo = window.prompt(`Motivo para revertir ${folio}:`);
         if (motivo === null) return;
         if (motivo.trim().length < 5) { mostrarMensaje('Captura un motivo de al menos 5 caracteres.'); return; }
-        if (!window.confirm(`¿Revertir ${folio}? La existencia física se moverá en sentido contrario y el movimiento original quedará REVERTIDO.`)) return;
+        if (!(await siConfirmar(`¿Revertir ${folio}? La existencia física se moverá en sentido contrario y el movimiento original quedará REVERTIDO.`, { titulo: 'Revertir movimiento', aceptar: 'Revertir', peligro: true }))) return;
         try {
             const data = await apiPost('REVERTIR_OPERACION', { movimiento_id: id, motivo: motivo.trim() });
             mostrarMensaje(data.mensaje || 'Movimiento revertido.', 'success');

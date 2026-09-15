@@ -58,8 +58,10 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
         rel="stylesheet"
         href="../css/style_productos.css?v=<?= si_escapar($versionModulo) ?>"
     >
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
@@ -67,7 +69,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content catalogos-page">
+        <main class="page-content catalogos-page si-module-page">
 
             <header class="catalogos-heading">
                 <div>
@@ -1790,7 +1792,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
     }
 
     async function desactivarPrecioVenta(id) {
-        if (!window.confirm('¿Desactivar este precio? El historial no se eliminará.')) {
+        if (!(await siConfirmar('¿Desactivar este precio? El historial no se eliminará.', { titulo: 'Desactivar precio', aceptar: 'Desactivar', peligro: true }))) {
             return;
         }
 
@@ -1974,7 +1976,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
             ? '¿Activar este producto?'
             : '¿Desactivar este producto? Sus presentaciones activas también quedarán desactivadas.';
 
-        if (!window.confirm(mensaje)) {
+        if (!(await siConfirmar(mensaje, { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 
@@ -2070,7 +2072,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
     }
 
     async function cambiarEstadoCategoria(id, activo) {
-        if (!window.confirm(activo === 1 ? '¿Activar esta categoría?' : '¿Desactivar esta categoría?')) {
+        if (!(await siConfirmar(activo === 1 ? '¿Activar esta categoría?' : '¿Desactivar esta categoría?', { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 
@@ -2174,7 +2176,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
             ? '¿Activar esta unidad?'
             : '¿Desactivar esta unidad? Solo se permitirá si no está siendo utilizada activamente.';
 
-        if (!window.confirm(mensaje)) {
+        if (!(await siConfirmar(mensaje, { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 
@@ -2317,7 +2319,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
     }
 
     async function cambiarEstadoPresentacion(id, activo) {
-        if (!window.confirm(activo === 1 ? '¿Activar esta presentación?' : '¿Desactivar esta presentación?')) {
+        if (!(await siConfirmar(activo === 1 ? '¿Activar esta presentación?' : '¿Desactivar esta presentación?', { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 

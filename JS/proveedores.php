@@ -66,8 +66,10 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
         rel="stylesheet"
         href="../css/style_proveedores.css?v=<?= si_escapar($versionModulo) ?>"
     >
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
@@ -75,7 +77,7 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content proveedores-page">
+        <main class="page-content proveedores-page si-module-page">
 
             <header class="proveedores-heading">
                 <div>
@@ -1723,7 +1725,7 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
                 ? '¿Activar este proveedor? Sus productos deberán reactivarse individualmente si fueron desactivados.'
                 : '¿Desactivar este proveedor? También se desactivarán sus relaciones de suministro para nuevas operaciones.';
 
-        if (!window.confirm(texto)) {
+        if (!(await siConfirmar(texto, { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) {
             return;
         }
 
@@ -2456,11 +2458,12 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
 
     async function cambiarEstadoRelacion(id, activo) {
         if (
-            !window.confirm(
+            !(await siConfirmar(
                 activo === 1
                     ? '¿Activar este producto para el proveedor?'
-                    : '¿Desactivar este producto para nuevas compras? El historial de precios se conservará.'
-            )
+                    : '¿Desactivar este producto para nuevas compras? El historial de precios se conservará.',
+                { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }
+            ))
         ) {
             return;
         }

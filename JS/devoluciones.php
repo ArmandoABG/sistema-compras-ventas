@@ -37,14 +37,16 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Devoluciones | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_devoluciones.css?v=<?= si_escapar($versionModulo) ?>">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
+    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
 </head>
-<body>
+<body class="si-module-dark">
 <div class="app-shell">
     <?php include __DIR__ . '/../inc/sidebar.php'; ?>
     <div class="app-content">
         <?php include __DIR__ . '/../inc/topbar.php'; ?>
 
-        <main class="page-content devoluciones-page">
+        <main class="page-content devoluciones-page si-module-page">
             <header class="module-heading devoluciones-heading">
                 <div>
                     <p class="module-eyebrow">DEVOLUCIONES · INVENTARIO · REGULARIZACIÓN FINANCIERA</p>
@@ -92,7 +94,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                     <div class="context-strip" id="contextoLista">Devoluciones de clientes confirmadas.</div>
 
                     <div class="table-wrap">
-                        <table class="module-table devoluciones-table">
+                        <table class="module-table devoluciones-table devoluciones-table--main">
                             <thead>
                             <tr>
                                 <th>Devolución</th>
@@ -788,7 +790,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
             return mostrarMensaje('mensajeVenta', 'Selecciona el método con el que se entregará el reembolso al cliente.', 'error');
         }
         if (!resolverAhora && estimado.reembolso > 0.00005) {
-            const continuarPendiente = window.confirm('Esta devolución genera un reembolso al cliente. Si continúas sin liquidarlo, el dinero quedará registrado como pendiente. ¿Deseas continuar así?');
+            const continuarPendiente = await siConfirmar('Esta devolución genera un reembolso al cliente. Si continúas sin liquidarlo, el dinero quedará registrado como pendiente. ¿Deseas continuar así?', { titulo: 'Reembolso pendiente', aceptar: 'Continuar' });
             if (!continuarPendiente) return;
         }
 
