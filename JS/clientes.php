@@ -46,8 +46,8 @@ if (!in_array($seccionInicial, ['directorio', 'clasificacion', 'credito'], true)
     <title>Clientes | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_clientes.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260912-02">
-    <script src="../inc/ui_modulos.js?v=20260912-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
+    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">

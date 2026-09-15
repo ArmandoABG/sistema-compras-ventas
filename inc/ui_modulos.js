@@ -6,6 +6,7 @@
         menuSelect: null,
         confirmacionResolver: null,
         confirmacion: null,
+        confirmacionFoco: null,
         toastRegion: null
     };
 
@@ -44,7 +45,7 @@
         estado.menuSelect.style.width = Math.min(ancho, window.innerWidth - margen * 2) + 'px';
         estado.menuSelect.style.left = Math.max(margen, Math.min(rect.left, window.innerWidth - estado.menuSelect.offsetWidth - margen)) + 'px';
         const espacioAbajo = window.innerHeight - rect.bottom - margen;
-        const alto = Math.min(estado.menuSelect.scrollHeight, 280);
+        const alto = Math.min(estado.menuSelect.scrollHeight, 280, Math.max(80, window.innerHeight - margen * 2));
         estado.menuSelect.style.maxHeight = alto + 'px';
         estado.menuSelect.style.top = (espacioAbajo >= Math.min(alto, 180) ? rect.bottom + 7 : Math.max(margen, rect.top - alto - 7)) + 'px';
     }
@@ -56,13 +57,14 @@
         sincronizarSelect(select);
         estado.menuSelect.replaceChildren();
         Array.from(select.options).forEach(function (opcion, indice) {
+            if (opcion.hidden || opcion.parentElement?.hidden) return;
             const item = document.createElement('button');
             item.type = 'button';
             item.className = 'si-select__option' + (indice === select.selectedIndex ? ' is-selected' : '');
             item.dataset.optionIndex = String(indice);
             item.setAttribute('role', 'option');
             item.setAttribute('aria-selected', indice === select.selectedIndex ? 'true' : 'false');
-            item.disabled = opcion.disabled;
+            item.disabled = opcion.disabled || Boolean(opcion.closest('optgroup')?.disabled);
             item.textContent = opcion.textContent;
             estado.menuSelect.appendChild(item);
         });
@@ -97,6 +99,7 @@
         trigger.className = 'si-select__trigger';
         trigger.setAttribute('aria-haspopup', 'listbox');
         trigger.setAttribute('aria-expanded', 'false');
+        trigger.setAttribute('aria-controls', 'siSelectMenu');
         trigger.innerHTML = '<span class="si-select__value"></span><span class="si-select__chevron" aria-hidden="true"></span>';
         control.appendChild(trigger);
         sincronizarSelect(select);
@@ -109,6 +112,13 @@
             }
         });
         select.addEventListener('change', function () { sincronizarSelect(select); });
+        select.addEventListener('invalid', function () {
+            trigger.setAttribute('aria-invalid', 'true');
+            trigger.focus();
+        });
+        select.addEventListener('change', function () {
+            trigger.setAttribute('aria-invalid', select.validity.valid ? 'false' : 'true');
+        });
         select.form?.addEventListener('reset', function () { window.requestAnimationFrame(function () { sincronizarSelect(select); }); });
         new MutationObserver(function () { sincronizarSelect(select); }).observe(select, {
             attributes: true,
@@ -126,6 +136,7 @@
     function crearSelectCompartido() {
         estado.menuSelect = document.createElement('div');
         estado.menuSelect.className = 'si-select__menu';
+        estado.menuSelect.id = 'siSelectMenu';
         estado.menuSelect.setAttribute('role', 'listbox');
         estado.menuSelect.hidden = true;
         document.body.appendChild(estado.menuSelect);
@@ -144,8 +155,8 @@
         estado.menuSelect.addEventListener('keydown', function (evento) {
             const opciones = Array.from(estado.menuSelect.querySelectorAll('.si-select__option:not(:disabled)'));
             const actual = opciones.indexOf(document.activeElement);
-            if (evento.key === 'Escape') { evento.preventDefault(); cerrarSelect(true); return; }
-            if (evento.key === 'Tab') { cerrarSelect(false); return; }
+            if (evento.key === 'Escape') { evento.preventDefault(); evento.stopPropagation(); cerrarSelect(true); return; }
+            if (evento.key === 'Tab') { cerrarSelect(true); return; }
             if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(evento.key)) return;
             evento.preventDefault();
             const indice = evento.key === 'Home'
@@ -179,14 +190,30 @@
             estado.confirmacionResolver = null;
             modal.hidden = true;
             document.body.classList.remove('si-ui-confirm-open');
+            if (estado.confirmacionFoco?.isConnected) estado.confirmacionFoco.focus();
+            estado.confirmacionFoco = null;
             if (finalizar) finalizar(valor);
         };
         modal.querySelector('.si-ui-confirm__close').addEventListener('click', function () { resolver(false); });
         modal.querySelector('.si-ui-confirm__cancel').addEventListener('click', function () { resolver(false); });
         modal.querySelector('.si-ui-confirm__accept').addEventListener('click', function () { resolver(true); });
         document.addEventListener('keydown', function (evento) {
-            if (evento.key === 'Escape' && !modal.hidden) resolver(false);
-        });
+            if (modal.hidden) return;
+            if (evento.key === 'Escape') {
+                evento.preventDefault();
+                evento.stopImmediatePropagation();
+                resolver(false);
+            } else if (evento.key === 'Tab') {
+                const controles = Array.from(modal.querySelectorAll('button:not(:disabled)'));
+                const primero = controles[0];
+                const ultimo = controles[controles.length - 1];
+                if (evento.shiftKey && (document.activeElement === primero || !modal.contains(document.activeElement))) {
+                    evento.preventDefault(); ultimo.focus();
+                } else if (!evento.shiftKey && (document.activeElement === ultimo || !modal.contains(document.activeElement))) {
+                    evento.preventDefault(); primero.focus();
+                }
+            }
+        }, true);
     }
 
     function confirmar(mensaje, opciones) {
@@ -194,6 +221,8 @@
         if (!estado.confirmacion) return Promise.resolve(false);
         if (estado.confirmacionResolver) estado.confirmacionResolver(false);
         const modal = estado.confirmacion;
+        if (modal.hidden) estado.confirmacionFoco = document.activeElement;
+        cerrarSelect(false);
         modal.querySelector('#siUiConfirmTitle').textContent = config.titulo;
         modal.querySelector('#siUiConfirmText').textContent = String(mensaje || '¿Deseas continuar?');
         const icono = modal.querySelector('.si-ui-confirm__icon');
@@ -216,12 +245,16 @@
         item.setAttribute('role', clase === 'error' ? 'alert' : 'status');
         const texto = document.createElement('span');
         texto.textContent = String(mensaje);
+        const icono = document.createElement('span');
+        icono.className = 'si-ui-toast__icon';
+        icono.setAttribute('aria-hidden', 'true');
+        icono.textContent = { success: '✓', error: '!', warning: '!', info: 'i' }[clase];
         const cerrar = document.createElement('button');
         cerrar.type = 'button';
         cerrar.className = 'si-ui-toast__close';
         cerrar.setAttribute('aria-label', 'Cerrar mensaje');
         cerrar.textContent = '×';
-        item.append(texto, cerrar);
+        item.append(icono, texto, cerrar);
         estado.toastRegion.appendChild(item);
         let temporizador = null;
         const retirar = function () {

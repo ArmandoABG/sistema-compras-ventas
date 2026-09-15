@@ -1236,6 +1236,167 @@
     background: var(--si-green-pale);
 }
 
+/* Cierre visual: superficies particulares que reutilizan los mismos tokens. */
+.si-module-dark :is(.module-eyebrow, .catalogos-eyebrow, .roles-eyebrow, .usuarios-eyebrow, .eyebrow) {
+    /* Las hojas anteriores declaran este color con !important. */
+    color: var(--si-green-medium) !important;
+}
+.si-module-dark .audit-page .table-wrap { background: var(--si-surface); }
+.si-module-dark :is(input[type="checkbox"], input[type="radio"]) { background-color: var(--si-panel); }
+.si-module-dark :is(.stock-policy-note span, .permissions-head small, .qr-result-empty strong) { color: var(--si-text-soft); }
+.si-module-dark :is(.modal-backdrop, .inv-stock-modal) small { color: var(--si-text-soft); }
+.si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) :is(.field, .form-field) small,
+.si-module-dark :is(.totals-card, .totals-box, .cancel-summary-grid, .audit-description-box,
+    .readonly-card, .email-alert-counter, .money-input) > :is(span, p, small),
+.si-module-dark :is(.totals-card, .totals-box, .cancel-summary-grid) > div > span,
+.si-module-dark .modal-backdrop :is(legend, .form-section p),
+.si-module-dark .presentation-explanation p { color: var(--si-text-soft); }
+.si-module-dark :is(.stock-copy-option strong, .presentation-explanation strong, .presentation-section h3) { color: var(--si-text); }
+.si-module-dark .btn-state:not(.btn-state--danger):not(.btn-state--success) { border-color: var(--si-border); color: var(--si-text-soft); background: var(--si-raised); }
+.si-module-dark .detail-modal { max-width: 100%; min-width: 0; box-sizing: border-box; }
+.si-module-dark :is(.modal-backdrop, .inv-stock-modal) { grid-template-columns: minmax(0, 1fr); }
+.si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) {
+    --text: var(--si-text); --text-soft: var(--si-text-soft); --muted: var(--si-muted);
+    --border: var(--si-border); --surface: var(--si-surface);
+}
+.si-module-dark :is(.audit-change-row > strong, .audit-technical dd, .audit-empty-detail strong) { color: var(--si-text); }
+.si-module-dark :is(.audit-technical dt, .audit-change-row em) { color: var(--si-text-soft); }
+.si-module-dark :is(.audit-changes, .audit-change-table-head span, .audit-change-row > strong, .audit-change-row > div) { border-color: var(--si-border); }
+.si-module-dark .module-table .row-overdue > td { background: #241b1c; }
+.si-module-dark .module-table .best-price-row > td { background: #14271c; }
+.si-module-dark .module-table :is(.row-overdue, .best-price-row):hover > td { background: var(--si-raised); }
+.si-module-dark .table-action--danger { color: #f0a2a7 !important; }
+.si-module-dark :is(.empty-state--error, .email-alert-user__warning) { color: #f0a2a7; }
+.si-module-dark :is(
+    .currency-strip article, .currency-empty, .empty-inline, .empty-card,
+    .discount-helper, .money-input, .optional-details summary,
+    .source-summary article, .detail-summary-grid article, .regularization-detail article,
+    .lines-section, .finance-preview, .document-result,
+    .active-filter, .operation-kind, .selected-product, .operation-preview,
+    .stock-context > div, .stock-snapshot article, .stock-copy-option, .stock-policy-preview,
+    .kardex-kpis article, .kardex-product-summary, .kardex-analysis-card > header,
+    .presentation-explanation, .suggestions, .suggestion-item, .search-result-item,
+    .recipe-metrics div, .recipe-empty, .recipe-detail-ingredients > div,
+    .recipe-card__ingredients, .recipe-balance, .detail-note,
+    .conversion-help, .autocomplete-results, .autocomplete-option,
+    .price-form-intro, .price-rule-preview, .calculation-preview,
+    .qr-reference, .qr-sale-summary > div, .qr-decision-panel, .qr-reject-panel,
+    .qr-history-table code, .permission-group > header, .permission-item,
+    .email-alert-info > div, .email-alert-counter, .email-alert-list,
+    .audit-change-row, .audit-change-row:nth-child(even), .audit-technical > div,
+    .audit-change-table-head
+) {
+    border-color: var(--si-border);
+    color: var(--si-text-soft);
+    background: var(--si-panel);
+}
+
+.si-module-dark :is(
+    .currency-strip, .source-summary, .detail-summary-grid, .regularization-detail,
+    .stock-context, .stock-snapshot, .kardex-kpis, .kardex-product-summary,
+    .selected-product, .recipe-card, .recipe-detail-ingredients, .recipe-metrics,
+    .qr-sale-summary, .email-alert-info, .email-alert-counter, .audit-detail-meta,
+    .warehouse-detail-stats, .warehouse-detail-hero, .permission-group, .detail-route,
+    .calculation-preview, .finance-preview, .price-rule-preview, .price-form-intro
+) :is(h2, h3, strong, b) { color: var(--si-text); }
+
+.si-module-dark :is(
+    .currency-strip, .stock-context, .stock-snapshot, .kardex-kpis, .kardex-product-summary,
+    .recipe-card, .recipe-detail-ingredients, .recipe-reference-box, .recipe-reference-card,
+    .qr-sale-summary, .email-alert-info, .audit-detail-meta, .warehouse-detail-stats,
+    .warehouse-detail-hero, .permission-item, .permission-group, .detail-meta, .detail-route,
+    .selected-product, .calculation-preview, .finance-preview, .price-rule-preview
+) :is(small, p) { color: var(--si-text-soft); }
+
+.si-module-dark :is(.currency-strip, .stock-context, .stock-snapshot, .kardex-kpis,
+    .qr-sale-summary, .email-alert-info, .audit-detail-meta, .warehouse-detail-stats,
+    .detail-meta, .recipe-metrics) span { color: var(--si-text-soft); }
+
+.si-module-dark :is(.recipe-product, .recipe-card__ingredients p, .recipe-rule-note p,
+    .recipe-reference-box small, .recipe-code, .role-card span,
+    .email-alert-user__main small, .permission-item small) { color: var(--si-text-soft); }
+
+.si-module-dark :is(.document-result, .suggestion-item, .search-result-item, .autocomplete-option):is(:hover, :focus-visible, .is-active),
+.si-module-dark .email-alert-user.is-disabled {
+    color: var(--si-text);
+    background: var(--si-raised);
+}
+.si-module-dark :is(.document-result, .suggestion-item, .search-result-item, .autocomplete-option) :is(strong, b) { color: var(--si-text); }
+.si-module-dark :is(.document-result, .suggestion-item, .search-result-item, .autocomplete-option) small { color: var(--si-text-soft); }
+
+.si-module-dark :is(.stock-policy-preview--normal, .recipe-balance.is-ok, .warehouse-health--ok,
+    .status-badge.is-applied, .status-badge.is-completed, .level-discount, .ranking,
+    .email-alert-user__role.is-admin, .audit-page .module-message.success) {
+    border-color: rgba(114, 201, 150, .25);
+    color: #9bdfb7;
+    background: #173525;
+}
+.si-module-dark :is(.stock-policy-preview--reorden, .recipe-balance.is-warning,
+    .warehouse-health--warning, .warehouse-blockers, .qr-warning,
+    .audit-change-dot, .status-badge.is-draft, .audit-page .module-message.warning) {
+    border-color: rgba(219, 174, 98, .25);
+    color: #e8c88f;
+    background: #342918;
+}
+.si-module-dark :is(.stock-danger, .operation-preview--danger, .detail-note.is-danger,
+    .stock-policy-preview--critico, .stock-policy-preview--danger,
+    .stock-policy-preview--sin-disponible, .stock-policy-preview--sin-stock,
+    .recipe-balance.is-danger, .warehouse-health--danger, .status-badge.is-cancelled,
+    .audit-page .module-message.error) {
+    border-color: rgba(229, 123, 130, .25);
+    color: #f0a2a7;
+    background: #351e22;
+}
+.si-module-dark :is(.status-badge--draft, .status-badge--history, .recipe-balance.is-neutral,
+    .email-alert-user__role, .roles-message--info) {
+    border-color: var(--si-border);
+    color: var(--si-text-soft);
+    background: var(--si-soft);
+}
+.si-module-dark :is(.permission-group, .permissions-head, .form-section, .editor-block,
+    .email-alert-user, .audit-change-row, .application-row) { border-color: var(--si-border); }
+.si-module-dark .permission-item:has(input:checked) { border-color: rgba(99, 185, 136, .35); background: var(--si-green-mist); }
+
+/* Inventario tiene modales propios fuera de .modal-backdrop. */
+.si-module-dark .inv-stock-modal { background: rgba(2, 5, 3, .78); backdrop-filter: blur(5px); }
+.si-module-dark :is(.inv-stock-modal__header, .inv-stock-modal__footer) { border-color: var(--si-border); color: var(--si-text-soft); background: var(--si-surface); }
+.si-module-dark .inv-stock-modal__body { color: var(--si-text-soft); background: var(--si-raised); }
+.si-module-dark .inv-stock-modal__header h2 { color: var(--si-text); }
+.si-module-dark .inv-stock-modal__header p { color: var(--si-text-soft); }
+.si-module-dark :is(.inv-stock-modal__eyebrow, .warehouse-code) { color: var(--si-green-medium); background: var(--si-green-pale); }
+.si-module-dark .inv-stock-modal__close { color: var(--si-text-soft); background: var(--si-soft); }
+.si-module-dark .inv-stock-modal__close:hover { color: var(--si-text); background: var(--si-tint); }
+.si-module-dark .inv-stock-modal :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+    min-height: 44px; border-color: var(--si-border); color: var(--si-text);
+    -webkit-text-fill-color: var(--si-text); background: var(--si-panel); color-scheme: dark;
+}
+.si-module-dark .inv-stock-modal :is(input, select, textarea):focus { border-color: var(--si-green); box-shadow: var(--si-focus); outline: none; }
+.si-module-dark .inv-stock-modal label > span { color: var(--si-text-soft); }
+
+/* Tamaños cómodos sin modificar Dashboard, Login, Ventas ni el marco. */
+.si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) { font-size: 14px; line-height: 1.5; }
+.si-module-dark :is(.si-module-page, .modal-backdrop) :is(.field, .form-field) > span { font-size: 13px; }
+.si-module-dark :is(.si-module-page, .modal-backdrop) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select:not(.si-select__native), textarea) { min-height: 44px; font-size: 14px; }
+.si-module-dark :is(.btn-primary, .btn-secondary, .btn-danger, .btn-warning, .btn-link, .link-button, .table-action, .btn-state, .btn-remove, .report-card__action) { min-height: 42px; font-size: 13px; }
+.si-module-dark :is(.si-select__trigger, .si-select__option) { min-height: 44px; font-size: 14px; }
+.si-module-dark :is(.module-table, .catalogos-table, .usuarios-table, .reportes-table) th { font-size: 12px; color: var(--si-text-soft); }
+.si-module-dark :is(.module-table, .catalogos-table, .usuarios-table, .reportes-table) td { font-size: 14px; }
+.si-module-dark :is(.cell-secondary, .cell-muted) { font-size: 12px; color: var(--si-text-soft); }
+.si-module-dark :is(.currency-strip, .kardex-kpis, .stock-snapshot) strong { font-size: clamp(24px, 2vw, 32px); font-weight: 780; font-variant-numeric: tabular-nums; }
+.si-module-dark :is(.text-right, .money, .totals-card, .totals-box) { font-variant-numeric: tabular-nums; }
+.si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) :is(h1, h2, h3, p, strong, small) { overflow-wrap: anywhere; }
+.si-module-dark :is(.modal-card, .detail-modal, .inv-stock-modal__card, .si-ui-confirm__card) { max-height: calc(100dvh - 32px); overflow-y: auto; overscroll-behavior: contain; }
+.si-module-dark :is(.pagination, .module-pagination, .catalogos-pagination, .usuarios-paginacion, .reportes-pagination, .recipe-pagination, .email-alert-pagination, .session-pagination) { flex-wrap: wrap; gap: 12px; }
+.si-module-dark :is(.pagination, .module-pagination, .catalogos-pagination, .usuarios-paginacion, .reportes-pagination, .recipe-pagination, .session-pagination) > div { flex-wrap: wrap; }
+.si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) :is(button, a, summary):focus-visible { outline: 2px solid var(--si-green); outline-offset: 3px; }
+.si-select__trigger[aria-invalid="true"] { border-color: var(--si-danger); }
+.si-ui-toast { grid-template-columns: auto minmax(0, 1fr) auto; }
+.si-ui-toast__icon { width: 26px; height: 26px; display: grid; place-items: center; border: 1px solid currentColor; border-radius: 50%; font-weight: 800; }
+.si-ui-toast > span { overflow-wrap: anywhere; }
+.si-ui-confirm__body p { font-size: 14px; white-space: pre-line; overflow-wrap: anywhere; }
+.si-ui-confirm__footer button { min-height: 44px; font-size: 14px; }
+.si-ui-confirm button:focus-visible, .si-ui-toast button:focus-visible { outline: 2px solid var(--si-green); outline-offset: 3px; }
+
 /* Las tablas de consulta muestran la información operativa inmediata.
    Los campos ocultos aquí siguen disponibles en sus vistas de detalle. */
 .si-module-dark .module-table--purchases > :is(thead, tbody) > tr > :is(:nth-child(3), :nth-child(4)),
@@ -1302,6 +1463,13 @@
 }
 
 @media (max-width: 1050px) {
+    .si-module-dark :is(.filters-grid, .catalogos-filtros, .warehouse-filters, .transfer-filters,
+        .reportes-filtros, .usuarios-filtros, .audit-filters) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .si-module-dark :is(.warehouse-stock-heading, .prod-editor-grid, .operations-layout, .qr-workspace) {
+        grid-template-columns: minmax(0, 1fr);
+    }
     .si-module-dark :is(.stats-grid--5, .stats-grid--6, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary) {
         grid-template-columns: repeat(3, minmax(0, 1fr));
     }
@@ -1335,6 +1503,31 @@
 }
 
 @media (max-width: 680px) {
+    .si-module-dark .audit-tabs { flex-wrap: wrap; }
+    .si-module-dark :is(.filters-grid, .catalogos-filtros, .warehouse-filters, .transfer-filters,
+        .reportes-filtros, .usuarios-filtros, .audit-filters, .form-grid,
+        .purchase-head-grid, .quote-header-grid, .apartado-header-grid, .warehouse-form-grid,
+        .transfer-meta-grid, .stock-policy-grid, .stock-context, .stock-snapshot,
+        .detail-grid, .detail-summary-grid, .cancel-summary-grid, .audit-detail-meta,
+        .warehouse-detail-stats, .email-alert-info, .email-alert-toolbar, .warehouse-stock-filters,
+        .quote-bottom-grid, .apartado-bottom-grid, .return-bottom-grid, .return-grid,
+        .product-picker__head, .settlement-fields, .advance-grid, .simple-search,
+        .recipe-reference-selected, .qr-sale-summary) {
+        grid-template-columns: minmax(0, 1fr);
+    }
+    .si-module-dark :is(.filters-grid, .form-grid, .stock-policy-grid, .quote-header-grid,
+        .apartado-header-grid, .purchase-head-grid) > * { min-width: 0; grid-column: auto; }
+    .si-module-dark :is(.warehouse-rules, .flow-notes, .kardex-kpis, .currency-strip) { grid-template-columns: minmax(0, 1fr); }
+    .si-module-dark :is(.block-heading, .subsection-heading, .section-heading, .reportes-selected-head,
+        .reportes-results-head, .permissions-head, .warehouse-detail-hero) { flex-direction: column; align-items: stretch; }
+    .si-module-dark :is(.inv-stock-modal__footer, .modal-footer__actions, .modal-footer__right,
+        .detail-footer-actions, .filter-actions, .operation-actions, .editor-actions) { display: flex; flex-wrap: wrap; gap: 10px; }
+    .si-module-dark :is(.inv-stock-modal__footer, .modal-footer__actions, .modal-footer__right,
+        .detail-footer-actions) > :is(button, a) { width: 100%; justify-content: center; }
+    .si-module-dark :is(.modal-header, .inv-stock-modal__header) { align-items: flex-start; padding: 16px; }
+    .si-module-dark :is(.modal-body, .detail-body, .inv-stock-modal__body, .warehouse-detail-body,
+        .audit-detail-body, .detail-modal__body, .transfer-modal__body) { padding: 16px; }
+    .si-module-dark :is(.si-module-page, .modal-backdrop, .inv-stock-modal) :is(input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; }
     .si-module-dark .si-module-page {
         width: calc(100% - 12px);
         margin: 12px auto 24px;
