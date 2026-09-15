@@ -46,8 +46,8 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
     <title>Cuentas por pagar | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_cuentas_pagar.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
-    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
+    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -84,9 +84,9 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
 
                 <section class="stats-grid stats-grid--5">
                     <article><span>Total</span><strong id="kpiCxpTotal">0</strong></article>
-                    <article><span>Pendientes</span><strong id="kpiCxpPendientes">0</strong></article>
+                    <article class="cxp-kpi cxp-kpi--pending"><span>Pendientes</span><strong id="kpiCxpPendientes">0</strong><small>cuentas con saldo</small></article>
                     <article><span>Con abonos</span><strong id="kpiCxpParciales">0</strong></article>
-                    <article><span>Vencidas</span><strong id="kpiCxpVencidas">0</strong></article>
+                    <article class="cxp-kpi cxp-kpi--overdue"><span>Vencidas</span><strong id="kpiCxpVencidas">0</strong><small>requieren atención</small></article>
                     <article><span>Pagadas</span><strong id="kpiCxpPagadas">0</strong></article>
                 </section>
 
@@ -900,14 +900,7 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
         $('kpiCxpVencidas').textContent = r.vencidas || 0;
         $('kpiCxpPagadas').textContent = r.pagadas || 0;
 
-        renderCurrencyStrip(
-            $('saldosMonedaDeudas'),
-            r.saldos_por_moneda || [],
-            item => 'Saldo pendiente: ' + dinero(item.saldo_pendiente, item.codigo, item.simbolo)
-                + (Number(item.saldo_vencido) > 0
-                    ? ' · Vencido: ' + dinero(item.saldo_vencido, item.codigo, item.simbolo)
-                    : '')
-        );
+        renderResumenMonedaDeudas($('saldosMonedaDeudas'), r.saldos_por_moneda || []);
     }
 
     async function abrirDetalleCuenta(id) {
@@ -1276,6 +1269,22 @@ if (!in_array($seccionInicial, ['deudas', 'abonos', 'vencimientos'], true)) {
         elemento.innerHTML = items.map(item =>
             '<article><span>' + escapeHtml(item.codigo) + '</span><strong>' + callback(item) + '</strong></article>'
         ).join('');
+    }
+
+    function renderResumenMonedaDeudas(elemento, items) {
+        if (!items.length) {
+            elemento.innerHTML = '<div class="currency-empty">Sin saldos para mostrar.</div>';
+            return;
+        }
+
+        elemento.innerHTML = items.map(item => {
+            const vencido = Number(item.saldo_vencido || 0);
+            return '<article class="cxp-currency-card">'
+                + '<span class="cxp-currency-code">' + escapeHtml(item.codigo) + '</span>'
+                + '<div class="cxp-balance-line cxp-balance-line--pending"><span>Saldo pendiente</span><strong>' + dinero(item.saldo_pendiente, item.codigo, item.simbolo) + '</strong></div>'
+                + (vencido > 0 ? '<div class="cxp-balance-line cxp-balance-line--overdue"><span>Vencido</span><strong>' + dinero(vencido, item.codigo, item.simbolo) + '</strong></div>' : '')
+                + '</article>';
+        }).join('');
     }
 
     function textoDinero(valor, codigo, simbolo) {

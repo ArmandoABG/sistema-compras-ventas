@@ -38,8 +38,8 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     <title>Verificar QR | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_qr.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
-    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
+    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">

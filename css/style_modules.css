@@ -831,12 +831,60 @@
 }
 
 .si-module-dark :is(.module-message, .catalogos-message, .usuarios-message, .roles-message) {
+    position: relative;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 12px;
+    min-height: 48px;
     border: 1px solid var(--si-border);
     border-radius: 11px;
     color: var(--si-text-soft);
     background: var(--si-raised);
     box-shadow: 0 12px 26px rgba(0, 0, 0, .14);
     animation: si-module-message-in 220ms var(--si-ease) both;
+}
+
+.si-module-dark :is(.module-message, .catalogos-message, .usuarios-message, .roles-message):not([hidden]) {
+    display: grid;
+}
+
+.si-inline-message__icon {
+    width: 28px;
+    height: 28px;
+    display: grid;
+    place-items: center;
+    border: 1px solid currentColor;
+    border-radius: 50%;
+    font-size: 13px;
+    font-weight: 850;
+    opacity: .9;
+}
+
+.si-inline-message__content {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+}
+
+.si-inline-message__close {
+    width: 32px;
+    height: 32px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid currentColor;
+    border-radius: 9px;
+    color: inherit;
+    background: transparent;
+    font: inherit;
+    font-size: 19px;
+    cursor: pointer;
+    opacity: .72;
+}
+
+.si-inline-message__close:is(:hover, :focus-visible) { opacity: 1; }
+.si-module-dark :is(.module-message, .catalogos-message, .usuarios-message, .roles-message).is-leaving {
+    animation: si-module-message-out 180ms var(--si-ease) both;
 }
 
 .si-module-dark :is(.module-message--success, .module-message.is-success, .catalogos-message--success, .usuarios-message--success, .roles-message--success) {
@@ -1397,6 +1445,88 @@
 .si-ui-confirm__footer button { min-height: 44px; font-size: 14px; }
 .si-ui-confirm button:focus-visible, .si-ui-toast button:focus-visible { outline: 2px solid var(--si-green); outline-offset: 3px; }
 
+/* Captura textual compartida para reemplazar diálogos prompt() del navegador. */
+.si-ui-prompt {
+    position: fixed;
+    inset: 0;
+    z-index: 1660;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    place-items: center;
+    padding: 16px;
+    background: rgba(2, 5, 3, .80);
+    backdrop-filter: blur(5px);
+    animation: si-module-overlay-in var(--si-normal) var(--si-ease) both;
+}
+.si-ui-prompt[hidden] { display: none !important; }
+.si-ui-prompt__card {
+    width: min(620px, 100%);
+    max-height: calc(100dvh - 32px);
+    overflow-y: auto;
+    border: 1px solid var(--si-border);
+    border-radius: 20px;
+    color: var(--si-text-soft);
+    background: var(--si-raised);
+    box-shadow: 0 28px 72px rgba(0, 0, 0, .52);
+    animation: si-module-modal-in var(--si-normal) var(--si-ease) both;
+}
+.si-ui-prompt__header,
+.si-ui-prompt__footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    background: var(--si-surface);
+}
+.si-ui-prompt__header { border-bottom: 1px solid var(--si-border-soft); }
+.si-ui-prompt__footer { border-top: 1px solid var(--si-border-soft); }
+.si-ui-prompt__header div { min-width: 0; }
+.si-ui-prompt__header span { color: var(--si-green-medium); font-size: 9px; font-weight: 820; letter-spacing: .10em; }
+.si-ui-prompt__header h2 { margin: 4px 0 0; color: var(--si-text); font-size: 21px; }
+.si-ui-prompt__body { padding: 21px 20px; }
+.si-ui-prompt__body label { display: grid; gap: 9px; }
+.si-ui-prompt__body label > span { color: var(--si-text); font-size: 14px; font-weight: 730; }
+.si-ui-prompt__body textarea {
+    width: 100%;
+    min-height: 118px;
+    padding: 12px 13px;
+    resize: vertical;
+    border: 1px solid var(--si-border);
+    border-radius: 11px;
+    color: var(--si-text);
+    -webkit-text-fill-color: var(--si-text);
+    caret-color: var(--si-green);
+    background: var(--si-panel);
+    font: inherit;
+    font-size: 16px;
+    line-height: 1.5;
+    outline: none;
+}
+.si-ui-prompt__body textarea::placeholder { color: var(--si-muted); opacity: .9; }
+.si-ui-prompt__body textarea:is(:hover, :focus) { border-color: rgba(99, 185, 136, .50); background: var(--si-raised); }
+.si-ui-prompt__body textarea:focus { box-shadow: var(--si-focus); }
+.si-ui-prompt__body small { color: var(--si-text-soft); font-size: 12px; line-height: 1.45; }
+.si-ui-prompt__close { width: 38px; height: 38px; border: 1px solid var(--si-border); border-radius: 10px; color: var(--si-text-soft); background: var(--si-surface); font-size: 22px; cursor: pointer; }
+.si-ui-prompt__footer button { min-height: 44px; padding: 8px 15px; border-radius: 10px; font: inherit; font-size: 14px; font-weight: 750; cursor: pointer; }
+.si-ui-prompt__cancel { border: 1px solid var(--si-border); color: var(--si-text-soft); background: var(--si-raised); }
+.si-ui-prompt__accept { border: 1px solid rgba(136, 202, 163, .28); color: #07110b; background: var(--si-green); }
+.si-ui-prompt button:focus-visible { outline: 2px solid var(--si-green); outline-offset: 3px; }
+
+/* Cuentas por pagar: semántica financiera solicitada sólo para el resumen de deudas. */
+.si-module-dark .cxp-kpi--pending { box-shadow: inset 3px 0 0 rgba(114, 201, 150, .72); }
+.si-module-dark .stats-grid .cxp-kpi--pending > strong { color: #92d7ae !important; }
+.si-module-dark .cxp-kpi--overdue { box-shadow: inset 3px 0 0 rgba(229, 123, 130, .72); }
+.si-module-dark .stats-grid .cxp-kpi--overdue > strong { color: #f0a2a7 !important; }
+.si-module-dark .cxp-currency-card { align-content: start; gap: 10px; padding: 16px 17px; }
+.si-module-dark .cxp-currency-code { color: var(--si-text-soft); font-size: 11px; }
+.si-module-dark .cxp-balance-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 14px; }
+.si-module-dark .cxp-balance-line > span { color: var(--si-text-soft); font-size: 12px; font-weight: 720; }
+.si-module-dark .cxp-balance-line > strong { font-size: clamp(18px, 1.8vw, 24px); font-weight: 800; letter-spacing: -.025em; text-align: right; font-variant-numeric: tabular-nums; }
+.si-module-dark .cxp-balance-line--pending > strong { color: #92d7ae; }
+.si-module-dark .cxp-balance-line--overdue { padding-top: 9px; border-top: 1px solid rgba(229, 123, 130, .18); }
+.si-module-dark .cxp-balance-line--overdue > strong { color: #f0a2a7; }
+
 /* Las tablas de consulta muestran la información operativa inmediata.
    Los campos ocultos aquí siguen disponibles en sus vistas de detalle. */
 .si-module-dark .module-table--purchases > :is(thead, tbody) > tr > :is(:nth-child(3), :nth-child(4)),
@@ -1503,6 +1633,13 @@
 }
 
 @media (max-width: 680px) {
+    .si-ui-prompt { padding: 10px; }
+    .si-ui-prompt__card { max-height: calc(100dvh - 20px); border-radius: 17px; }
+    .si-ui-prompt__header, .si-ui-prompt__body, .si-ui-prompt__footer { padding: 15px; }
+    .si-ui-prompt__footer { align-items: stretch; flex-direction: column; }
+    .si-ui-prompt__footer button { width: 100%; }
+    .si-module-dark .cxp-balance-line { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+    .si-module-dark .cxp-balance-line > strong { text-align: left; }
     .si-module-dark .audit-tabs { flex-wrap: wrap; }
     .si-module-dark :is(.filters-grid, .catalogos-filtros, .warehouse-filters, .transfer-filters,
         .reportes-filtros, .usuarios-filtros, .audit-filters, .form-grid,

@@ -38,8 +38,8 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
     <title>Apartados | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_apartados.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
-    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
+    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -756,7 +756,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
 
     async function cancelarAnticipo(id) {
         if (!(await siConfirmar('Esta opción anula un anticipo capturado por corrección mientras el apartado sigue ACTIVO. Si quieres cerrar el apartado y devolver o retener el dinero, usa “Cancelar apartado”. ¿Continuar?', { titulo: 'Anular anticipo', aceptar: 'Continuar', peligro: true }))) return;
-        const motivo = window.prompt('Motivo de anulación/corrección del anticipo:'); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error'); if (motivo.trim().length > 1000) return mostrarMensaje('mensajeDetalle', 'El motivo no puede exceder 1000 caracteres.', 'error');
+        const motivo = await siSolicitarTexto('Motivo de anulación o corrección del anticipo', { titulo: 'Motivo de anulación', aceptar: 'Continuar', placeholder: 'Describe por qué debe anularse este anticipo', ayuda: 'Mínimo 5 caracteres. Esta información quedará en el historial.', maxLength: 1000 }); if (motivo === null) return; if (motivo.trim().length < 5) return mostrarMensaje('mensajeDetalle', 'El motivo debe tener al menos 5 caracteres.', 'error'); if (motivo.trim().length > 1000) return mostrarMensaje('mensajeDetalle', 'El motivo no puede exceder 1000 caracteres.', 'error');
         try { const r = await apiPost('CANCELAR_ANTICIPO', { anticipo_id: id, motivo: motivo.trim() }); await verDetalle(estado.detalle.apartado.id); mostrarMensaje('mensajeDetalle', r.mensaje, 'success'); await cargarApartados(); }
         catch (e) { mostrarMensaje('mensajeDetalle', e.message, 'error'); }
     }

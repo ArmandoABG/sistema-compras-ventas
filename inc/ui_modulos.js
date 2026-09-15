@@ -7,7 +7,11 @@
         confirmacionResolver: null,
         confirmacion: null,
         confirmacionFoco: null,
-        toastRegion: null
+        solicitudTexto: null,
+        solicitudTextoResolver: null,
+        solicitudTextoFoco: null,
+        toastRegion: null,
+        mensajeTimers: new WeakMap()
     };
 
     function etiquetaSelect(select) {
@@ -237,6 +241,124 @@
         return new Promise(function (resolve) { estado.confirmacionResolver = resolve; });
     }
 
+    function crearSolicitudTexto() {
+        const modal = document.createElement('div');
+        modal.className = 'si-ui-prompt';
+        modal.hidden = true;
+        modal.innerHTML = '<section class="si-ui-prompt__card" role="dialog" aria-modal="true" aria-labelledby="siUiPromptTitle" aria-describedby="siUiPromptText">'
+            + '<header class="si-ui-prompt__header"><div><span>INFORMACIÓN REQUERIDA</span><h2 id="siUiPromptTitle">Capturar información</h2></div><button type="button" class="si-ui-prompt__close" aria-label="Cerrar">×</button></header>'
+            + '<div class="si-ui-prompt__body"><label><span id="siUiPromptText"></span><textarea rows="4"></textarea><small></small></label></div>'
+            + '<footer class="si-ui-prompt__footer"><button type="button" class="si-ui-prompt__cancel">Volver</button><button type="button" class="si-ui-prompt__accept">Continuar</button></footer>'
+            + '</section>';
+        document.body.appendChild(modal);
+        estado.solicitudTexto = modal;
+
+        const resolver = function (valor) {
+            const finalizar = estado.solicitudTextoResolver;
+            estado.solicitudTextoResolver = null;
+            modal.hidden = true;
+            document.body.classList.remove('si-ui-confirm-open');
+            if (estado.solicitudTextoFoco?.isConnected) estado.solicitudTextoFoco.focus();
+            estado.solicitudTextoFoco = null;
+            if (finalizar) finalizar(valor);
+        };
+        const textarea = modal.querySelector('textarea');
+        modal.querySelector('.si-ui-prompt__close').addEventListener('click', function () { resolver(null); });
+        modal.querySelector('.si-ui-prompt__cancel').addEventListener('click', function () { resolver(null); });
+        modal.querySelector('.si-ui-prompt__accept').addEventListener('click', function () { resolver(textarea.value); });
+        document.addEventListener('keydown', function (evento) {
+            if (modal.hidden) return;
+            if (evento.key === 'Escape') {
+                evento.preventDefault();
+                evento.stopImmediatePropagation();
+                resolver(null);
+            } else if (evento.key === 'Tab') {
+                const controles = Array.from(modal.querySelectorAll('textarea, button:not(:disabled)'));
+                const primero = controles[0];
+                const ultimo = controles[controles.length - 1];
+                if (evento.shiftKey && (document.activeElement === primero || !modal.contains(document.activeElement))) {
+                    evento.preventDefault(); ultimo.focus();
+                } else if (!evento.shiftKey && (document.activeElement === ultimo || !modal.contains(document.activeElement))) {
+                    evento.preventDefault(); primero.focus();
+                }
+            } else if ((evento.ctrlKey || evento.metaKey) && evento.key === 'Enter' && document.activeElement === textarea) {
+                evento.preventDefault();
+                resolver(textarea.value);
+            }
+        }, true);
+    }
+
+    function solicitarTexto(mensaje, opciones) {
+        const config = Object.assign({ titulo: 'Capturar información', aceptar: 'Continuar', valor: '', placeholder: '', ayuda: '', maxLength: 1000 }, opciones || {});
+        if (!estado.solicitudTexto) return Promise.resolve(null);
+        if (estado.solicitudTextoResolver) estado.solicitudTextoResolver(null);
+        cerrarSelect(false);
+        const modal = estado.solicitudTexto;
+        estado.solicitudTextoFoco = document.activeElement;
+        modal.querySelector('#siUiPromptTitle').textContent = config.titulo;
+        modal.querySelector('#siUiPromptText').textContent = String(mensaje || 'Escribe la información solicitada.');
+        const textarea = modal.querySelector('textarea');
+        textarea.value = String(config.valor || '');
+        textarea.placeholder = String(config.placeholder || '');
+        textarea.maxLength = Math.max(1, Number(config.maxLength) || 1000);
+        const ayuda = modal.querySelector('.si-ui-prompt__body small');
+        ayuda.textContent = String(config.ayuda || 'Puedes cancelar sin aplicar cambios.');
+        modal.querySelector('.si-ui-prompt__accept').textContent = config.aceptar;
+        modal.hidden = false;
+        document.body.classList.add('si-ui-confirm-open');
+        window.requestAnimationFrame(function () { textarea.focus(); });
+        return new Promise(function (resolve) { estado.solicitudTextoResolver = resolve; });
+    }
+
+    function tipoMensaje(elemento) {
+        const clases = elemento.className;
+        if (/error|danger/i.test(clases)) return 'error';
+        if (/warning|advertencia/i.test(clases)) return 'warning';
+        if (/success|exito/i.test(clases)) return 'success';
+        return 'info';
+    }
+
+    function mejorarMensaje(elemento) {
+        if (!(elemento instanceof HTMLElement)) return;
+        window.clearTimeout(estado.mensajeTimers.get(elemento));
+        estado.mensajeTimers.delete(elemento);
+        if (elemento.hidden || elemento.querySelector(':scope > .si-inline-message__content')) return;
+        const mensaje = elemento.textContent.trim();
+        if (!mensaje) return;
+        const tipo = tipoMensaje(elemento);
+        const icono = document.createElement('span');
+        icono.className = 'si-inline-message__icon';
+        icono.setAttribute('aria-hidden', 'true');
+        icono.textContent = { success: '✓', error: '!', warning: '!', info: 'i' }[tipo];
+        const contenido = document.createElement('span');
+        contenido.className = 'si-inline-message__content';
+        contenido.textContent = mensaje;
+        const cerrar = document.createElement('button');
+        cerrar.type = 'button';
+        cerrar.className = 'si-inline-message__close';
+        cerrar.setAttribute('aria-label', 'Cerrar mensaje');
+        cerrar.textContent = '×';
+        const retirar = function () {
+            elemento.classList.add('is-leaving');
+            window.setTimeout(function () {
+                elemento.hidden = true;
+                elemento.classList.remove('is-leaving');
+            }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
+        };
+        cerrar.addEventListener('click', retirar);
+        elemento.replaceChildren(icono, contenido, cerrar);
+        elemento.dataset.siMessageType = tipo;
+        elemento.setAttribute('role', tipo === 'error' ? 'alert' : 'status');
+        elemento.setAttribute('aria-live', tipo === 'error' ? 'assertive' : 'polite');
+        if (tipo === 'success') estado.mensajeTimers.set(elemento, window.setTimeout(retirar, 5200));
+    }
+
+    function mejorarMensajes(root) {
+        const selector = '.module-message, .catalogos-message, .usuarios-message, .roles-message';
+        if (root instanceof HTMLElement && root.matches(selector)) mejorarMensaje(root);
+        root.querySelectorAll?.(selector).forEach(mejorarMensaje);
+    }
+
     function toast(mensaje, tipo, duracion) {
         if (!estado.toastRegion || !mensaje) return;
         const clase = ['success', 'error', 'warning', 'info'].includes(tipo) ? tipo : 'info';
@@ -263,33 +385,41 @@
             window.setTimeout(function () { item.remove(); }, window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 180);
         };
         cerrar.addEventListener('click', retirar);
-        temporizador = window.setTimeout(retirar, Number(duracion) > 0 ? Number(duracion) : 4600);
+        const espera = duracion === 0 ? 0 : (Number(duracion) > 0 ? Number(duracion) : { success: 4600, info: 6000, warning: 8000, error: 0 }[clase]);
+        if (espera > 0) temporizador = window.setTimeout(retirar, espera);
     }
 
     function iniciar() {
         if (!document.body.classList.contains('si-module-dark')) return;
         crearSelectCompartido();
         crearConfirmacion();
+        crearSolicitudTexto();
         estado.toastRegion = document.createElement('div');
         estado.toastRegion.className = 'si-ui-toast-region';
         estado.toastRegion.setAttribute('aria-live', 'polite');
         document.body.appendChild(estado.toastRegion);
         mejorarSelects(document);
+        mejorarMensajes(document);
 
         new MutationObserver(function (cambios) {
             cambios.forEach(function (cambio) {
                 cambio.addedNodes.forEach(function (nodo) {
-                    if (nodo.nodeType === Node.ELEMENT_NODE) mejorarSelects(nodo);
+                    if (nodo.nodeType === Node.ELEMENT_NODE) {
+                        mejorarSelects(nodo);
+                        mejorarMensajes(nodo);
+                    }
                 });
                 if (cambio.type === 'attributes' && cambio.target instanceof HTMLElement && !cambio.target.hidden) {
                     cambio.target.querySelectorAll?.('select.si-select__native').forEach(sincronizarSelect);
+                    mejorarMensajes(cambio.target);
                 }
             });
-        }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden'] });
+        }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
     }
 
-    window.siUI = { confirmar: confirmar, toast: toast, sincronizarSelects: function () { document.querySelectorAll('select.si-select__native').forEach(sincronizarSelect); } };
+    window.siUI = { confirmar: confirmar, solicitarTexto: solicitarTexto, toast: toast, sincronizarSelects: function () { document.querySelectorAll('select.si-select__native').forEach(sincronizarSelect); } };
     window.siConfirmar = confirmar;
+    window.siSolicitarTexto = solicitarTexto;
     window.siToast = toast;
 
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar, { once: true });

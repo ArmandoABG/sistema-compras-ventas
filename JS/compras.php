@@ -40,8 +40,8 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     <title>Compras | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_compras.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
-    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
+    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -925,7 +925,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     }
 
     async function cancelarCompra(id) {
-        const motivo = prompt('Motivo de cancelación de la compra:');
+        const motivo = await siSolicitarTexto('Motivo de cancelación de la compra', { titulo: 'Cancelar compra', aceptar: 'Continuar', placeholder: 'Describe el motivo de la cancelación', ayuda: 'La operación no se ejecutará hasta completar la confirmación.', maxLength: 1000 });
         if (motivo == null) return;
         if (!motivo.trim()) {
             mostrarMensaje($('mensajePagina'), 'Debes indicar el motivo de cancelación.', 'error');
@@ -1447,7 +1447,7 @@ if ($seccionInicial === 'recepciones' && !$puedeVerRecepciones) {
     }
 
     async function cancelarRecepcion(id) {
-        const motivo = prompt('Motivo de cancelación de la recepción:');
+        const motivo = await siSolicitarTexto('Motivo de cancelación de la recepción', { titulo: 'Cancelar recepción', aceptar: 'Continuar', placeholder: 'Describe el motivo de la cancelación', ayuda: 'La operación no se ejecutará hasta completar la confirmación.', maxLength: 1000 });
         if (motivo == null) return;
         if (!motivo.trim()) {
             mostrarMensaje($('mensajePagina'), 'Debes indicar el motivo de cancelación.', 'error');

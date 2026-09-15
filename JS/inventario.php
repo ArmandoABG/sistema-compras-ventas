@@ -60,8 +60,8 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     <title>Inventario | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_inventario.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-01">
-    <script src="../inc/ui_modulos.js?v=20260915-01"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
+    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -1772,7 +1772,7 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     }
 
     async function revertirOperacion(id, folio) {
-        const motivo = window.prompt(`Motivo para revertir ${folio}:`);
+        const motivo = await siSolicitarTexto(`Motivo para revertir ${folio}`, { titulo: 'Revertir movimiento', aceptar: 'Continuar', placeholder: 'Describe el motivo de la reversión', ayuda: 'Mínimo 5 caracteres. La reversión se confirmará en el siguiente paso.', maxLength: 1000 });
         if (motivo === null) return;
         if (motivo.trim().length < 5) { mostrarMensaje('Captura un motivo de al menos 5 caracteres.'); return; }
         if (!(await siConfirmar(`¿Revertir ${folio}? La existencia física se moverá en sentido contrario y el movimiento original quedará REVERTIDO.`, { titulo: 'Revertir movimiento', aceptar: 'Revertir', peligro: true }))) return;
