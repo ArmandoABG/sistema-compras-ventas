@@ -144,6 +144,7 @@ $versionModulo = is_file($cssModulo)
         rel="stylesheet"
         href="../css/style_dashboard.css?v=<?= si_escapar($versionModulo) ?>"
     >
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="dashboard-page">
 
@@ -234,7 +235,7 @@ $versionModulo = is_file($cssModulo)
                 <article class="kpi-card kpi-card--primary"<?= $puedeDashboardVentas ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Ventas de hoy</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 19V9m6 10V5m6 14v-7m4 7H2"></path></svg></span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 4h2l2.2 10h10.6l2-7H6"></path><circle cx="9" cy="19" r="1.5"></circle><circle cx="17" cy="19" r="1.5"></circle></svg></span>
                     </div>
                     <strong id="kpiVentasHoy">0</strong>
                     <small id="detalleVentasHoy">
@@ -245,7 +246,7 @@ $versionModulo = is_file($cssModulo)
                 <article class="kpi-card kpi-card--medium"<?= $puedeDashboardCompras ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Compras por recibir</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 6h18l-2 9H6L3 3H1m6 16a1 1 0 1 0 0 .01M18 19a1 1 0 1 0 0 .01"></path></svg></span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 8h14l-1 13H6L5 8Z"></path><path d="M9 9V6a3 3 0 0 1 6 0v3"></path></svg></span>
                     </div>
                     <strong id="kpiCompras">0</strong>
                     <small>Pendientes o parciales</small>
@@ -263,7 +264,7 @@ $versionModulo = is_file($cssModulo)
                 <article class="kpi-card kpi-card--primary"<?= $puedeDashboardCobrar ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Cobros vencidos</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg></span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="10" cy="11" r="7"></circle><path d="M10 7v8M12.5 8.5c-.6-.6-1.4-.8-2.5-.8-1.4 0-2.5.7-2.5 1.7 0 1.1.9 1.5 2.5 1.8s2.5.9 2.5 2-1.1 2-2.5 2c-1 0-2-.3-2.7-1"></path><path d="M16 14v3l2 1"></path><circle cx="16" cy="17" r="5"></circle></svg></span>
                     </div>
                     <strong id="kpiCobros">0</strong>
                     <small>Cuentas de clientes</small>
@@ -272,7 +273,7 @@ $versionModulo = is_file($cssModulo)
                 <article class="kpi-card kpi-card--medium"<?= $puedeDashboardPagar ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Pagos vencidos</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"></rect><path d="M3 10h18m-5 5h2"></path></svg></span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7.5h16a2 2 0 0 1 2 2V19H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13v3.5"></path><path d="M16 12h5v4h-5a2 2 0 0 1 0-4Z"></path></svg></span>
                     </div>
                     <strong id="kpiPagos">0</strong>
                     <small>Cuentas a proveedores</small>
@@ -281,7 +282,7 @@ $versionModulo = is_file($cssModulo)
                 <article class="kpi-card kpi-card--soft"<?= $puedeDashboardMerma ? '' : ' hidden' ?>>
                     <div class="kpi-card__top">
                         <span>Índice de merma</span>
-                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3c4 4 7 7 7 11a7 7 0 0 1-14 0c0-4 3-7 7-11Z"></path><path d="M9 16c1 1 2 1 3 1"></path></svg></span>
+                        <span class="kpi-card__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z"></path><path d="m4 7 8 4 8-4M12 11v3M12 18h.01"></path></svg></span>
                     </div>
                     <strong id="kpiMerma">0.00%</strong>
                     <small id="detalleMerma">Costo de merma del mes</small>
@@ -424,18 +425,22 @@ $versionModulo = is_file($cssModulo)
                     <article class="dashboard-alert-summary__item is-critical">
                         <span>Críticas</span>
                         <strong id="alertasCriticas">0</strong>
+                        <span class="dashboard-alert-summary__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"></path><path d="M12 9v4M12 17h.01"></path></svg></span>
                     </article>
                     <article class="dashboard-alert-summary__item is-high">
                         <span>Altas</span>
                         <strong id="alertasAltas">0</strong>
+                        <span class="dashboard-alert-summary__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg></span>
                     </article>
                     <article class="dashboard-alert-summary__item is-normal">
                         <span>Atención</span>
                         <strong id="alertasNormales">0</strong>
+                        <span class="dashboard-alert-summary__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg></span>
                     </article>
                     <article class="dashboard-alert-summary__item is-total">
                         <span>Sin leer</span>
                         <strong id="alertasTotal">0</strong>
+                        <span class="dashboard-alert-summary__icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 5h16v14H4V5Z"></path><path d="m4 7 8 6 8-6"></path></svg></span>
                     </article>
                 </div>
 
@@ -1322,6 +1327,14 @@ $versionModulo = is_file($cssModulo)
         return 'Atención';
     }
 
+    function iconoPrioridadAlerta(prioridad) {
+        const valor = String(prioridad || 'NORMAL').toUpperCase();
+        if (valor === 'CRITICA') return '<svg viewBox="0 0 24 24"><path d="M12 3 2.5 20h19L12 3Z"></path><path d="M12 9v4M12 17h.01"></path></svg>';
+        if (valor === 'ALTA') return '<svg viewBox="0 0 24 24"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"></path></svg>';
+        if (valor === 'BAJA') return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>';
+        return '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle><path d="M12 11v5M12 8h.01"></path></svg>';
+    }
+
     function alertasFiltradas() {
         const items = Array.isArray(estadoAlertas.alertas) ? estadoAlertas.alertas : [];
 
@@ -1387,6 +1400,7 @@ $versionModulo = is_file($cssModulo)
 
             return '<article class="dashboard-alert-row ' + clasePrioridadAlerta(item.prioridad) + (leida ? ' is-read' : '') + '" data-alert-key="' + escapeHtml(item.clave || '') + '">'
                 + '<div class="dashboard-alert-row__indicator" aria-hidden="true"></div>'
+                + '<span class="dashboard-alert-row__icon" aria-hidden="true">' + iconoPrioridadAlerta(item.prioridad) + '</span>'
                 + '<div class="dashboard-alert-row__main">'
                 + '<div class="dashboard-alert-row__meta">'
                 + '<span class="dashboard-alert-card__priority">' + escapeHtml(textoPrioridadAlerta(item.prioridad)) + '</span>'

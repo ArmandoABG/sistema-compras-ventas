@@ -41,6 +41,7 @@ $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?
     <title>Ventas | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_ventas.css?v=<?= si_escapar($versionModulo) ?>">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="ventas-body">
 <div class="app-shell">

@@ -66,8 +66,8 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
         rel="stylesheet"
         href="../css/style_proveedores.css?v=<?= si_escapar($versionModulo) ?>"
     >
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 
@@ -3521,3 +3521,4 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
 
 </body>
 </html>
+

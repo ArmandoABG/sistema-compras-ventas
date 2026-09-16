@@ -46,8 +46,8 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
     <title>Cuentas por cobrar | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_cuentas_cobrar.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -1493,3 +1493,4 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
 </script>
 </body>
 </html>
+

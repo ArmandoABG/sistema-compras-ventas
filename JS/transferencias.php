@@ -35,8 +35,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Transferencias | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_transferencias.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -592,3 +592,4 @@ window.TRANSFERENCIAS_CONFIG = <?= json_encode([
 </script>
 </body>
 </html>
+

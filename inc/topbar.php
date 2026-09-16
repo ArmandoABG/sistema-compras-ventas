@@ -148,7 +148,7 @@ $csrfTopbar = si_token_csrf();
         <header class="topbar-profile-card__head">
             <div>
                 <small>CUENTA PERSONAL</small>
-                <h2 id="topbarProfileTitle">Mi perfil</h2>
+                <h2 id="topbarProfileTitle">Editar mi perfil</h2>
             </div>
             <button type="button" class="topbar-profile-card__close" id="topbarProfileClose" aria-label="Cerrar">×</button>
         </header>
@@ -431,7 +431,8 @@ $csrfTopbar = si_token_csrf();
                 }).join('') + '</div>'
                 : '';
 
-            return '<article class="topbar-alert-item ' + priority + '">'
+            return '<article class="topbar-alert-item ' + priority + ' is-unread">'
+                + '<span class="topbar-alert-item__icon" aria-hidden="true">' + (priority === 'is-critical' || priority === 'is-high' ? '!' : 'i') + '</span>'
                 + '<div class="topbar-alert-item__head">'
                 + '<span class="topbar-alert-item__priority">' + escapeHtml(priorityText(item.prioridad)) + '</span>'
                 + '<span class="topbar-alert-item__count">' + Number(item.conteo || 0) + '</span>'
@@ -563,18 +564,31 @@ $csrfTopbar = si_token_csrf();
     const passwordForm = document.getElementById('topbarPasswordForm');
     const message = document.getElementById('topbarProfileMessage');
     const endpoint = <?= json_encode(si_url('funciones/perfil_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
+    let messageTimer = null;
 
     if (!root || !button || !menu || !openProfile || !modal || !close || !profileForm || !passwordForm || !message) {
         return;
     }
 
     function showMessage(text, type) {
-        message.textContent = text || '';
-        message.className = 'topbar-profile-message is-' + (type || 'error');
+        window.clearTimeout(messageTimer);
+        const safeType = ['success', 'error', 'warning', 'info'].includes(type) ? type : 'error';
+        const icon = {success: '✓', error: '!', warning: '!', info: 'i'}[safeType];
+        message.className = 'topbar-profile-message is-' + safeType;
+        message.setAttribute('role', safeType === 'error' ? 'alert' : 'status');
+        message.setAttribute('aria-live', safeType === 'error' ? 'assertive' : 'polite');
+        message.innerHTML = '<span class="si-inline-message__icon" aria-hidden="true">' + icon + '</span>'
+            + '<span class="si-inline-message__content"></span>'
+            + '<button type="button" class="si-inline-message__close" aria-label="Cerrar mensaje">×</button>';
+        message.querySelector('.si-inline-message__content').textContent = text || '';
+        message.querySelector('.si-inline-message__close').addEventListener('click', hideMessage, {once: true});
         message.hidden = false;
+        if (safeType === 'success') messageTimer = window.setTimeout(hideMessage, 5200);
     }
 
     function hideMessage() {
+        window.clearTimeout(messageTimer);
+        messageTimer = null;
         message.hidden = true;
         message.textContent = '';
     }

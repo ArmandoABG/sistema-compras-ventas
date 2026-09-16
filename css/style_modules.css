@@ -1755,3 +1755,186 @@
         transition-duration: .01ms !important;
     }
 }
+
+/* ==================================================================
+   Pasada visual específica · métricas, tablas, modales y acciones
+   ================================================================== */
+
+.si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article {
+    position: relative;
+    min-height: 112px;
+    overflow: hidden;
+    padding: 18px 74px 17px 18px;
+    border: 1px solid var(--si-border);
+    border-radius: 14px;
+    background: linear-gradient(145deg, var(--si-surface), rgba(23,30,26,.96));
+    box-shadow: inset 3px 0 0 rgba(99,185,136,.52), 0 12px 28px rgba(0,0,0,.10);
+    transition: border-color var(--si-fast) var(--si-ease), box-shadow var(--si-fast) var(--si-ease), transform var(--si-fast) var(--si-ease);
+}
+
+.si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article:hover {
+    border-color: rgba(99,185,136,.27);
+    box-shadow: inset 3px 0 0 rgba(99,185,136,.70), 0 15px 32px rgba(0,0,0,.16);
+    transform: translateY(-1px);
+}
+
+.si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article::after {
+    position: absolute;
+    right: -34px;
+    bottom: -48px;
+    width: 126px;
+    height: 126px;
+    border: 1px solid rgba(99,185,136,.10);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99,185,136,.055), transparent 68%);
+    content: "";
+    pointer-events: none;
+}
+
+.si-module-dark .si-kpi-card__visual {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 17px;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    border: 1px solid rgba(99,185,136,.13);
+    border-radius: 12px;
+    color: var(--si-green-medium);
+    background: rgba(99,185,136,.07);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+    opacity: .78;
+    overflow: hidden;
+    padding: 7px;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: color var(--si-fast) var(--si-ease), border-color var(--si-fast) var(--si-ease), background var(--si-fast) var(--si-ease), box-shadow var(--si-fast) var(--si-ease), opacity var(--si-fast) var(--si-ease);
+}
+
+.si-module-dark .si-kpi-card__visual svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: hidden;
+}
+
+.si-module-dark .si-kpi-card:hover .si-kpi-card__visual {
+    border-color: rgba(99,185,136,.24);
+    background: rgba(99,185,136,.11);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.05), 0 0 18px rgba(99,185,136,.08);
+    opacity: .96;
+}
+
+.si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article > span {
+    color: var(--si-muted);
+    font-size: 10.5px;
+    font-weight: 820;
+    letter-spacing: .07em;
+    text-transform: uppercase;
+}
+
+.si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article > strong {
+    margin-top: 8px;
+    color: var(--si-text);
+    font-size: clamp(28px, 2.25vw, 36px);
+    font-weight: 820;
+    letter-spacing: -.04em;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.si-module-dark :is(.module-table, .catalogos-table, .usuarios-table, .reportes-table, .audit-table, .prod-table, .warehouse-table, .devoluciones-table) th {
+    color: var(--si-green-medium) !important;
+    background: linear-gradient(180deg, rgba(99,185,136,.07), rgba(99,185,136,.035));
+    font-size: 12px;
+    font-weight: 820;
+    letter-spacing: .065em;
+    text-transform: uppercase;
+}
+
+.si-module-dark :is(.modal-header, .detail-modal__header, .audit-detail-header, .inv-stock-modal__header),
+.si-ui-confirm__header,
+.si-ui-prompt__header {
+    border-color: rgba(136,202,163,.15);
+    background: linear-gradient(135deg, rgba(40,106,74,.48), rgba(13,21,17,.98) 72%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+}
+
+.si-module-dark :is(.modal-header, .detail-modal__header, .audit-detail-header, .inv-stock-modal__header) :is(h2, h3),
+.si-ui-confirm__header h2,
+.si-ui-prompt__header h2 { color: #f4f8f5; }
+
+.si-module-dark :is(.modal-header, .detail-modal__header, .audit-detail-header, .inv-stock-modal__header) :is(small, .module-eyebrow),
+.si-ui-confirm__header span,
+.si-ui-prompt__header span { color: #9bdfb7; }
+
+.si-module-dark :is(.modal-header, .detail-modal__header, .audit-detail-header, .inv-stock-modal__header) p { color: #aab9b0; }
+
+.si-module-dark :is(.modal-footer, .detail-modal__footer, .inv-stock-modal__footer),
+.si-ui-confirm__footer,
+.si-ui-prompt__footer {
+    border-color: var(--si-border-soft);
+    background: var(--si-surface);
+}
+
+.si-module-dark .modal-close,
+.si-module-dark .inv-stock-modal__close,
+.si-ui-confirm__close,
+.si-ui-prompt__close {
+    width: 40px;
+    height: 40px;
+    border: 1px solid rgba(237,242,239,.13);
+    border-radius: 11px;
+    color: #edf2ef;
+    background: rgba(255,255,255,.065);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    transition: color var(--si-fast), border-color var(--si-fast), background var(--si-fast), box-shadow var(--si-fast), transform var(--si-fast);
+}
+
+.si-module-dark .modal-close:hover,
+.si-module-dark .modal-close:focus-visible,
+.si-module-dark .inv-stock-modal__close:hover,
+.si-module-dark .inv-stock-modal__close:focus-visible,
+.si-ui-confirm__close:hover,
+.si-ui-confirm__close:focus-visible,
+.si-ui-prompt__close:hover,
+.si-ui-prompt__close:focus-visible {
+    border-color: rgba(136,202,163,.34);
+    color: #fff;
+    background: rgba(136,202,163,.14);
+    box-shadow: 0 0 0 4px rgba(99,185,136,.10), 0 8px 20px rgba(0,0,0,.18);
+    outline: none;
+    transform: translateY(-1px);
+}
+
+.si-module-dark :is(.btn-primary, .btn-secondary, .btn-danger, .btn-warning, .btn-link, .link-button, .table-action, .btn-state, .btn-remove, .report-card__action),
+.si-ui-confirm__footer button,
+.si-ui-prompt__footer button {
+    transition: color var(--si-fast) var(--si-ease), border-color var(--si-fast) var(--si-ease), background var(--si-fast) var(--si-ease), box-shadow var(--si-fast) var(--si-ease), filter var(--si-fast) var(--si-ease), transform var(--si-fast) var(--si-ease);
+}
+
+.si-module-dark :is(.btn-primary, .btn-secondary, .btn-danger, .btn-warning, .btn-link, .link-button, .table-action, .btn-state, .btn-remove, .report-card__action):hover:not(:disabled),
+.si-ui-confirm__footer button:hover:not(:disabled),
+.si-ui-prompt__footer button:hover:not(:disabled) {
+    filter: brightness(1.08);
+    box-shadow: 0 8px 19px rgba(38,104,67,.14);
+    transform: translateY(-1px);
+}
+
+.si-module-dark :is(.module-message, .catalogos-message, .usuarios-message, .roles-message) {
+    border-radius: var(--feedback-radius, 12px);
+}
+
+@media (max-width: 720px) {
+    .si-module-dark :is(.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis) article {
+        min-height: 104px;
+        padding: 16px 68px 15px 16px;
+    }
+    .si-module-dark .si-kpi-card__visual {
+        right: 15px;
+        width: 40px;
+        height: 40px;
+    }
+}

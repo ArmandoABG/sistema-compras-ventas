@@ -11,8 +11,156 @@
         solicitudTextoResolver: null,
         solicitudTextoFoco: null,
         toastRegion: null,
-        mensajeTimers: new WeakMap()
+        mensajeTimers: new WeakMap(),
+        tablasRaf: 0
     };
+
+    const selectorKpis = '.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis';
+    const selectorContenedorTabla = '.table-wrap, .usuarios-table-wrap, .reportes-table-wrap, .prod-table-wrap, .line-table-wrap';
+    const selectorTablas = selectorContenedorTabla.split(', ').map(function (selector) { return selector + ' table'; }).join(', ');
+
+    const iconosKpi = {
+        usuarios: '<circle cx="8" cy="8" r="3"/><path d="M2.5 20v-2.2A4.8 4.8 0 0 1 7.3 13h1.4a4.8 4.8 0 0 1 4.8 4.8V20"/><path d="M15.5 4.8a3 3 0 0 1 0 5.8M17 13a4.8 4.8 0 0 1 4.5 4.8V20"/>',
+        check: '<path d="m4 12 5 5L20 6"/>',
+        pausa: '<path d="M9 5v14M15 5v14"/>',
+        candado: '<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2"/>',
+        reloj: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/>',
+        alerta: '<path d="M12 3 2.5 20h19L12 3Z"/><path d="M12 9v4M12 17h.01"/>',
+        cartera: '<path d="M3 7.5h16a2 2 0 0 1 2 2V19H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h13v3.5"/><path d="M16 12h5v4h-5a2 2 0 0 1 0-4Z"/>',
+        dinero: '<circle cx="12" cy="12" r="9"/><path d="M15 8.5c-.7-.7-1.7-1-3-1-1.7 0-3 .8-3 2s1.1 1.8 3 2.2 3 1 3 2.3-1.3 2.3-3 2.3c-1.2 0-2.4-.4-3.2-1.2M12 5.5v13"/>',
+        cajas: '<path d="m4 7 8-4 8 4-8 4-8-4Z"/><path d="m4 12 8 4 8-4M4 17l8 4 8-4"/>',
+        paquete: '<path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z"/><path d="m4 7 8 4 8-4M12 11v10"/>',
+        carrito: '<path d="M3 4h2l2.2 10h10.6l2-7H6"/><circle cx="9" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/>',
+        bolsa: '<path d="M5 8h14l-1 13H6L5 8Z"/><path d="M9 9V6a3 3 0 0 1 6 0v3"/>',
+        camion: '<path d="M3 6h11v11H3V6Zm11 4h4l3 3v4h-7v-7Z"/><circle cx="7" cy="18" r="2"/><circle cx="18" cy="18" r="2"/>',
+        edificio: '<path d="M4 21V5l8-3v19M12 8h8v13M7 7h2M7 11h2M7 15h2M15 11h2M15 15h2"/>',
+        engranes: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>',
+        archivo: '<path d="M6 2h8l4 4v16H6V2Z"/><path d="M14 2v5h5M9 12h6M9 16h6"/>',
+        capas: '<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/>',
+        calendario: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4M17 3v4M3 10h18M12 14v3M12 19h.01"/>',
+        transferencia: '<path d="M4 7h14l-3-3M20 17H6l3 3M18 7l-3 3M6 17l3-3"/>',
+        lista: '<path d="M9 6h11M9 12h11M9 18h11M4 6h.01M4 12h.01M4 18h.01"/>',
+        qr: '<path d="M3 3h7v7H3V3Zm11 0h7v7h-7V3ZM3 14h7v7H3v-7Zm11 0h3v3h-3v-3Zm4 0h3v7h-7v-3M6 6h1M17 6h1M6 17h1"/>',
+        apartado: '<path d="M6 3h12v18l-6-4-6 4V3Z"/><path d="M9 8h6M9 12h4"/>',
+        recibo: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+        merma: '<path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z"/><path d="m4 7 8 4 8-4M12 11v3M12 18h.01"/>',
+        grafica: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'
+    };
+
+    function textoNormalizado(valor) {
+        return String(valor || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    }
+
+    function tipoIconoKpi(tarjeta) {
+        const etiqueta = textoNormalizado(tarjeta.querySelector(':scope > span')?.textContent);
+        const pagina = tarjeta.closest('[class*="-page"]') || document.querySelector('main');
+        const contexto = textoNormalizado((pagina?.className || '') + ' ' + (document.querySelector('h1')?.textContent || ''));
+        if (/verificar|qr-/.test(contexto)) {
+            if (/rechazo|incidencia/.test(etiqueta)) return 'alerta';
+            if (/salida confirmada/.test(etiqueta)) return 'check';
+            return 'qr';
+        }
+        if (/transferencia/.test(etiqueta)) return 'transferencia';
+        if (/movimiento|renglones|reverso|revertid/.test(etiqueta)) return 'transferencia';
+        if (/merma/.test(etiqueta)) return 'merma';
+        if (/bloquead/.test(etiqueta)) return 'candado';
+        if (/vencid/.test(etiqueta)) return 'calendario';
+        if (/critico|alerta|sin disponible|sin stock|excedid/.test(etiqueta)) return 'alerta';
+        if (/sin ingreso|pendiente|por vencer|reorden|hoy|dias/.test(etiqueta)) return 'reloj';
+        if (/inactiv|cancelad/.test(etiqueta)) return 'pausa';
+        if (/borrador/.test(etiqueta)) return 'archivo';
+        if (/parcial/.test(etiqueta)) return 'capas';
+        if (/por recibir|recepcion/.test(etiqueta)) return 'camion';
+        if (/cotizacion/.test(contexto) && /^(total|generadas?)$/.test(etiqueta)) return 'recibo';
+        if (/apartado/.test(contexto) && /^total$/.test(etiqueta)) return 'apartado';
+        if (/auditoria/.test(contexto) && /^(registros?|total)$/.test(etiqueta)) return 'lista';
+        if (/produccion/.test(contexto) && /^total$/.test(etiqueta)) return 'engranes';
+        if (/produccion/.test(contexto) && /este mes/.test(etiqueta)) return 'calendario';
+        if (/ventas/.test(contexto) && /^total$/.test(etiqueta)) return 'carrito';
+        if (/clientes/.test(contexto) && /^(disponible|linea autorizada|credito utilizado|solo contado)$/.test(etiqueta)) return 'dinero';
+        if (/transferencias/.test(contexto) && /almacenes/.test(etiqueta)) return 'cajas';
+        if (/activ|aplicad|aceptad|confirmad|pagad|recibid|completad|con existencia|disponible/.test(etiqueta)) return 'check';
+        if (/usuario|cliente/.test(etiqueta) || (/usuarios/.test(contexto) && /^(total|registros?)$/.test(etiqueta))) return 'usuarios';
+        if (/proveedor/.test(etiqueta)) return 'edificio';
+        if (/almacen/.test(etiqueta)) return 'cajas';
+        if (/inventario|existencia|stock|fisic|reservad/.test(etiqueta) || (/inventario|inv-page/.test(contexto) && /^(total|registros?)$/.test(etiqueta))) return 'cajas';
+        if (/producto|articulo|resultado/.test(etiqueta)) return 'paquete';
+        if (/venta/.test(etiqueta) || (/ventas/.test(contexto) && /total/.test(etiqueta))) return 'carrito';
+        if (/compra/.test(etiqueta) || (/compras/.test(contexto) && /^total$/.test(etiqueta))) return 'bolsa';
+        if (/cobro|abono|credito|importe|monto/.test(etiqueta)) return 'dinero';
+        if (/pago|deuda|saldo/.test(etiqueta) || (/cxp|cuentas por pagar/.test(contexto) && /total/.test(etiqueta))) return 'cartera';
+        if (/produccion/.test(etiqueta)) return 'engranes';
+        if (/recibid/.test(etiqueta)) return 'camion';
+        if (/apartado/.test(contexto)) return 'apartado';
+        if (/auditoria/.test(contexto)) return 'lista';
+        if (/produccion/.test(contexto)) return 'engranes';
+        return 'grafica';
+    }
+
+    function mejorarKpis(root) {
+        const contenedores = [];
+        if (root instanceof HTMLElement && root.matches(selectorKpis)) contenedores.push(root);
+        root.querySelectorAll?.(selectorKpis).forEach(function (contenedor) { contenedores.push(contenedor); });
+        contenedores.forEach(function (contenedor) {
+            contenedor.querySelectorAll(':scope > article').forEach(function (tarjeta) {
+                tarjeta.classList.add('si-kpi-card');
+                let visual = tarjeta.querySelector(':scope > .si-kpi-card__visual');
+                if (!visual) {
+                    visual = document.createElement('span');
+                    visual.className = 'si-kpi-card__visual';
+                    visual.setAttribute('aria-hidden', 'true');
+                    tarjeta.appendChild(visual);
+                }
+                const tipo = tipoIconoKpi(tarjeta);
+                if (visual.dataset.icono !== tipo) {
+                    visual.dataset.icono = tipo;
+                    visual.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">' + iconosKpi[tipo] + '</svg>';
+                }
+            });
+        });
+    }
+
+    function filasVisibles(tabla) {
+        return Array.from(tabla.tBodies).flatMap(function (tbody) { return Array.from(tbody.rows); }).filter(function (fila) {
+            return !fila.hidden && !fila.querySelector('.empty-cell') && fila.getClientRects().length > 0;
+        });
+    }
+
+    function ajustarScrollTablas() {
+        estado.tablasRaf = 0;
+        document.querySelectorAll(selectorTablas).forEach(function (tabla) {
+            const contenedor = tabla.closest(selectorContenedorTabla);
+            if (!contenedor) return;
+            const filas = filasVisibles(tabla);
+            if (filas.length <= 20) {
+                contenedor.dataset.siTableScroll = 'natural';
+                contenedor.style.removeProperty('--si-table-visible-height');
+                return;
+            }
+            const cabecera = tabla.tHead?.getBoundingClientRect().height || 0;
+            const altoFilas = filas.slice(0, 20).reduce(function (total, fila) { return total + fila.getBoundingClientRect().height; }, 0);
+            if (altoFilas > 0) {
+                contenedor.dataset.siTableScroll = 'limited';
+                contenedor.style.setProperty('--si-table-visible-height', Math.ceil(cabecera + altoFilas + 2) + 'px');
+            }
+        });
+    }
+
+    function programarScrollTablas() {
+        if (estado.tablasRaf) return;
+        estado.tablasRaf = window.requestAnimationFrame(ajustarScrollTablas);
+    }
+
+    function iniciarTablas() {
+        programarScrollTablas();
+        new MutationObserver(programarScrollTablas).observe(document.body, {
+            childList: true,
+            subtree: true,
+            attributes: true,
+            attributeFilter: ['hidden']
+        });
+        window.addEventListener('resize', programarScrollTablas, { passive: true });
+    }
 
     function etiquetaSelect(select) {
         const label = select.closest('label');
@@ -354,7 +502,7 @@
     }
 
     function mejorarMensajes(root) {
-        const selector = '.module-message, .catalogos-message, .usuarios-message, .roles-message';
+        const selector = '.module-message, .catalogos-message, .usuarios-message, .roles-message, .topbar-profile-message';
         if (root instanceof HTMLElement && root.matches(selector)) mejorarMensaje(root);
         root.querySelectorAll?.(selector).forEach(mejorarMensaje);
     }
@@ -390,6 +538,7 @@
     }
 
     function iniciar() {
+        iniciarTablas();
         if (!document.body.classList.contains('si-module-dark')) return;
         crearSelectCompartido();
         crearConfirmacion();
@@ -400,6 +549,7 @@
         document.body.appendChild(estado.toastRegion);
         mejorarSelects(document);
         mejorarMensajes(document);
+        mejorarKpis(document);
 
         new MutationObserver(function (cambios) {
             cambios.forEach(function (cambio) {
@@ -407,11 +557,13 @@
                     if (nodo.nodeType === Node.ELEMENT_NODE) {
                         mejorarSelects(nodo);
                         mejorarMensajes(nodo);
+                        mejorarKpis(nodo);
                     }
                 });
                 if (cambio.type === 'attributes' && cambio.target instanceof HTMLElement && !cambio.target.hidden) {
                     cambio.target.querySelectorAll?.('select.si-select__native').forEach(sincronizarSelect);
                     mejorarMensajes(cambio.target);
+                    mejorarKpis(cambio.target);
                 }
             });
         }).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });

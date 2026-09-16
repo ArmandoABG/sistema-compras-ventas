@@ -42,8 +42,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Usuarios | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_usuarios.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -409,7 +409,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
     async function guardarUsuario(event) {
         event.preventDefault(); const form = event.currentTarget; const boton = $('btnGuardarUsuario'); const msg = $('mensajeFormUsuario'); ocultarMensaje(msg); boton.disabled = true; const original = boton.textContent; boton.textContent = 'Guardando...';
-        try { const datos = await api('?usuarios_api=1', {method: 'POST', body: new FormData(form)}); if (!datos) return; cerrarModal('modalUsuario'); mostrarMensaje(mensajePagina, datos.mensaje, 'success'); await cargarUsuarios(); }
+        try { const datos = await api('?usuarios_api=1', {method: 'POST', body: new FormData(form)}); if (!datos) return; cerrarModal('modalUsuario'); const recarga = cargarUsuarios(); mostrarMensaje(mensajePagina, datos.mensaje, 'success'); await recarga; }
         catch (error) { mostrarMensaje(msg, error.message, 'error'); }
         finally { boton.disabled = false; boton.textContent = original; }
     }
@@ -417,7 +417,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     async function cambiarEstado(id, activo) {
         if (!(await siConfirmar(activo === 1 ? '¿Activar esta cuenta?' : '¿Desactivar esta cuenta? Sus sesiones activas serán cerradas.', { titulo: 'Confirmar estado', aceptar: activo === 1 ? 'Activar' : 'Desactivar', peligro: activo !== 1 }))) return;
         const form = new FormData(); form.append('csrf_token', '<?= si_escapar($csrfToken) ?>'); form.append('accion', 'CAMBIAR_ESTADO'); form.append('usuario_id', String(id)); form.append('activo', String(activo));
-        try { const datos = await api('?usuarios_api=1', {method: 'POST', body: form}); mostrarMensaje(mensajePagina, datos.mensaje, 'success'); await cargarUsuarios(); }
+        try { const datos = await api('?usuarios_api=1', {method: 'POST', body: form}); const recarga = cargarUsuarios(); mostrarMensaje(mensajePagina, datos.mensaje, 'success'); await recarga; }
         catch (error) { mostrarMensaje(mensajePagina, error.message, 'error'); }
     }
 
@@ -468,7 +468,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         $('passwordTemporalConfirmar').value = password;
         $('passwordTemporal').type = 'text';
         $('passwordTemporalConfirmar').type = 'text';
-        mostrarMensaje($('mensajePassword'), 'Contraseña temporal generada. Cópiala y entrégala al usuario de forma segura.', 'success');
+        mostrarMensaje($('mensajePassword'), 'Contraseña temporal generada. Cópiala y entrégala al usuario de forma segura.', 'info');
     }
 
     async function cambiarPassword(event) {
@@ -493,6 +493,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
         tbody.innerHTML =
             '<tr><td colspan="6">Cargando...</td></tr>';
+        $('btnSesionAnterior').disabled = true;
+        $('btnSesionSiguiente').disabled = true;
 
         abrirModal('modalSesiones');
 
@@ -560,6 +562,11 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 '<tr><td colspan="6" class="empty-cell">'
                 + escapeHtml(error.message)
                 + '</td></tr>';
+            $('textoSesiones').textContent = 'No disponible';
+            $('paginaSesionActual').textContent = 'Página —';
+            $('btnSesionAnterior').disabled = true;
+            $('btnSesionSiguiente').disabled = true;
+            if (typeof window.siToast === 'function') window.siToast(error.message, 'error', 0);
         }
     }
 
@@ -732,7 +739,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         formData.append('accion', accion);
 
         bloquearBotonesEmail(true);
-        mostrarMensaje(mensaje, esPrueba ? 'Enviando correo de prueba...' : 'Revisando inventario y enviando alertas pendientes...', 'success');
+        mostrarMensaje(mensaje, esPrueba ? 'Enviando correo de prueba...' : 'Revisando inventario y enviando alertas pendientes...', 'info');
         try {
             const datos = await api('?usuarios_api=1', {method: 'POST', body: formData});
             let errores = Number(datos.errores || 0);
@@ -859,3 +866,4 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 </script>
 </body>
 </html>
+

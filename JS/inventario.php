@@ -60,8 +60,8 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
     <title>Inventario | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_inventario.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -1387,9 +1387,9 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                 aplicar_todos: dom.nivelesAplicarTodos.checked ? 1 : 0,
             });
             cerrarModalNiveles();
+            const refrescos = [cargarInventario(), cargarResumen()];
             mostrarMensaje(data.mensaje || 'Niveles actualizados.', 'success');
-            cargarInventario();
-            cargarResumen();
+            await Promise.all(refrescos);
         } catch (error) {
             mostrarMensaje(error.message);
         } finally {
@@ -1707,14 +1707,17 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
                 motivo: dom.operacionMotivo.value.trim(),
                 observaciones: dom.operacionObservaciones.value.trim(),
             });
-            mostrarMensaje(data.mensaje || 'Operación registrada.', 'success');
             dom.formOperacion.reset();
             limpiarProductoOperacion();
             tipoOperacionActual(estado.operaciones.tipo);
-            cargarOperaciones();
-            cargarInventario();
-            cargarResumen();
-            if (CONFIG.puedeKardex) cargarKardex();
+            const refrescos = [
+                cargarOperaciones(),
+                cargarInventario(),
+                cargarResumen(),
+                CONFIG.puedeKardex ? cargarKardex() : Promise.resolve(),
+            ];
+            mostrarMensaje(data.mensaje || 'Operación registrada.', 'success');
+            await Promise.all(refrescos);
         } catch (error) { mostrarMensaje(error.message); }
         finally { dom.btnGuardarOperacion.disabled = false; }
     }
@@ -1778,8 +1781,14 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
         if (!(await siConfirmar(`¿Revertir ${folio}? La existencia física se moverá en sentido contrario y el movimiento original quedará REVERTIDO.`, { titulo: 'Revertir movimiento', aceptar: 'Revertir', peligro: true }))) return;
         try {
             const data = await apiPost('REVERTIR_OPERACION', { movimiento_id: id, motivo: motivo.trim() });
+            const refrescos = [
+                cargarOperaciones(),
+                cargarInventario(),
+                cargarResumen(),
+                CONFIG.puedeKardex ? cargarKardex() : Promise.resolve(),
+            ];
             mostrarMensaje(data.mensaje || 'Movimiento revertido.', 'success');
-            cargarOperaciones(); cargarInventario(); cargarResumen(); if (CONFIG.puedeKardex) cargarKardex();
+            await Promise.all(refrescos);
         } catch (error) { mostrarMensaje(error.message); }
     }
 
@@ -2012,3 +2021,4 @@ if ($seccionInicial === 'operaciones' && !$puedeOperaciones) {
 </script>
 </body>
 </html>
+

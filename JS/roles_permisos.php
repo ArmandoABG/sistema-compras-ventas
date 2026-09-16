@@ -33,8 +33,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Roles y permisos | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_roles_permisos.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -186,8 +186,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         this.disabled = true;
         try {
             const data = await api('?roles_api=1', {method: 'POST', body: form});
-            mostrarMensaje(data.mensaje, 'success');
             await cargarInicial(estado.rolActual ? estado.rolActual.id : 0);
+            mostrarMensaje(data.mensaje, 'success');
         } catch (error) {
             mostrarMensaje(error.message, 'error');
         } finally {
@@ -211,8 +211,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 
         try {
             const data = await api('?roles_api=1', {method: 'POST', body: form});
-            mostrarMensaje(data.mensaje, 'success');
             await cargarInicial(rolId);
+            mostrarMensaje(data.mensaje, 'success');
         } catch (error) {
             mostrarMensaje(error.message, 'error');
         } finally {
@@ -225,3 +225,4 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 </script>
 </body>
 </html>
+

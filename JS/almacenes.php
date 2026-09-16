@@ -35,8 +35,8 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
     <title>Almacenes | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_almacenes.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-02">
-    <script src="../inc/ui_modulos.js?v=20260915-02"></script>
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
 </head>
 <body class="si-module-dark">
 <div class="app-shell">
@@ -347,7 +347,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         ev.preventDefault(); if(!CONFIG.puedeAdministrar)return; ocultar(dom.mensajeModal); dom.btnGuardar.disabled=true;
         try {
             const d=await post('GUARDAR_ALMACEN',{almacen_id:dom.almacenId.value,codigo:dom.codigo.value,nombre:dom.nombre.value,ubicacion:dom.ubicacion.value});
-            cerrar(dom.modal); mostrar(dom.mensaje,d.mensaje||'Almacén guardado.','success'); await cargar();
+            cerrar(dom.modal); const recarga=cargar(); mostrar(dom.mensaje,d.mensaje||'Almacén guardado.','success'); await recarga;
         } catch(e){mostrar(dom.mensajeModal,e.message);} finally {dom.btnGuardar.disabled=false;}
     }
 
@@ -393,7 +393,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
         if(!CONFIG.puedeAdministrar)return; const activar=Number(activoActual)!==1;
         const texto=activar?'¿Activar este almacén? Volverá a estar disponible en operaciones nuevas.':'¿Desactivar este almacén? Solo podrá hacerse si está vacío, sin reservas y sin operaciones pendientes.';
         if (!(await siConfirmar(texto, { titulo: 'Confirmar estado', aceptar: activar ? 'Activar' : 'Desactivar', peligro: !activar }))) return;
-        try{const d=await post('CAMBIAR_ESTADO_ALMACEN',{almacen_id:id,activo:activar?1:0});mostrar(dom.mensaje,d.mensaje||'Estado actualizado.','success');cerrar(dom.modalDetalle);await cargar();}catch(e){mostrar(dom.mensajeDetalle&&!dom.modalDetalle.hidden?dom.mensajeDetalle:dom.mensaje,e.message);}
+        try{const d=await post('CAMBIAR_ESTADO_ALMACEN',{almacen_id:id,activo:activar?1:0});cerrar(dom.modalDetalle);const recarga=cargar();mostrar(dom.mensaje,d.mensaje||'Estado actualizado.','success');await recarga;}catch(e){mostrar(dom.mensajeDetalle&&!dom.modalDetalle.hidden?dom.mensajeDetalle:dom.mensaje,e.message);}
     }
 
     dom.btnNuevo?.addEventListener('click',prepararNuevo); dom.form?.addEventListener('submit',guardar);
@@ -410,3 +410,4 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 </script>
 </body>
 </html>
+
