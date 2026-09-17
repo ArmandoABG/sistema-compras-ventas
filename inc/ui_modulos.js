@@ -12,7 +12,8 @@
         solicitudTextoFoco: null,
         toastRegion: null,
         mensajeTimers: new WeakMap(),
-        tablasRaf: 0
+        tablasRaf: 0,
+        volverArribaRaf: 0
     };
 
     const selectorKpis = '.stats-grid, .catalogos-kpis, .warehouse-summary, .transfer-summary, .audit-summary, .usuarios-kpis';
@@ -44,6 +45,8 @@
         apartado: '<path d="M6 3h12v18l-6-4-6 4V3Z"/><path d="M9 8h6M9 12h4"/>',
         recibo: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2V3Z"/><path d="M9 8h6M9 12h6M9 16h4"/>',
         merma: '<path d="m4 7 8-4 8 4v10l-8 4-8-4V7Z"/><path d="m4 7 8 4 8-4M12 11v3M12 18h.01"/>',
+        tarjeta: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
+        cancelar: '<circle cx="12" cy="12" r="9"/><path d="m9 9 6 6M15 9l-6 6"/>',
         grafica: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>'
     };
 
@@ -55,6 +58,14 @@
         const etiqueta = textoNormalizado(tarjeta.querySelector(':scope > span')?.textContent);
         const pagina = tarjeta.closest('[class*="-page"]') || document.querySelector('main');
         const contexto = textoNormalizado((pagina?.className || '') + ' ' + (document.querySelector('h1')?.textContent || ''));
+        if (/ventas/.test(contexto)) {
+            if (/^total$/.test(etiqueta)) return 'carrito';
+            if (/^confirmadas?$/.test(etiqueta)) return 'check';
+            if (/^contado$/.test(etiqueta)) return 'dinero';
+            if (/^credito$/.test(etiqueta)) return 'tarjeta';
+            if (/^canceladas?$/.test(etiqueta)) return 'cancelar';
+            if (/importe confirmado/.test(etiqueta)) return 'grafica';
+        }
         if (/verificar|qr-/.test(contexto)) {
             if (/rechazo|incidencia/.test(etiqueta)) return 'alerta';
             if (/salida confirmada/.test(etiqueta)) return 'check';
@@ -160,6 +171,70 @@
             attributeFilter: ['hidden']
         });
         window.addEventListener('resize', programarScrollTablas, { passive: true });
+    }
+
+    function iniciarVolverArriba() {
+        if (!document.querySelector('.app-shell')) return;
+
+        const boton = document.createElement('button');
+        boton.type = 'button';
+        boton.className = 'si-back-to-top';
+        boton.setAttribute('aria-label', 'Volver al inicio de la página');
+        boton.setAttribute('title', 'Volver arriba');
+        boton.setAttribute('aria-hidden', 'true');
+        boton.tabIndex = -1;
+        boton.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 14 6-6 6 6"/></svg>';
+        document.body.appendChild(boton);
+
+        const obstaculos = '.pagination, .module-pagination, .catalogos-pagination, .usuarios-paginacion, .reportes-pagination, .recipe-pagination, .email-alert-pagination, .session-pagination';
+
+        function modalVisible() {
+            return Array.from(document.querySelectorAll('[aria-modal="true"]')).some(function (modal) {
+                const contenedor = modal.closest('[hidden], .modal-backdrop, .topbar-profile-modal, .inv-stock-modal, .si-ui-confirm, .si-ui-prompt') || modal;
+                return !contenedor.hidden && contenedor.getClientRects().length > 0;
+            });
+        }
+
+        function actualizar() {
+            estado.volverArribaRaf = 0;
+            const documento = document.scrollingElement || document.documentElement;
+            const umbral = window.innerWidth <= 720 ? 320 : 480;
+            const desplazamiento = window.scrollY || documento.scrollTop || 0;
+            const tieneRecorrido = documento.scrollHeight > window.innerHeight + umbral;
+            const visible = tieneRecorrido && desplazamiento > umbral && !modalVisible();
+            let separacion = window.innerWidth <= 720 ? 16 : 24;
+
+            if (visible) {
+                document.querySelectorAll(obstaculos).forEach(function (elemento) {
+                    if (elemento.hidden || elemento.getClientRects().length === 0) return;
+                    const rect = elemento.getBoundingClientRect();
+                    if (rect.top < window.innerHeight && rect.bottom > window.innerHeight - 150) {
+                        separacion = Math.max(separacion, Math.ceil(window.innerHeight - rect.top + 14));
+                    }
+                });
+            }
+
+            boton.style.setProperty('--si-back-to-top-bottom', separacion + 'px');
+            boton.classList.toggle('is-visible', visible);
+            boton.setAttribute('aria-hidden', visible ? 'false' : 'true');
+            boton.tabIndex = visible ? 0 : -1;
+        }
+
+        function programar() {
+            if (estado.volverArribaRaf) return;
+            estado.volverArribaRaf = window.requestAnimationFrame(actualizar);
+        }
+
+        boton.addEventListener('click', function () {
+            window.scrollTo({
+                top: 0,
+                behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+            });
+        });
+        window.addEventListener('scroll', programar, { passive: true });
+        window.addEventListener('resize', programar, { passive: true });
+        new MutationObserver(programar).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+        actualizar();
     }
 
     function etiquetaSelect(select) {
@@ -539,7 +614,12 @@
 
     function iniciar() {
         iniciarTablas();
-        if (!document.body.classList.contains('si-module-dark')) return;
+        iniciarVolverArriba();
+        const esModuloOscuro = document.body.classList.contains('si-module-dark');
+        const esVentas = document.body.classList.contains('ventas-body');
+        if (!esModuloOscuro && !esVentas) return;
+        mejorarKpis(document);
+        if (esVentas) return;
         crearSelectCompartido();
         crearConfirmacion();
         crearSolicitudTexto();
@@ -549,7 +629,6 @@
         document.body.appendChild(estado.toastRegion);
         mejorarSelects(document);
         mejorarMensajes(document);
-        mejorarKpis(document);
 
         new MutationObserver(function (cambios) {
             cambios.forEach(function (cambio) {

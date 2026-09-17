@@ -67,7 +67,7 @@ if (!in_array($seccionInicial, $seccionesPermitidas, true)) {
         href="../css/style_proveedores.css?v=<?= si_escapar($versionModulo) ?>"
     >
     <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
-    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
+    <script src="../inc/ui_modulos.js?v=20260917-06"></script>
 </head>
 <body class="si-module-dark">
 

@@ -144,7 +144,7 @@ $versionModulo = is_file($cssModulo)
         rel="stylesheet"
         href="../css/style_dashboard.css?v=<?= si_escapar($versionModulo) ?>"
     >
-    <script src="../inc/ui_modulos.js?v=20260915-05"></script>
+    <script src="../inc/ui_modulos.js?v=20260917-06"></script>
 </head>
 <body class="dashboard-page">
 

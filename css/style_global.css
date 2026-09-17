@@ -137,6 +137,148 @@ textarea {
     font: inherit;
 }
 
+.si-back-to-top {
+    position: fixed;
+    right: max(24px, env(safe-area-inset-right));
+    bottom: max(var(--si-back-to-top-bottom, 24px), env(safe-area-inset-bottom));
+    z-index: 980;
+    width: 46px;
+    height: 46px;
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 1px solid rgba(99, 185, 136, .30);
+    border-radius: 14px;
+    color: var(--app-frame-green-medium);
+    background: rgba(18, 23, 20, .96);
+    box-shadow: 0 10px 28px rgba(0, 0, 0, .24), inset 0 1px 0 rgba(255, 255, 255, .05);
+    opacity: 0;
+    visibility: hidden;
+    cursor: pointer;
+    pointer-events: none;
+    transform: translateY(10px) scale(.94);
+    transition: opacity var(--motion-normal) var(--ease-standard), visibility var(--motion-normal) var(--ease-standard), transform var(--motion-normal) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), bottom var(--motion-fast) var(--ease-standard);
+}
+
+.si-back-to-top.is-visible {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+}
+
+.si-back-to-top svg {
+    width: 21px;
+    height: 21px;
+}
+
+.si-back-to-top:hover {
+    border-color: rgba(136, 202, 163, .52);
+    color: #b2e5c6;
+    background: #18231d;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, .28), 0 0 18px rgba(99, 185, 136, .08);
+    transform: translateY(-2px);
+}
+
+.si-back-to-top:focus-visible {
+    outline: 2px solid var(--app-frame-green);
+    outline-offset: 4px;
+}
+
+/* Componente KPI compartido por módulos internos y Ventas. */
+:is(.si-module-dark, .ventas-body) .si-kpi-card {
+    position: relative;
+    min-height: 112px;
+    overflow: hidden;
+    padding: 18px 74px 17px 18px;
+    border: 1px solid var(--app-frame-border);
+    border-radius: 14px;
+    background: linear-gradient(145deg, var(--app-frame-surface), rgba(23, 30, 26, .96));
+    box-shadow: inset 3px 0 0 rgba(99, 185, 136, .52), 0 12px 28px rgba(0, 0, 0, .10);
+    transition: border-color var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard), transform var(--motion-fast) var(--ease-standard);
+}
+
+:is(.si-module-dark, .ventas-body) .si-kpi-card:hover {
+    border-color: rgba(99, 185, 136, .27);
+    box-shadow: inset 3px 0 0 rgba(99, 185, 136, .70), 0 15px 32px rgba(0, 0, 0, .16);
+    transform: translateY(-1px);
+}
+
+:is(.si-module-dark, .ventas-body) .si-kpi-card::after {
+    position: absolute;
+    right: -34px;
+    bottom: -48px;
+    width: 126px;
+    height: 126px;
+    border: 1px solid rgba(99, 185, 136, .10);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(99, 185, 136, .055), transparent 68%);
+    content: "";
+    pointer-events: none;
+}
+
+:is(.si-module-dark, .ventas-body) .si-kpi-card__visual {
+    position: absolute;
+    z-index: 1;
+    top: 50%;
+    right: 17px;
+    width: 42px;
+    height: 42px;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    padding: 7px;
+    border: 1px solid rgba(99, 185, 136, .13);
+    border-radius: 12px;
+    color: var(--app-frame-green-medium);
+    background: rgba(99, 185, 136, .07);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .035);
+    opacity: .78;
+    pointer-events: none;
+    transform: translateY(-50%);
+    transition: opacity var(--motion-fast) var(--ease-standard), border-color var(--motion-fast) var(--ease-standard), background var(--motion-fast) var(--ease-standard), box-shadow var(--motion-fast) var(--ease-standard);
+}
+
+:is(.si-module-dark, .ventas-body) .si-kpi-card__visual svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+    overflow: hidden;
+}
+
+:is(.si-module-dark, .ventas-body) .si-kpi-card:hover .si-kpi-card__visual {
+    border-color: rgba(99, 185, 136, .24);
+    background: rgba(99, 185, 136, .11);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .05), 0 0 18px rgba(99, 185, 136, .08);
+    opacity: .96;
+}
+
+@media (max-width: 720px) {
+    .si-back-to-top {
+        right: max(16px, env(safe-area-inset-right));
+        width: 42px;
+        height: 42px;
+        border-radius: 13px;
+    }
+
+    :is(.si-module-dark, .ventas-body) .si-kpi-card {
+        min-height: 104px;
+        padding: 16px 68px 15px 16px;
+    }
+
+    :is(.si-module-dark, .ventas-body) .si-kpi-card__visual {
+        right: 15px;
+        width: 40px;
+        height: 40px;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .si-back-to-top {
+        transition-duration: .01ms !important;
+    }
+}
+
 .app-shell {
     min-height: 100vh;
     display: grid;
