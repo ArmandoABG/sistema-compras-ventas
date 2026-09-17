@@ -70,9 +70,10 @@ $globalCssPath = __DIR__ . '/css/style_global.css';
 $globalCssVersion = is_file($globalCssPath)
     ? (string) filemtime($globalCssPath)
     : '1';
+$temaLogin = si_normalizar_tema($_COOKIE['si_theme_preview'] ?? 'dark');
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar($temaLogin) ?>">
 <head>
     <meta charset="UTF-8">
     <meta

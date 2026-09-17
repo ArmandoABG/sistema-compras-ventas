@@ -49,15 +49,16 @@ header(
 );
 ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Diagnóstico de seguridad</title>
     <style>
-        :root{color-scheme:dark;--bg:#141916;--panel:#080d0a;--surface:#111813;--field:#0b120e;--border:rgba(147,171,156,.18);--text:#f1f5f2;--soft:#bdc8c1;--muted:#829087;--green:#7bcda0}
+        :root{color-scheme:dark;--bg:#141916;--panel:#080d0a;--surface:#111813;--field:#0b120e;--border:rgba(147,171,156,.18);--text:#f1f5f2;--soft:#bdc8c1;--muted:#829087;--green:#7bcda0;--shadow:0 28px 80px rgba(0,0,0,.3)}
+        html[data-theme="light"]{color-scheme:light;--bg:#e6ece8;--panel:#fbfcfb;--surface:#f4f8f5;--field:#edf3ef;--border:rgba(31,70,45,.15);--text:#17231b;--soft:#405147;--muted:#6a786f;--green:#1e6b45;--shadow:0 28px 70px rgba(31,53,40,.14)}
         *{box-sizing:border-box}body{margin:0;min-height:100vh;padding:28px;color:var(--soft);background:radial-gradient(circle at 15% 15%,rgba(41,112,73,.12),transparent 26%),var(--bg);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55}
-        main{width:min(820px,100%);margin:0 auto;padding:30px;border:1px solid var(--border);border-radius:22px;background:var(--panel);box-shadow:0 28px 80px rgba(0,0,0,.3)}
+        main{width:min(820px,100%);margin:0 auto;padding:30px;border:1px solid var(--border);border-radius:22px;background:var(--panel);box-shadow:var(--shadow)}
         header{padding-bottom:18px;border-bottom:1px solid var(--border)}header small{color:var(--green);font-size:11px;font-weight:800;letter-spacing:.09em}h1{margin:5px 0 4px;color:var(--text);font-size:clamp(28px,5vw,40px);letter-spacing:-.04em}header p{margin:0;color:var(--muted)}
         .diagnostic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:20px 0}.diagnostic-item{margin:0;padding:14px;border:1px solid var(--border);border-radius:13px;background:var(--surface)}.diagnostic-item strong{display:block;margin-bottom:4px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.05em}.diagnostic-item span{color:var(--text);overflow-wrap:anywhere}
         details{border:1px solid var(--border);border-radius:13px;background:var(--surface);overflow:hidden}summary{padding:14px 16px;color:var(--text);font-weight:750;cursor:pointer}pre{max-height:360px;margin:0;padding:16px;overflow:auto;border-top:1px solid var(--border);color:var(--soft);background:var(--field);font-size:12px;line-height:1.6}

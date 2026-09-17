@@ -86,6 +86,18 @@ function si_url(string $ruta = ''): string
         : $base . '/' . $ruta;
 }
 
+function si_normalizar_tema($tema): string
+{
+    return strtolower(trim((string) $tema)) === 'light'
+        ? 'light'
+        : 'dark';
+}
+
+function si_tema_actual(): string
+{
+    return si_normalizar_tema($_SESSION['tema_preferido'] ?? 'dark');
+}
+
 function si_es_https(): bool
 {
     return (
@@ -271,6 +283,7 @@ function si_validar_sesion_en_bd(bool $json): void
             "SELECT
                 u.activo,
                 u.debe_cambiar_password,
+                u.tema_preferido,
                 s.activa
              FROM sesiones_usuario s
              INNER JOIN usuarios u
@@ -301,6 +314,7 @@ function si_validar_sesion_en_bd(bool $json): void
         }
 
         $_SESSION['debe_cambiar_password'] = (int) ($estado['debe_cambiar_password'] ?? 0);
+        $_SESSION['tema_preferido'] = si_normalizar_tema($estado['tema_preferido'] ?? 'dark');
 
     } catch (Throwable $e) {
         error_log(

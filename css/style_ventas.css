@@ -2081,3 +2081,46 @@ body.modal-open {
         transition-duration: .01ms !important;
     }
 }
+
+/* Modo claro · Ventas conserva su composición y usa los tokens globales. */
+html[data-theme="light"] body.ventas-body {
+    color-scheme: light;
+    background: var(--ventas-page-bg);
+}
+
+html[data-theme="light"] .ventas-workspace {
+    background:
+        radial-gradient(circle at 92% 0, rgba(49, 141, 92, .055), transparent 28rem),
+        var(--ventas-canvas);
+    box-shadow: 0 24px 60px rgba(31, 53, 40, .10);
+}
+
+html[data-theme="light"] .ventas-workspace::before { background: linear-gradient(90deg, transparent, rgba(49, 141, 92, .20), transparent); }
+html[data-theme="light"] .ventas-body :is(.field input, .field select, .field textarea, .line-input) { color-scheme: light; box-shadow: inset 0 1px 2px rgba(31, 53, 40, .08); }
+html[data-theme="light"] .ventas-body :is(.field input, .field select, .field textarea, .line-input):disabled,
+html[data-theme="light"] .ventas-body :is(.field input, .field textarea, .line-input)[readonly] { color: var(--ventas-muted); -webkit-text-fill-color: var(--ventas-muted); background: #e7ede9; opacity: .74; }
+html[data-theme="light"] .ventas-body :is(.field select option, .line-input option) { color: var(--ventas-text); background: var(--ventas-panel); }
+html[data-theme="light"] .ventas-body :is(.field select option, .line-input option):checked { color: #f4fbf6; background: #28784f linear-gradient(#28784f, #28784f); }
+html[data-theme="light"] .ventas-body .field input[type="date"]::-webkit-calendar-picker-indicator,
+html[data-theme="light"] .ventas-body .field input[type="search"]::-webkit-search-cancel-button { filter: none; opacity: .68; }
+
+html[data-theme="light"] .ventas-select__trigger { box-shadow: inset 0 1px 2px rgba(31, 53, 40, .08); }
+html[data-theme="light"] .ventas-select__menu { border-color: rgba(49, 141, 92, .22); color: var(--ventas-text); background: rgba(251, 252, 251, .99); box-shadow: 0 18px 48px rgba(31, 53, 40, .18); }
+html[data-theme="light"] .ventas-select__option:is(:hover, :focus-visible) { color: var(--ventas-green-medium); background: var(--ventas-green-pale); }
+html[data-theme="light"] .ventas-select__option.is-selected { color: var(--ventas-green-medium); background: rgba(49, 141, 92, .14); }
+
+html[data-theme="light"] .ventas-body :is(.module-card, .payment-card, .totals-card, .client-summary > div, .detail-data-grid > div, .detail-summary-grid > div) { box-shadow: 0 14px 34px rgba(31, 53, 40, .08); }
+html[data-theme="light"] .ventas-body .module-table--ventas > tbody > tr:hover > td,
+html[data-theme="light"] .ventas-body .module-table--ventas > tbody > tr:focus-within > td,
+html[data-theme="light"] .ventas-body .module-table--ventas > tbody > tr[aria-selected="true"] > td { background: var(--ventas-raised); }
+
+html[data-theme="light"] .ventas-body :is(.status-badge--success, .status-badge--active) { border-color: rgba(35, 118, 69, .22); color: #1e653b; background: #e6f5eb; }
+html[data-theme="light"] .ventas-body .status-badge--warning { border-color: rgba(154, 98, 12, .22); color: #80500a; background: #fff4d8; }
+html[data-theme="light"] .ventas-body .status-badge--danger { border-color: rgba(184, 61, 71, .22); color: #a9323d; background: #fdebed; }
+html[data-theme="light"] .ventas-body :is(.status-badge--neutral, .status-badge--inactive) { color: #627169; background: #e9efeb; }
+
+html[data-theme="light"] .ventas-body .modal-backdrop { background: rgba(35, 49, 40, .34); }
+html[data-theme="light"] .ventas-body .modal-card { box-shadow: 0 28px 72px rgba(31, 53, 40, .20); }
+html[data-theme="light"] .ventas-body :is(.ventas-toast--success, .module-message--success) { border-color: var(--feedback-success-border); color: var(--feedback-success-text); background: var(--feedback-success-bg); }
+html[data-theme="light"] .ventas-body :is(.ventas-toast--warning, .module-message--warning) { border-color: var(--feedback-warning-border); color: var(--feedback-warning-text); background: var(--feedback-warning-bg); }
+html[data-theme="light"] .ventas-body :is(.ventas-toast--error, .module-message--error) { border-color: var(--feedback-error-border); color: var(--feedback-error-text); background: var(--feedback-error-bg); }

@@ -30,7 +30,7 @@ $lectorFotoLocal = __DIR__ . '/../inc/si_qr_photo_reader.js';
 $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoLocal) : '1';
 ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -38,7 +38,7 @@ $versionLectorFoto = is_file($lectorFotoLocal) ? (string) filemtime($lectorFotoL
     <title>Verificar QR | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_qr.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260917-06">
     <script src="../inc/ui_modulos.js?v=20260917-06"></script>
 </head>
 <body class="si-module-dark">

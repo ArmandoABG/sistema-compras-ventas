@@ -33,7 +33,7 @@ $cotizacionInicial = filter_input(INPUT_GET, 'cotizacion_id', FILTER_VALIDATE_IN
 $apartadoInicial = filter_input(INPUT_GET, 'apartado_id', FILTER_VALIDATE_INT) ?: 0;
 ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

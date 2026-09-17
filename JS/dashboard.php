@@ -120,7 +120,7 @@ $versionModulo = is_file($cssModulo)
     : '1';
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="UTF-8">
 

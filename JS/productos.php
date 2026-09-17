@@ -41,7 +41,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
 }
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -58,7 +58,7 @@ if (!in_array($seccionInicial, ['productos', 'categorias', 'unidades', 'presenta
         rel="stylesheet"
         href="../css/style_productos.css?v=<?= si_escapar($versionModulo) ?>"
     >
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260917-06">
     <script src="../inc/ui_modulos.js?v=20260917-06"></script>
 </head>
 <body class="si-module-dark">

@@ -537,6 +537,28 @@ button:disabled {
     align-items: start;
 }
 
+html[data-theme="light"] body.si-module-dark .catalogos-card > .filters-grid--prices {
+    display: grid;
+    gap: 17px 18px;
+    padding: 20px clamp(18px, 2vw, 24px) 21px;
+    border-bottom: 1px solid rgba(31, 70, 45, .11);
+    background: linear-gradient(135deg, rgba(251, 252, 251, .98), rgba(241, 247, 243, .98));
+}
+
+html[data-theme="light"] body.si-module-dark .filters-grid--prices .field {
+    gap: 8px;
+}
+
+html[data-theme="light"] body.si-module-dark .filters-grid--prices .field > span {
+    padding-inline: 2px;
+    color: #3b5043;
+}
+
+html[data-theme="light"] body.si-module-dark .filters-grid--prices :is(input, select) {
+    min-height: 44px;
+    padding-inline: 12px;
+}
+
 .catalogos-table--prices {
     min-width: 1180px;
 }
@@ -607,5 +629,10 @@ button:disabled {
 
     .filters-grid--prices .field--search-wide {
         grid-column: auto;
+    }
+
+    html[data-theme="light"] body.si-module-dark .catalogos-card > .filters-grid--prices {
+        gap: 15px;
+        padding: 17px 16px 18px;
     }
 }

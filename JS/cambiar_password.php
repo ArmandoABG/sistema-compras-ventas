@@ -18,7 +18,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
 $nombre = trim((string) ($_SESSION['nombre_completo'] ?? $_SESSION['usuario'] ?? 'Usuario'));
 ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">

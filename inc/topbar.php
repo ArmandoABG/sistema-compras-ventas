@@ -22,6 +22,7 @@ if ($inicialesUsuario === '') {
     $inicialesUsuario = 'U';
 }
 $csrfTopbar = si_token_csrf();
+$temaActualTopbar = si_tema_actual();
 ?>
 <header class="topbar">
     <div class="topbar-title">
@@ -134,6 +135,20 @@ $csrfTopbar = si_token_csrf();
                     <strong>Mi perfil</strong>
                     <small>Editar mis datos y contraseña</small>
                 </button>
+                <div class="topbar-theme" role="group" aria-labelledby="topbarThemeLabel">
+                    <span id="topbarThemeLabel">Tema</span>
+                    <div class="topbar-theme__options">
+                        <button type="button" class="topbar-theme__option<?= $temaActualTopbar === 'dark' ? ' is-active' : '' ?>" data-theme-option="dark" aria-pressed="<?= $temaActualTopbar === 'dark' ? 'true' : 'false' ?>">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 15.2A8 8 0 0 1 8.8 4 8.2 8.2 0 1 0 20 15.2Z"></path></svg>
+                            <span>Oscuro</span>
+                        </button>
+                        <button type="button" class="topbar-theme__option<?= $temaActualTopbar === 'light' ? ' is-active' : '' ?>" data-theme-option="light" aria-pressed="<?= $temaActualTopbar === 'light' ? 'true' : 'false' ?>">
+                            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
+                            <span>Claro</span>
+                        </button>
+                    </div>
+                    <small class="topbar-theme__status" id="topbarThemeStatus" role="status" aria-live="polite" hidden></small>
+                </div>
                 <form action="<?= si_escapar(si_url('funciones/logout.php')) ?>" method="post">
                     <input type="hidden" name="csrf_token" value="<?= si_escapar($csrfTopbar) ?>">
                     <button type="submit" class="topbar-account__logout">Cerrar sesión</button>
@@ -563,6 +578,8 @@ $csrfTopbar = si_token_csrf();
     const profileForm = document.getElementById('topbarProfileForm');
     const passwordForm = document.getElementById('topbarPasswordForm');
     const message = document.getElementById('topbarProfileMessage');
+    const themeOptions = Array.from(document.querySelectorAll('[data-theme-option]'));
+    const themeStatus = document.getElementById('topbarThemeStatus');
     const endpoint = <?= json_encode(si_url('funciones/perfil_funciones.php'), JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
     let messageTimer = null;
 
@@ -627,6 +644,55 @@ $csrfTopbar = si_token_csrf();
         button.setAttribute('aria-expanded', 'false');
     }
 
+    function syncThemeOptions(theme) {
+        themeOptions.forEach(function (option) {
+            const selected = option.dataset.themeOption === theme;
+            option.classList.toggle('is-active', selected);
+            option.setAttribute('aria-pressed', selected ? 'true' : 'false');
+            option.disabled = false;
+        });
+    }
+
+    function setThemeStatus(text, type) {
+        if (!themeStatus) return;
+        themeStatus.textContent = text || '';
+        themeStatus.className = 'topbar-theme__status' + (type ? ' is-' + type : '');
+        themeStatus.hidden = !text;
+    }
+
+    async function saveTheme(theme) {
+        const previous = document.documentElement.dataset.theme === 'light' ? 'light' : 'dark';
+        if (theme === previous) return;
+
+        document.documentElement.classList.add('si-theme-transition');
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+        syncThemeOptions(theme);
+        setThemeStatus('Guardando preferencia…', 'info');
+        themeOptions.forEach(function (option) { option.disabled = true; });
+
+        const form = new FormData();
+        form.append('csrf_token', <?= json_encode($csrfTopbar, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>);
+        form.append('accion', 'GUARDAR_TEMA');
+        form.append('tema', theme);
+
+        try {
+            const data = await api(endpoint, {method: 'POST', body: form});
+            if (!data) return;
+            syncThemeOptions(data.tema === 'light' ? 'light' : 'dark');
+            setThemeStatus('Preferencia guardada.', 'success');
+            window.setTimeout(function () { setThemeStatus('', ''); }, 2200);
+        } catch (error) {
+            document.documentElement.dataset.theme = previous;
+            document.documentElement.style.colorScheme = previous;
+            syncThemeOptions(previous);
+            setThemeStatus('No se pudo guardar.', 'error');
+            if (typeof window.siToast === 'function') window.siToast(error.message, 'error');
+        } finally {
+            window.setTimeout(function () { document.documentElement.classList.remove('si-theme-transition'); }, 260);
+        }
+    }
+
     function closeModal() {
         modal.hidden = true;
         document.body.classList.remove('topbar-profile-open');
@@ -649,6 +715,12 @@ $csrfTopbar = si_token_csrf();
     button.addEventListener('click', function () {
         if (menu.hidden) openMenu();
         else closeMenu();
+    });
+
+    themeOptions.forEach(function (option) {
+        option.addEventListener('click', function () {
+            saveTheme(option.dataset.themeOption === 'light' ? 'light' : 'dark');
+        });
     });
 
     openProfile.addEventListener('click', async function () {

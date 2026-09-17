@@ -908,3 +908,54 @@ input:focus-visible {
         transition-duration: .01ms !important;
     }
 }
+
+/* Modo claro · misma composición, superficies claras y panel de marca verde. */
+html[data-theme="light"] {
+    color-scheme: light;
+    background: var(--login-page-bg);
+}
+
+html[data-theme="light"] body {
+    color: var(--login-text);
+    background:
+        radial-gradient(circle at 14% 8%, rgba(49, 141, 92, .10), transparent 30rem),
+        radial-gradient(circle at 88% 88%, rgba(49, 141, 92, .055), transparent 26rem),
+        var(--login-page-bg);
+}
+
+html[data-theme="light"] .login-page::before,
+html[data-theme="light"] .login-page::after { border-color: rgba(49, 141, 92, .10); }
+
+html[data-theme="light"] .login-shell {
+    border-color: var(--login-border);
+    background:
+        radial-gradient(circle at 18% 0, rgba(49, 141, 92, .065), transparent 28rem),
+        var(--login-canvas);
+    box-shadow: 0 30px 74px rgba(31, 53, 40, .16);
+}
+
+html[data-theme="light"] .login-brand-panel {
+    color: #f4faf6;
+    background:
+        radial-gradient(circle at 6% 0, rgba(255, 255, 255, .13), transparent 20rem),
+        linear-gradient(150deg, #194a32 0%, #286a49 55%, #377f59 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+}
+
+html[data-theme="light"] .login-brand-panel :is(.login-brand strong, .login-brand-copy h1, .login-benefits strong) { color: #f4faf6; }
+html[data-theme="light"] .login-brand-panel :is(.login-brand small, .login-brand-copy p, .login-benefits small, .login-brand-footer) { color: rgba(238, 247, 241, .76); }
+html[data-theme="light"] .login-brand-panel .login-brand-copy__eyebrow { color: #b9e7ca; }
+html[data-theme="light"] .login-brand-panel .login-benefits li > span { border-color: rgba(255, 255, 255, .20); color: #d3f1de; background: rgba(255, 255, 255, .10); }
+
+html[data-theme="light"] .login-form-panel { border-color: var(--login-border); background: radial-gradient(circle at 100% 0, rgba(49, 141, 92, .055), transparent 22rem), var(--login-surface); }
+html[data-theme="light"] .login-mobile-brand { color: var(--login-text); }
+html[data-theme="light"] :is(.login-form-wrap input, .login-card input) { color-scheme: light; border-color: var(--login-border); color: var(--login-text); background: var(--login-panel); box-shadow: inset 0 1px 2px rgba(31, 53, 40, .08); }
+html[data-theme="light"] :is(.login-form-wrap input, .login-card input):hover { border-color: rgba(49, 141, 92, .28); background: var(--login-raised); }
+html[data-theme="light"] :is(.login-form-wrap input, .login-card input):focus { border-color: rgba(49, 141, 92, .52); background: var(--login-surface); }
+html[data-theme="light"] :is(.login-form-wrap input, .login-card input):-webkit-autofill { -webkit-text-fill-color: var(--login-text); -webkit-box-shadow: 0 0 0 1000px var(--login-panel) inset; box-shadow: 0 0 0 1000px var(--login-panel) inset; }
+html[data-theme="light"] .password-field__toggle { color: var(--login-muted); background: var(--login-raised); }
+html[data-theme="light"] .login-support { border-color: var(--login-border-soft); background: var(--login-raised); }
+html[data-theme="light"] .login-message--success { border-color: var(--feedback-success-border); color: var(--feedback-success-text); background: var(--feedback-success-bg); }
+html[data-theme="light"] .login-message--warning { border-color: var(--feedback-warning-border); color: var(--feedback-warning-text); background: var(--feedback-warning-bg); }
+html[data-theme="light"] .login-message--error { border-color: var(--feedback-error-border); color: var(--feedback-error-text); background: var(--feedback-error-bg); }
+html[data-theme="light"] .login-message--info { border-color: var(--feedback-info-border); color: var(--feedback-info-text); background: var(--feedback-info-bg); }

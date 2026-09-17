@@ -38,7 +38,7 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
 }
 ?>
 <!doctype html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar(si_tema_actual()) ?>">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -46,7 +46,7 @@ if (!in_array($seccionInicial, ['cuentas', 'abonos', 'vencimientos'], true)) {
     <title>Cuentas por cobrar | Sistema Integral</title>
     <link rel="stylesheet" href="../css/style_global.css?v=<?= si_escapar($versionGlobal) ?>">
     <link rel="stylesheet" href="../css/style_cuentas_cobrar.css?v=<?= si_escapar($versionModulo) ?>">
-    <link rel="stylesheet" href="../css/style_modules.css?v=20260915-04">
+    <link rel="stylesheet" href="../css/style_modules.css?v=20260917-06">
     <script src="../inc/ui_modulos.js?v=20260917-06"></script>
 </head>
 <body class="si-module-dark">

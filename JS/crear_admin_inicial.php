@@ -67,12 +67,20 @@ $cssPath =
     __DIR__
     . '/../css/style_login.css';
 
+$globalCssPath =
+    __DIR__
+    . '/../css/style_global.css';
+
 $cssVersion = is_file($cssPath)
     ? (string) filemtime($cssPath)
     : (string) time();
+$globalCssVersion = is_file($globalCssPath)
+    ? (string) filemtime($globalCssPath)
+    : '1';
+$temaInicial = si_normalizar_tema($_COOKIE['si_theme_preview'] ?? 'dark');
 ?>
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es" data-theme="<?= si_escapar($temaInicial) ?>">
 <head>
     <meta charset="UTF-8">
 
@@ -87,6 +95,10 @@ $cssVersion = is_file($cssPath)
         Administrador inicial | Sistema Integral
     </title>
 
+    <link
+        rel="stylesheet"
+        href="../css/style_global.css?v=<?= si_escapar($globalCssVersion) ?>"
+    >
     <link
         rel="stylesheet"
         href="../css/style_login.css?v=<?= si_escapar($cssVersion) ?>"

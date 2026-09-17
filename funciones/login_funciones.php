@@ -58,6 +58,7 @@ try {
             apellido_materno,
             activo,
             debe_cambiar_password,
+            tema_preferido,
             bloqueado_hasta
          FROM usuarios
          WHERE usuario = :usuario
@@ -206,6 +207,7 @@ try {
 
     $_SESSION['usuario_id'] = $usuarioId;
     $_SESSION['usuario'] = (string) $registro['usuario'];
+    $_SESSION['tema_preferido'] = si_normalizar_tema($registro['tema_preferido'] ?? 'dark');
 
     $_SESSION['nombre_completo'] = trim(
         implode(
@@ -337,6 +339,23 @@ try {
     );
     $_SESSION['ultima_actividad'] = time();
     $_SESSION['sesion_regenerada_en'] = time();
+
+    /*
+     * El login no puede conocer al usuario antes de autenticarlo. Una vez
+     * validado, sincronizamos la preferencia persistida para que la próxima
+     * pantalla de acceso (por ejemplo, después de cerrar sesión) conserve
+     * el tema de esta cuenta sin depender del usuario anterior del navegador.
+     */
+    if (!headers_sent()) {
+        setcookie('si_theme_preview', $_SESSION['tema_preferido'], [
+            'expires' => time() + 31536000,
+            'path' => si_base_url() !== '' ? si_base_url() : '/',
+            'domain' => '',
+            'secure' => si_es_https(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
 
     si_responder_json(
         true,

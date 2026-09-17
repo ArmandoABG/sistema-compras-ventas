@@ -33,6 +33,7 @@ try {
 
     if ($accion === 'GUARDAR_PERFIL') perfil_guardar($conexion);
     if ($accion === 'CAMBIAR_PASSWORD') perfil_cambiar_password($conexion);
+    if ($accion === 'GUARDAR_TEMA') perfil_guardar_tema($conexion);
 
     si_responder_json(false, 'La acción solicitada no es válida.', [], 400);
 } catch (PDOException $e) {
@@ -54,7 +55,7 @@ function perfil_obtener(PDO $conexion): void
 {
     $id = (int) ($_SESSION['usuario_id'] ?? 0);
     $stmt = $conexion->prepare(
-        "SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono,
+        "SELECT id, usuario, nombres, apellido_paterno, apellido_materno, correo, telefono, tema_preferido,
                 activo, debe_cambiar_password, ultimo_acceso
          FROM usuarios
          WHERE id = :id
@@ -77,10 +78,72 @@ function perfil_obtener(PDO $conexion): void
             'apellido_materno' => $usuario['apellido_materno'],
             'correo' => $usuario['correo'],
             'telefono' => $usuario['telefono'],
+            'tema_preferido' => si_normalizar_tema($usuario['tema_preferido'] ?? 'dark'),
             'debe_cambiar_password' => (int) $usuario['debe_cambiar_password'],
             'roles' => is_array($roles) ? array_values($roles) : [],
         ],
     ]);
+}
+
+function perfil_guardar_tema(PDO $conexion): void
+{
+    $id = (int) ($_SESSION['usuario_id'] ?? 0);
+    $temaEntrada = strtolower(trim((string) ($_POST['tema'] ?? '')));
+
+    if (!in_array($temaEntrada, ['dark', 'light'], true)) {
+        si_responder_json(false, 'El tema seleccionado no es válido.', ['campo' => 'tema'], 422);
+    }
+
+    $conexion->beginTransaction();
+    $stmt = $conexion->prepare(
+        "SELECT tema_preferido, activo
+         FROM usuarios
+         WHERE id = :id
+         LIMIT 1
+         FOR UPDATE"
+    );
+    $stmt->execute([':id' => $id]);
+    $usuario = $stmt->fetch();
+
+    if (!$usuario || (int) $usuario['activo'] !== 1) {
+        $conexion->rollBack();
+        si_responder_json(false, 'Tu cuenta ya no está disponible.', [], 403);
+    }
+
+    $temaAnterior = si_normalizar_tema($usuario['tema_preferido'] ?? 'dark');
+    if ($temaAnterior !== $temaEntrada) {
+        $stmt = $conexion->prepare(
+            "UPDATE usuarios
+             SET tema_preferido = :tema
+             WHERE id = :id"
+        );
+        $stmt->execute([':tema' => $temaEntrada, ':id' => $id]);
+
+        perfil_auditar(
+            $conexion,
+            $id,
+            'TEMA_PREFERIDO_ACTUALIZADO',
+            'El usuario actualizó su preferencia visual.',
+            ['tema_preferido' => $temaAnterior],
+            ['tema_preferido' => $temaEntrada]
+        );
+    }
+
+    $conexion->commit();
+    $_SESSION['tema_preferido'] = $temaEntrada;
+
+    if (!headers_sent()) {
+        setcookie('si_theme_preview', $temaEntrada, [
+            'expires' => time() + 31536000,
+            'path' => si_base_url() !== '' ? si_base_url() : '/',
+            'domain' => '',
+            'secure' => si_es_https(),
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
+
+    si_responder_json(true, 'Tema guardado.', ['tema' => $temaEntrada]);
 }
 
 function perfil_guardar(PDO $conexion): void
