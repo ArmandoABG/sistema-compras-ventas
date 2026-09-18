@@ -2425,9 +2425,23 @@ html[data-theme="light"] *::-webkit-scrollbar-corner { background: var(--light-s
 html[data-theme="light"] .sidebar {
     border-color: var(--app-frame-border);
     color: var(--app-frame-text);
+    border-top: none;
+
     background:
-        radial-gradient(circle at 12% 0, rgba(49, 141, 92, .14), transparent 21rem),
-        linear-gradient(165deg, var(--light-chrome-start) 0%, var(--light-chrome-mid) 48%, var(--light-chrome-end) 100%);
+        radial-gradient(
+            circle at 18% 0,
+            rgba(92, 190, 125, .20),
+            transparent 20rem
+        ),
+        linear-gradient(
+            180deg,
+            #f3fbf5 0%,
+            #d9f1df 32%,
+            #a8ddb8 62%,
+            #4fa96f 82%,
+            #1f6f43 100%
+        );
+
     box-shadow: 12px 0 34px rgba(31, 53, 40, .08);
 }
 
@@ -2473,9 +2487,23 @@ html[data-theme="light"] .sidebar-footer small { color: #69786f; }
 html[data-theme="light"] .topbar {
     border-color: var(--app-frame-border);
     color: var(--app-frame-text);
+    border-top: none;
+
     background:
-        radial-gradient(circle at 8% 0, rgba(49, 141, 92, .13), transparent 20rem),
-        linear-gradient(135deg, rgba(248, 252, 249, .98), rgba(230, 241, 233, .98));
+        radial-gradient(
+            circle at 12% 0,
+            rgba(92, 190, 125, .18),
+            transparent 20rem
+        ),
+        linear-gradient(
+            180deg,
+            #f3fbf5 0%,
+            #d9f1df 35%,
+            #a8ddb8 65%,
+            #5bb47a 82%,
+            #2b8050 100%
+        );
+
     box-shadow: 0 8px 24px rgba(31, 53, 40, .07);
 }
 
@@ -2546,11 +2574,27 @@ html[data-theme="light"] .topbar-profile-account-summary > div { border-color: v
 html[data-theme="light"] .topbar-profile-password { border-color: var(--app-frame-border-soft); }
 
 /* Superficie principal compartida: clara, con presencia verde muy tenue. */
-html[data-theme="light"] body:is(.dashboard-page, .ventas-body, .si-module-dark) .app-content :is(.dashboard-workspace, .ventas-workspace, .si-module-page) {
+/* Superficie principal compartida: clara arriba y verde suave hacia abajo. */
+
+html[data-theme="light"] body:is(.dashboard-page, .ventas-body, .si-module-dark)
+.app-content :is(.dashboard-workspace, .ventas-workspace, .si-module-page) {
+
     border-color: rgba(31, 94, 61, .13);
+        border-top: none;
     background:
-        radial-gradient(circle at 92% 0, rgba(49, 141, 92, .10), transparent 29rem),
-        linear-gradient(145deg, #f8fbf9 0%, #eff6f1 54%, #e5f0e8 100%);
+        radial-gradient(
+            circle at 92% 8%,
+            rgba(49, 141, 92, .10),
+            transparent 29rem
+        ),
+        linear-gradient(
+            180deg,
+            #f8fbf9 0%,
+            #edf7f0 32%,
+            #d9eee0 62%,
+            #b8ddc4 82%,
+            #8bc49e 100%
+        );
 }
 
 /* Encabezado Light único para modales y diálogos compartidos. */
