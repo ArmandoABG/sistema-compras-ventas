@@ -108,6 +108,10 @@
     display: grid;
     gap: 12px;
 }
+.prod-listing {
+    display: grid;
+    gap: 16px;
+}
 .stats-grid--5 { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .stats-grid article,
 .module-card {

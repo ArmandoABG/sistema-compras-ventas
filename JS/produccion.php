@@ -68,7 +68,7 @@ $versionModulo = is_file($cssModulo) ? (string) filemtime($cssModulo) : '1';
                 <button type="button" class="prod-tab" id="tabRecetas">Recetas</button>
             </nav>
 
-            <section id="vistaListado">
+            <section id="vistaListado" class="prod-listing">
                 <section class="stats-grid stats-grid--5">
                     <article><span>Total</span><strong id="kpiTotal">0</strong><small>producciones registradas</small></article>
                     <article><span>Borradores</span><strong id="kpiBorradores">0</strong><small>sin afectar inventario</small></article>
